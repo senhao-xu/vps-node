@@ -1,0 +1,2 @@
+{"file":"deploy/install-agent.sh","reason":"Verify generated binary install command uses installer-supported env vars."}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"No any, types from api layer, command builder as typed pure function."}

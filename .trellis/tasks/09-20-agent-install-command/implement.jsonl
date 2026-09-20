@@ -1,0 +1,3 @@
+{"file":"deploy/install-agent.sh","reason":"Binary install command must mirror the installer's exact env vars (PANEL_URL/SERVER_ID/REGISTER_TOKEN)."}
+{"file":"README.md","reason":"Docker run template must match documented agent run conventions (--init, state volume, env names)."}
+{"file":".trellis/spec/frontend/directory-structure.md","reason":"Frontend conventions: shared utils, CopyText component reuse, no API changes needed."}

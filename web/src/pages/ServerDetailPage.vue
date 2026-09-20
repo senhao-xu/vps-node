@@ -13,7 +13,9 @@ import NodeFormDialog from '@/components/NodeFormDialog.vue'
 import OneTimeSecret from '@/components/OneTimeSecret.vue'
 import ServerFormDialog from '@/components/ServerFormDialog.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
+import { copyText } from '@/utils/clipboard'
 import { formatDateTime, formatDuration, formatRelative } from '@/utils/format'
+import { binaryInstallCommand, dockerInstallCommand } from '@/utils/installCommands'
 import { nodeStatusInfo, protocolLabel, serverStatusInfo } from '@/utils/labels'
 
 const route = useRoute()
@@ -32,6 +34,35 @@ const rotatingAgentToken = ref(false)
 const agentTokenResult = ref<AgentTokenResult | null>(null)
 const registerTokenResult = ref<RegisterTokenResult | null>(null)
 const generatingRegisterToken = ref(false)
+
+type InstallTab = 'binary' | 'docker'
+
+const installTab = ref<InstallTab>('binary')
+const commandCopied = ref(false)
+let copyTimer: ReturnType<typeof setTimeout> | null = null
+
+const panelOrigin = window.location.origin
+const freshRegisterToken = computed(() => registerTokenResult.value?.register_token ?? '')
+
+const installNotes: Record<InstallTab, string> = {
+  binary: 'install 脚本目前随 release tarball 分发，脚本地址需按实际发布渠道替换。',
+  docker: '镜像需自行构建或在节点可见的 registry 中拉取；端口映射请按节点实际端口修改。',
+}
+
+const activeInstallCommand = computed(() =>
+  installTab.value === 'binary'
+    ? binaryInstallCommand(panelOrigin, server.value?.id ?? 0, freshRegisterToken.value)
+    : dockerInstallCommand(panelOrigin, server.value?.id ?? 0, freshRegisterToken.value),
+)
+
+async function copyInstallCommand() {
+  const ok = await copyText(activeInstallCommand.value)
+  commandCopied.value = ok
+  if (copyTimer) clearTimeout(copyTimer)
+  copyTimer = setTimeout(() => {
+    commandCopied.value = false
+  }, 1500)
+}
 
 const showNodeDialog = ref(false)
 const editNode = ref<NodeBrief | null>(null)
@@ -331,6 +362,55 @@ onMounted(() => {
           :value="registerTokenResult.register_token"
           :hint="`仅显示这一次，有效期至 ${formatDateTime(registerTokenResult.expires_at)}。`"
         />
+        <div class="install-block">
+          <div class="install-head">
+            <span class="install-title">Agent 安装</span>
+            <div class="install-tabs">
+              <button
+                type="button"
+                class="install-tab"
+                :class="{ active: installTab === 'binary' }"
+                @click="installTab = 'binary'"
+              >
+                二进制安装
+              </button>
+              <button
+                type="button"
+                class="install-tab"
+                :class="{ active: installTab === 'docker' }"
+                @click="installTab = 'docker'"
+              >
+                Docker 安装
+              </button>
+            </div>
+          </div>
+          <p
+            v-if="freshRegisterToken === ''"
+            class="install-hint"
+          >
+            先生成 Register Token，生成后命令会自动内嵌真实 token（当前为占位符）。
+          </p>
+          <p
+            v-else
+            class="install-hint ok"
+          >
+            已内嵌本次生成的 Register Token。
+          </p>
+          <div class="install-code-head">
+            <span class="text-secondary">安装命令</span>
+            <button
+              type="button"
+              class="btn link small"
+              @click="copyInstallCommand"
+            >
+              {{ commandCopied ? '已复制' : '复制' }}
+            </button>
+          </div>
+          <pre class="install-code">{{ activeInstallCommand }}</pre>
+          <p class="install-note">
+            {{ installNotes[installTab] }}
+          </p>
+        </div>
       </div>
 
       <div class="card">
@@ -485,6 +565,86 @@ onMounted(() => {
 
 .secret-block {
   margin-top: var(--spacing-md);
+}
+
+.install-block {
+  margin-top: var(--spacing-md);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--color-border);
+}
+
+.install-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-sm);
+}
+
+.install-title {
+  font-size: var(--font-size-md);
+  font-weight: 600;
+}
+
+.install-tabs {
+  display: inline-flex;
+  gap: var(--spacing-xs);
+  padding: 2px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+}
+
+.install-tab {
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  padding: 4px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.install-tab.active {
+  background: var(--color-surface);
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.install-hint {
+  margin: 0 0 var(--spacing-sm);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.install-hint.ok {
+  color: var(--color-success);
+}
+
+.install-code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  font-size: var(--font-size-sm);
+}
+
+.install-code {
+  margin: var(--spacing-xs) 0 0;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  overflow-x: auto;
+}
+
+.install-note {
+  margin: var(--spacing-xs) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
 }
 
 .metrics {
