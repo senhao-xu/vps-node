@@ -1,0 +1,519 @@
+<script setup lang="ts">
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { deleteServer, getServer, rotateAgentToken, createRegisterToken, updateServer } from '@/api/servers'
+import { deleteNode } from '@/api/nodes'
+import { errorMessage } from '@/api/http'
+import type { AgentTokenResult, NodeBrief, RegisterTokenResult, ServerDetail, ServerStatus } from '@/api/types'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import DataTable from '@/components/DataTable.vue'
+import ErrorBanner from '@/components/ErrorBanner.vue'
+import MetricBar from '@/components/MetricBar.vue'
+import NodeFormDialog from '@/components/NodeFormDialog.vue'
+import OneTimeSecret from '@/components/OneTimeSecret.vue'
+import ServerFormDialog from '@/components/ServerFormDialog.vue'
+import StatusBadge from '@/components/StatusBadge.vue'
+import { formatDateTime, formatDuration, formatRelative } from '@/utils/format'
+import { nodeStatusInfo, protocolLabel, serverStatusInfo } from '@/utils/labels'
+
+const route = useRoute()
+const router = useRouter()
+
+const server = ref<ServerDetail | null>(null)
+const loading = ref(false)
+const error = ref('')
+const actionError = ref('')
+
+const showEdit = ref(false)
+const showDeleteConfirm = ref(false)
+const deleting = ref(false)
+const statusUpdating = ref(false)
+const rotatingAgentToken = ref(false)
+const agentTokenResult = ref<AgentTokenResult | null>(null)
+const registerTokenResult = ref<RegisterTokenResult | null>(null)
+const generatingRegisterToken = ref(false)
+
+const showNodeDialog = ref(false)
+const editNode = ref<NodeBrief | null>(null)
+const deleteNodeTarget = ref<NodeBrief | null>(null)
+const deletingNode = ref(false)
+
+const serverId = computed(() => {
+  const raw = route.params.id
+  const id = typeof raw === 'string' ? Number(raw) : NaN
+  return Number.isInteger(id) && id > 0 ? id : null
+})
+
+const nodeColumns: { key: string; label: string; align?: 'left' | 'right' | 'center'; width?: string }[] = [
+  { key: 'name', label: '节点名称' },
+  { key: 'protocol', label: '协议', width: '120px' },
+  { key: 'port', label: '端口', align: 'right', width: '80px' },
+  { key: 'status', label: '状态', width: '80px' },
+  { key: 'actions', label: '操作', width: '130px' },
+]
+
+async function load() {
+  const id = serverId.value
+  if (id === null) {
+    error.value = '无效的服务器 ID'
+    return
+  }
+  loading.value = true
+  error.value = ''
+  try {
+    server.value = await getServer(id)
+  } catch (err) {
+    error.value = errorMessage(err)
+    if ((err as { status?: number }).status === 404) {
+      void router.replace('/servers')
+    }
+  } finally {
+    loading.value = false
+  }
+}
+
+async function toggleStatus() {
+  const current = server.value
+  if (!current) return
+  const next: ServerStatus = current.status === 'disabled' ? 'active' : 'disabled'
+  statusUpdating.value = true
+  actionError.value = ''
+  try {
+    await updateServer(current.id, { status: next })
+    await load()
+  } catch (err) {
+    actionError.value = errorMessage(err)
+  } finally {
+    statusUpdating.value = false
+  }
+}
+
+async function rotateToken() {
+  const current = server.value
+  if (!current) return
+  rotatingAgentToken.value = true
+  actionError.value = ''
+  try {
+    agentTokenResult.value = await rotateAgentToken(current.id)
+  } catch (err) {
+    actionError.value = errorMessage(err)
+  } finally {
+    rotatingAgentToken.value = false
+  }
+}
+
+async function generateRegisterToken() {
+  const current = server.value
+  if (!current) return
+  generatingRegisterToken.value = true
+  actionError.value = ''
+  try {
+    registerTokenResult.value = await createRegisterToken(current.id)
+  } catch (err) {
+    actionError.value = errorMessage(err)
+  } finally {
+    generatingRegisterToken.value = false
+  }
+}
+
+async function confirmDeleteServer() {
+  const current = server.value
+  if (!current) return
+  deleting.value = true
+  actionError.value = ''
+  try {
+    await deleteServer(current.id)
+    await router.replace('/servers')
+  } catch (err) {
+    actionError.value = errorMessage(err)
+  } finally {
+    deleting.value = false
+  }
+}
+
+async function confirmDeleteNode() {
+  const target = deleteNodeTarget.value
+  if (!target) return
+  deletingNode.value = true
+  actionError.value = ''
+  try {
+    await deleteNode(target.id)
+    deleteNodeTarget.value = null
+    await load()
+  } catch (err) {
+    actionError.value = errorMessage(err)
+  } finally {
+    deletingNode.value = false
+  }
+}
+
+function onSaved() {
+  void load()
+}
+
+watch(serverId, () => {
+  agentTokenResult.value = null
+  registerTokenResult.value = null
+  void load()
+})
+
+onMounted(() => {
+  void load()
+})
+</script>
+
+<template>
+  <section class="page">
+    <div class="page-header">
+      <h1 class="page-title">
+        服务器详情
+        <span
+          v-if="server"
+          class="head-status"
+        >
+          <StatusBadge v-bind="serverStatusInfo(server.status)" />
+        </span>
+      </h1>
+      <div class="header-actions">
+        <button
+          v-if="server"
+          type="button"
+          class="btn secondary"
+          :disabled="statusUpdating"
+          @click="toggleStatus"
+        >
+          {{ server.status === 'disabled' ? '启用' : '禁用' }}
+        </button>
+        <button
+          v-if="server"
+          type="button"
+          class="btn secondary"
+          @click="showEdit = true"
+        >
+          编辑
+        </button>
+        <button
+          type="button"
+          class="btn secondary"
+          @click="void router.push('/servers')"
+        >
+          返回列表
+        </button>
+        <button
+          v-if="server"
+          type="button"
+          class="btn danger secondary"
+          @click="showDeleteConfirm = true"
+        >
+          删除
+        </button>
+      </div>
+    </div>
+    <ErrorBanner
+      :message="error"
+      @dismiss="error = ''"
+    />
+    <ErrorBanner
+      :message="actionError"
+      @dismiss="actionError = ''"
+    />
+
+    <div
+      v-if="loading && !server"
+      class="empty-tip"
+    >
+      加载中…
+    </div>
+    <template v-else-if="server">
+      <div class="card">
+        <h2 class="card-title">
+          基础信息
+        </h2>
+        <div class="info-grid">
+          <div class="info-item">
+            <span class="info-label">名称</span>
+            <span>{{ server.name }}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">地址</span>
+            <span class="mono">{{ server.address }}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Server ID</span>
+            <span>{{ server.id }}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">配置版本（revision）</span>
+            <span class="mono">{{ server.revision }}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">在线用户</span>
+            <span>{{ server.online_users }}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">创建时间</span>
+            <span>{{ formatDateTime(server.created_at) }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title">
+          Agent
+        </h2>
+        <div
+          v-if="server.agent"
+          class="info-grid"
+        >
+          <div class="info-item">
+            <span class="info-label">Agent ID</span>
+            <span>{{ server.agent.id }}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">版本</span>
+            <span>{{ server.agent.version || '—' }}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">最后心跳</span>
+            <span>
+              {{ server.agent.last_seen_at ? formatDateTime(server.agent.last_seen_at) : '从未' }}
+              <span
+                v-if="server.agent.last_seen_at"
+                class="text-secondary"
+              >
+                （{{ formatRelative(server.agent.last_seen_at) }}）
+              </span>
+            </span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">连接时间</span>
+            <span>{{ formatDateTime(server.agent.connected_at) }}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">操作</span>
+            <button
+              type="button"
+              class="btn secondary small"
+              :disabled="rotatingAgentToken"
+              @click="rotateToken"
+            >
+              {{ rotatingAgentToken ? '生成中…' : '轮换 Agent Token' }}
+            </button>
+          </div>
+        </div>
+        <p
+          v-else
+          class="text-secondary agent-missing"
+        >
+          该服务器还没有注册 Agent。点击下方按钮生成一次性注册 Token，在服务器上运行 Agent 时使用。
+        </p>
+        <div class="token-actions">
+          <button
+            type="button"
+            class="btn secondary small"
+            :disabled="generatingRegisterToken"
+            @click="generateRegisterToken"
+          >
+            {{ generatingRegisterToken ? '生成中…' : (server.agent ? '重新生成注册 Token' : '生成注册 Token') }}
+          </button>
+        </div>
+        <OneTimeSecret
+          v-if="agentTokenResult"
+          class="secret-block"
+          label="新 Agent Token（旧 Token 已立即失效）"
+          :value="agentTokenResult.agent_token"
+          hint="仅显示这一次，请立即复制保存并更新 Agent 配置。"
+        />
+        <OneTimeSecret
+          v-if="registerTokenResult"
+          class="secret-block"
+          label="注册 Token"
+          :value="registerTokenResult.register_token"
+          :hint="`仅显示这一次，有效期至 ${formatDateTime(registerTokenResult.expires_at)}。`"
+        />
+      </div>
+
+      <div class="card">
+        <h2 class="card-title">
+          系统指标
+        </h2>
+        <div class="metrics">
+          <MetricBar
+            label="CPU"
+            :percent="server.cpu_percent"
+          />
+          <MetricBar
+            label="内存"
+            :percent="server.memory_percent"
+          />
+          <MetricBar
+            label="磁盘"
+            :percent="server.disk_percent"
+          />
+          <div class="uptime-row">
+            <span class="text-secondary">Uptime</span>
+            <span>{{ formatDuration(server.uptime_seconds) }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2 class="card-title">
+            节点（{{ server.nodes.length }}）
+          </h2>
+          <button
+            type="button"
+            class="btn small"
+            @click="showNodeDialog = true"
+          >
+            添加节点
+          </button>
+        </div>
+        <DataTable
+          :columns="nodeColumns"
+          :rows="server.nodes"
+          :loading="loading"
+        >
+          <template #cell-protocol="{ row }">
+            {{ protocolLabel(row.protocol) }}
+          </template>
+          <template #cell-status="{ row }">
+            <StatusBadge v-bind="nodeStatusInfo(row.status)" />
+          </template>
+          <template #cell-actions="{ row }">
+            <span class="actions">
+              <button
+                type="button"
+                class="btn link"
+                @click="editNode = row"
+              >编辑</button>
+              <button
+                type="button"
+                class="btn link"
+                @click="deleteNodeTarget = row"
+              >删除</button>
+            </span>
+          </template>
+          <template #empty>
+            该服务器还没有节点，点击右上角添加
+          </template>
+        </DataTable>
+      </div>
+    </template>
+
+    <ServerFormDialog
+      :open="showEdit"
+      :server="server"
+      @close="showEdit = false"
+      @saved="load"
+    />
+    <NodeFormDialog
+      :open="showNodeDialog"
+      :server-id="serverId ?? 0"
+      @close="showNodeDialog = false"
+      @saved="onSaved"
+    />
+    <NodeFormDialog
+      :open="editNode !== null"
+      :server-id="serverId ?? 0"
+      :node="editNode"
+      @close="editNode = null"
+      @saved="onSaved"
+    />
+
+    <ConfirmDialog
+      :open="showDeleteConfirm"
+      title="删除服务器"
+      :message="`确定删除服务器「${server?.name ?? ''}」吗？\n将同时删除其 Agent、节点、节点授权和当前连接。`"
+      danger
+      confirm-text="删除"
+      :loading="deleting"
+      @cancel="showDeleteConfirm = false"
+      @confirm="confirmDeleteServer"
+    />
+
+    <ConfirmDialog
+      :open="deleteNodeTarget !== null"
+      title="删除节点"
+      :message="`确定删除节点「${deleteNodeTarget?.name ?? ''}」吗？\n将移除该节点的用户授权，Agent 下次同步后停止该服务。`"
+      danger
+      confirm-text="删除"
+      :loading="deletingNode"
+      @cancel="deleteNodeTarget = null"
+      @confirm="confirmDeleteNode"
+    />
+  </section>
+</template>
+
+<style scoped>
+.header-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.head-status {
+  margin-left: var(--spacing-sm);
+  vertical-align: middle;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--spacing-md) var(--spacing-lg);
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.info-label {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.agent-missing {
+  margin: 0 0 var(--spacing-md);
+}
+
+.token-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.secret-block {
+  margin-top: var(--spacing-md);
+}
+
+.metrics {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  max-width: 480px;
+}
+
+.uptime-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--font-size-sm);
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+}
+
+.card-head .card-title {
+  margin-bottom: 0;
+}
+
+.actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+</style>

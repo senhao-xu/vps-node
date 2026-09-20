@@ -1,0 +1,121 @@
+<script setup lang="ts">
+import { ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
+import { errorMessage } from '@/api/http'
+
+const route = useRoute()
+const router = useRouter()
+const auth = useAuthStore()
+
+const username = ref('')
+const password = ref('')
+const submitting = ref(false)
+const error = ref('')
+
+async function submit() {
+  if (!username.value.trim() || !password.value) {
+    error.value = '请输入用户名和密码'
+    return
+  }
+  submitting.value = true
+  error.value = ''
+  try {
+    await auth.login(username.value.trim(), password.value)
+    const redirect = route.query.redirect
+    const target = typeof redirect === 'string' && redirect.startsWith('/') ? redirect : '/'
+    await router.replace(target)
+  } catch (err) {
+    error.value = errorMessage(err)
+  } finally {
+    submitting.value = false
+  }
+}
+</script>
+
+<template>
+  <section class="login-page">
+    <form
+      class="card login-form"
+      @submit.prevent="submit"
+    >
+      <h1 class="login-title">
+        VPS Node 管理面板
+      </h1>
+      <p class="text-secondary login-sub">
+        请使用管理员账号登录
+      </p>
+      <div
+        v-if="error"
+        class="login-error"
+      >
+        {{ error }}
+      </div>
+      <div class="field">
+        <label for="login-username">用户名</label>
+        <input
+          id="login-username"
+          v-model="username"
+          type="text"
+          autocomplete="username"
+          placeholder="用户名"
+        >
+      </div>
+      <div class="field">
+        <label for="login-password">密码</label>
+        <input
+          id="login-password"
+          v-model="password"
+          type="password"
+          autocomplete="current-password"
+          placeholder="密码"
+        >
+      </div>
+      <button
+        type="submit"
+        class="btn"
+        :disabled="submitting"
+      >
+        {{ submitting ? '登录中…' : '登录' }}
+      </button>
+    </form>
+  </section>
+</template>
+
+<style scoped>
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-lg);
+}
+
+.login-form {
+  width: 340px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.login-title {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  text-align: center;
+}
+
+.login-sub {
+  margin: 0;
+  text-align: center;
+  font-size: var(--font-size-sm);
+}
+
+.login-error {
+  background: rgba(220, 38, 38, 0.08);
+  border: 1px solid rgba(220, 38, 38, 0.35);
+  color: var(--color-danger);
+  border-radius: var(--radius-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-size: var(--font-size-sm);
+}
+</style>

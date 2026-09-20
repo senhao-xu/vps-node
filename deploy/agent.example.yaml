@@ -1,0 +1,28 @@
+panel_url: https://panel.example.com
+# Provide exactly one of the two tokens:
+#   token          - an existing agent token (from the Server detail page)
+#   register_token - a one-time registration token (Server detail page);
+#                    the agent registers once and stores its identity in state_path
+token: ""
+register_token: replace-with-register-token
+# Must match the server the token belongs to (safety cross-check).
+server_id: 1
+# Persisted agent identity, applied revision and batch sequence numbers (0600).
+state_path: /var/lib/panel-agent/state.json
+log_level: info
+heartbeat_interval: 30
+sync_interval: 30
+traffic_interval: 60
+singbox:
+  # Active sing-box configuration; the agent atomically replaces this file.
+  config_path: /etc/sing-box/config.json
+  # Binary used for "check -c <file>" validation before activation.
+  check_bin: /usr/local/bin/sing-box
+  # Optional single command (binary + fixed args) run after activation.
+  # Example: /bin/systemctl restart sing-box
+  # Empty means no automatic reload; sing-box keeps running the previous config.
+  reload_command: ""
+collection:
+  traffic: true
+  sessions: true
+  connection_logs: true

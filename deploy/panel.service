@@ -1,0 +1,29 @@
+[Unit]
+Description=vps-node Panel
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=panel
+Group=panel
+ExecStart=/usr/local/bin/panel -config /etc/panel/panel.yaml
+WorkingDirectory=/var/lib/panel
+StateDirectory=panel
+ConfigurationDirectory=panel
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

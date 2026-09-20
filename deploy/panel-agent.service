@@ -1,0 +1,35 @@
+[Unit]
+Description=vps-node Panel Agent
+After=network-online.target sing-box.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=panel-agent
+Group=panel-agent
+ExecStart=/usr/local/bin/panel-agent -config /etc/panel-agent/agent.yaml
+WorkingDirectory=/var/lib/panel-agent
+StateDirectory=panel-agent
+ConfigurationDirectory=panel-agent
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+ReadWritePaths=/etc/sing-box
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65535
+
+# The agent only writes the sing-box config file and (optionally) invokes the
+# configured reload_command. Privileged reloads (e.g. systemctl restart
+# sing-box) need a polkit rule or a sudo allowlist for the panel-agent user;
+# prefer a privilege-free reload (watchdog / signal-based) when possible.
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target
