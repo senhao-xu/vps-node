@@ -1,10 +1,12 @@
 import { request } from './http'
 import type {
   ConnectionLog,
+  CreateUserInput,
   Paged,
   Session,
   TrafficBucket,
   TrafficSeries,
+  UpdateUserInput,
   User,
   UserCreated,
   UserDetail,
@@ -50,24 +52,11 @@ export function getUser(userId: number): Promise<UserDetail> {
   return request<UserDetail>(`/api/users/${userId}`)
 }
 
-export function createUser(input: {
-  quota_bytes?: number
-  started_at?: string | null
-  expires_at?: string | null
-  node_ids?: number[]
-}): Promise<UserCreated> {
+export function createUser(input: CreateUserInput): Promise<UserCreated> {
   return request<UserCreated>('/api/users', { method: 'POST', body: input })
 }
 
-export function updateUser(
-  userId: number,
-  input: {
-    status?: UserStatus
-    quota_bytes?: number
-    started_at?: string | null
-    expires_at?: string | null
-  },
-): Promise<UserDetail> {
+export function updateUser(userId: number, input: UpdateUserInput): Promise<UserDetail> {
   return request<UserDetail>(`/api/users/${userId}`, { method: 'PUT', body: input })
 }
 

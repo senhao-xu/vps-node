@@ -142,6 +142,7 @@ func (e *panelEnv) seedScenario(cookie *http.Cookie) (serverID, nodeID, userID i
 
 	in30Days := time.Now().AddDate(0, 0, 30).UTC().Format(time.RFC3339)
 	_, out = e.do("POST", "/api/users", map[string]any{
+		"username":    "e2euser",
 		"quota_bytes": 1 << 30,
 		"started_at":  time.Now().Add(-time.Hour).UTC().Format(time.RFC3339),
 		"expires_at":  in30Days,

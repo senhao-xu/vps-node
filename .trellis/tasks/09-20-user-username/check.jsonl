@@ -1,0 +1,2 @@
+{"file":"docs/api-contract.md","reason":"Verify username contract diff is reflected in Go DTOs and web/src/api/types.ts consistently."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Full validation command list must stay green after the change."}

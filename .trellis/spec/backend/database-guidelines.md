@@ -56,3 +56,13 @@ repo.Tx(ctx, func(tx repo.DBTX) error {
 
 - `internal/janitor` deletes: `connection_logs` (raw retention days), `traffic_records` (aggregate retention days), stale `sessions`, expired `admin_sessions`, old batch markers — bounded 500-row batches per loop.
 - Storage caps: `retention.max_connection_logs` (default 1,000,000) and `retention.max_traffic_records` (default 5,000,000; `0` = off) delete oldest-beyond-cap. Any new history table needs both a retention-days path AND a cap path in the janitor sweep.
+
+---
+
+## Gotcha: SQLite table rebuild inside tx-based migrations
+
+> **Warning**: the migration runner wraps each file in a transaction and the DSN sets `foreign_keys(1)`. Inside that transaction `PRAGMA foreign_keys=off` and `PRAGMA legacy_alter_table` are **no-ops**, so a plain create-copy-drop-rename on a parent table cascade-wipes or dangles its children.
+
+- To change a parent table (e.g. `users` in 0004): back up child rows → drop children → rebuild parent → recreate children byte-equivalent (columns, PK, CASCADE FKs, UNIQUE constraints, ALL indexes) → reinsert children → all in the same migration tx.
+- Always add a migration test asserting: dependent rows survive, `PRAGMA foreign_key_check` is clean, cascade semantics still work post-migration, and recreated indexes exist (`sqlite_master` check).
+- Never rely on column order (`SELECT *` / bare `INSERT INTO t VALUES`) — rebuilds may reorder columns.

@@ -33,8 +33,8 @@ func TestMigrateIdempotent(t *testing.T) {
 	if err := d.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations`).Scan(&count); err != nil {
 		t.Fatalf("count migrations: %v", err)
 	}
-	if count != 3 {
-		t.Fatalf("expected 3 applied migrations, got %d", count)
+	if count != 4 {
+		t.Fatalf("expected 4 applied migrations, got %d", count)
 	}
 
 	for _, table := range []string{
@@ -60,7 +60,7 @@ func TestMigrationContentAppliedOnce(t *testing.T) {
 		t.Fatalf("query users: %v", err)
 	}
 
-	if _, err := d.ExecContext(ctx, `INSERT INTO users (uuid, token_hash, created_at, updated_at) VALUES ('u1', 'h1', 1, 1)`); err != nil {
+	if _, err := d.ExecContext(ctx, `INSERT INTO users (uuid, username, token_hash, created_at, updated_at) VALUES ('u1', 'user-u1', 'h1', 1, 1)`); err != nil {
 		t.Fatalf("insert user: %v", err)
 	}
 }

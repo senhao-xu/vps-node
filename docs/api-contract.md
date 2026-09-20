@@ -95,7 +95,7 @@ Response `200`:
 
 ### GET /api/users
 
-Query: `query` (exact match on uuid or token), `status`, `expiry` (`valid`|`expired`), `page`, `page_size`.
+Query: `query` (exact match on username, uuid, or token), `status`, `expiry` (`valid`|`expired`), `page`, `page_size`.
 
 Response `200`: paginated list of:
 
@@ -103,6 +103,7 @@ Response `200`: paginated list of:
 {
   "id": 1001,
   "uuid": "xxxxxxxx-xxxx-...",
+  "username": "alice",
   "status": "active",
   "quota_bytes": 1099511627776,
   "used_bytes": 343597383680,
@@ -114,12 +115,13 @@ Response `200`: paginated list of:
 }
 ```
 
-`token` is never listed. `session_count` counts only fresh snapshots (see Session freshness).
+`username` is required, globally unique, 1–64 chars from `[A-Za-z0-9_.-]`. `token` is never listed. `session_count` counts only fresh snapshots (see Session freshness).
 
 ### POST /api/users
 
 ```json
 {
+  "username": "alice",
   "quota_bytes": 1099511627776,
   "started_at": "2026-01-01T00:00:00Z",
   "expires_at": "2026-12-01T00:00:00Z",
@@ -127,7 +129,7 @@ Response `200`: paginated list of:
 }
 ```
 
-Panel generates `uuid` and `token`. `uuid`, `token` optional-on-input only if explicitly allowed later; default is server-generated. Response `201`: full user DTO plus `token` (the only time the plaintext token is returned).
+`username` is required: missing/empty or invalid format → `422 validation`; already taken → `409 conflict`. Panel generates `uuid` and `token`. Response `201`: full user DTO plus `token` (the only time the plaintext token is returned).
 
 ### GET /api/users/:id
 
@@ -138,10 +140,10 @@ Response `200`: user DTO (no token) plus `remaining_bytes` and `used_percent`.
 Partial update; included fields are applied:
 
 ```json
-{ "status": "active", "quota_bytes": 214748364800, "started_at": "...", "expires_at": "..." }
+{ "username": "alice2", "status": "active", "quota_bytes": 214748364800, "started_at": "...", "expires_at": "..." }
 ```
 
-`expires_at: null` clears expiry. Setting `expires_at` in the past or `status: "expired"` marks the user expired. Response `200`: updated DTO.
+Optional `username` change follows the same validation as create (format → `422 validation`, taken by another user → `409 conflict`; keeping the user's own value is allowed). Changing `username` does not bump server revisions. `expires_at: null` clears expiry. Setting `expires_at` in the past or `status: "expired"` marks the user expired. Response `200`: updated DTO.
 
 ### DELETE /api/users/:id
 

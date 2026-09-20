@@ -23,7 +23,7 @@ func TestListEligibleUsersByServer(t *testing.T) {
 
 	mkUser := func(uuid string, quota, used int64, expires *time.Time) int64 {
 		id, err := r.CreateUser(ctx, repo.NewUser{
-			UUID: uuid, TokenHash: "hash-" + uuid, Status: repo.UserStatusActive,
+			UUID: uuid, Username: "user-" + uuid, TokenHash: "hash-" + uuid, Status: repo.UserStatusActive,
 			QuotaBytes: quota, ExpiresAt: expires,
 		})
 		if err != nil {

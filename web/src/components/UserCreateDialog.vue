@@ -23,6 +23,7 @@ const emit = defineEmits<{
 
 const nodes = ref<NodeBrief[]>([])
 const servers = ref<Server[]>([])
+const username = ref('')
 const unlimited = ref(true)
 const quotaValue = ref<number | null>(null)
 const quotaUnit = ref<QuotaUnit>('GB')
@@ -33,12 +34,15 @@ const submitting = ref(false)
 const error = ref('')
 const created = ref<UserCreated | null>(null)
 
+const usernamePattern = /^[A-Za-z0-9_.-]{1,64}$/
+
 watch(
   () => props.open,
   (open) => {
     if (!open) return
     created.value = null
     error.value = ''
+    username.value = ''
     unlimited.value = true
     quotaValue.value = null
     quotaUnit.value = 'GB'
@@ -70,6 +74,9 @@ const quotaBytes = computed(() => {
 })
 
 const validationMessage = computed(() => {
+  const name = username.value.trim()
+  if (!name) return '请输入用户名'
+  if (!usernamePattern.test(name)) return '用户名需为 1-64 个字符，仅限字母、数字、下划线、中划线或点'
   if (!unlimited.value && quotaBytes.value === null) return '请输入有效的流量额度'
   const start = localInputToIso(startedAt.value)
   const expire = localInputToIso(expiresAt.value)
@@ -87,6 +94,7 @@ async function submit() {
   submitting.value = true
   try {
     const user = await createUser({
+      username: username.value.trim(),
       quota_bytes: quotaBytes.value ?? 0,
       started_at: localInputToIso(startedAt.value),
       expires_at: localInputToIso(expiresAt.value),
@@ -112,6 +120,10 @@ async function submit() {
     <template v-if="created">
       <p>用户已创建，请立即保存以下一次性 Token：</p>
       <div class="created-info">
+        <span class="text-secondary">用户名：</span>
+        <code class="mono">{{ created.username }}</code>
+      </div>
+      <div class="created-info">
         <span class="text-secondary">UUID：</span>
         <code class="mono">{{ created.uuid }}</code>
       </div>
@@ -126,6 +138,16 @@ async function submit() {
         @dismiss="error = ''"
       />
       <div class="form">
+        <div class="field">
+          <label>用户名（必填）</label>
+          <input
+            v-model="username"
+            type="text"
+            maxlength="64"
+            placeholder="1-64 个字符，仅限字母、数字、_ - ."
+            @keyup.enter="submit"
+          >
+        </div>
         <div class="field">
           <label>流量额度</label>
           <div class="quota-row">

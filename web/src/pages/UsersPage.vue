@@ -33,6 +33,7 @@ const statusUpdatingId = ref<number | null>(null)
 
 const columns: Column[] = [
   { key: 'id', label: 'ID', width: '70px' },
+  { key: 'username', label: '用户名', width: '150px' },
   { key: 'uuid', label: 'UUID' },
   { key: 'status', label: '状态', width: '80px' },
   { key: 'traffic', label: '流量', width: '200px' },
@@ -154,7 +155,7 @@ onMounted(() => {
         <input
           v-model="query"
           type="text"
-          placeholder="按 UUID 或 Token 精确搜索"
+          placeholder="按 用户名 / UUID / Token 精确搜索"
           style="width: 260px"
           @keyup.enter="applyFilters"
         >

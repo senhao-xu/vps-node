@@ -21,6 +21,7 @@ export type Paged<T> = {
 export type User = {
   id: number
   uuid: string
+  username: string
   status: UserStatus
   quota_bytes: number
   used_bytes: number
@@ -161,6 +162,7 @@ export type AgentTokenResult = {
 export type NodeSettingsInput = Record<string, unknown>
 
 export type CreateUserInput = {
+  username: string
   quota_bytes?: number
   started_at?: string | null
   expires_at?: string | null
@@ -169,6 +171,7 @@ export type CreateUserInput = {
 
 export type UpdateUserInput = {
   status?: UserStatus
+  username?: string
   quota_bytes?: number
   started_at?: string | null
   expires_at?: string | null

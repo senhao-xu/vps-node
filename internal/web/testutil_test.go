@@ -172,7 +172,7 @@ func (e *testEnv) seedNode(t *testing.T, serverID int64, name string, port int) 
 func (e *testEnv) seedUser(t *testing.T, uuid string) int64 {
 	t.Helper()
 	id, err := e.repo.CreateUser(context.Background(), repo.NewUser{
-		UUID: uuid, TokenHash: "hash-" + uuid, Status: repo.UserStatusActive, QuotaBytes: 1000,
+		UUID: uuid, Username: "user-" + uuid, TokenHash: "hash-" + uuid, Status: repo.UserStatusActive, QuotaBytes: 1000,
 	})
 	if err != nil {
 		t.Fatalf("seed user: %v", err)

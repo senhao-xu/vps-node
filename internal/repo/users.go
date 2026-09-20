@@ -10,6 +10,7 @@ import (
 type User struct {
 	ID         int64
 	UUID       string
+	Username   string
 	TokenHash  string
 	Status     string
 	QuotaBytes int64
@@ -22,6 +23,7 @@ type User struct {
 
 type NewUser struct {
 	UUID       string
+	Username   string
 	TokenHash  string
 	Status     string
 	QuotaBytes int64
@@ -44,7 +46,7 @@ const (
 	UserStatusExpired  = "expired"
 )
 
-const userSelect = `SELECT id, uuid, token_hash, status, quota_bytes, used_bytes, started_at, expires_at, created_at, updated_at FROM users`
+const userSelect = `SELECT id, uuid, username, token_hash, status, quota_bytes, used_bytes, started_at, expires_at, created_at, updated_at FROM users`
 
 type execer interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
@@ -58,9 +60,9 @@ func insertUserExec(ctx context.Context, q execer, n NewUser) (int64, error) {
 	}
 	now := nowUnix()
 	res, err := q.ExecContext(ctx,
-		`INSERT INTO users (uuid, token_hash, status, quota_bytes, used_bytes, started_at, expires_at, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?)`,
-		n.UUID, n.TokenHash, n.Status, n.QuotaBytes, timeArg(n.StartedAt), timeArg(n.ExpiresAt), now, now)
+		`INSERT INTO users (uuid, username, token_hash, status, quota_bytes, used_bytes, started_at, expires_at, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
+		n.UUID, n.Username, n.TokenHash, n.Status, n.QuotaBytes, timeArg(n.StartedAt), timeArg(n.ExpiresAt), now, now)
 	if err != nil {
 		return 0, mapErr(err)
 	}
@@ -98,8 +100,8 @@ func (r *Repo) ListUsers(ctx context.Context, f UserFilter) ([]User, int64, erro
 		if tokenHash == "" {
 			tokenHash = f.Query
 		}
-		where = append(where, "(uuid = ? OR token_hash = ?)")
-		args = append(args, f.Query, tokenHash)
+		where = append(where, "(uuid = ? OR token_hash = ? OR username = ?)")
+		args = append(args, f.Query, tokenHash, f.Query)
 	}
 	if f.Status != "" {
 		where = append(where, "status = ?")
@@ -148,7 +150,7 @@ func (r *Repo) CountUsers(ctx context.Context) (int64, error) {
 
 func (r *Repo) ListEligibleUsersByServer(ctx context.Context, serverID int64, now time.Time) ([]User, error) {
 	rows, err := r.DB.QueryContext(ctx,
-		`SELECT u.id, u.uuid, u.token_hash, u.status, u.quota_bytes, u.used_bytes, u.started_at, u.expires_at, u.created_at, u.updated_at
+		`SELECT u.id, u.uuid, u.username, u.token_hash, u.status, u.quota_bytes, u.used_bytes, u.started_at, u.expires_at, u.created_at, u.updated_at
 		 FROM users u
 		 JOIN user_nodes un ON un.user_id = u.id
 		 JOIN nodes n ON n.id = un.node_id
@@ -216,7 +218,7 @@ func scanUser(scan func(dest ...any) error) (User, error) {
 	var u User
 	var startedAt, expiresAt sql.NullInt64
 	var createdAt, updatedAt int64
-	err := scan(&u.ID, &u.UUID, &u.TokenHash, &u.Status, &u.QuotaBytes, &u.UsedBytes,
+	err := scan(&u.ID, &u.UUID, &u.Username, &u.TokenHash, &u.Status, &u.QuotaBytes, &u.UsedBytes,
 		&startedAt, &expiresAt, &createdAt, &updatedAt)
 	if err != nil {
 		return User{}, mapErr(err)

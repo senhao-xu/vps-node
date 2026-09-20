@@ -27,7 +27,7 @@ func newTestRepo(t *testing.T) *repo.Repo {
 
 func mustCreateUser(t *testing.T, r *repo.Repo, uuid string) int64 {
 	t.Helper()
-	id, err := r.CreateUser(context.Background(), repo.NewUser{UUID: uuid, TokenHash: "hash-" + uuid, Status: repo.UserStatusActive, QuotaBytes: 100})
+	id, err := r.CreateUser(context.Background(), repo.NewUser{UUID: uuid, Username: "user-" + uuid, TokenHash: "hash-" + uuid, Status: repo.UserStatusActive, QuotaBytes: 100})
 	if err != nil {
 		t.Fatalf("create user: %v", err)
 	}
@@ -74,11 +74,14 @@ func TestUserCRUD(t *testing.T) {
 		t.Fatalf("uuid lookup mismatch: %d != %d", byUUID.ID, id)
 	}
 
-	if _, err := r.CreateUser(ctx, repo.NewUser{UUID: "uuid-1", TokenHash: "other"}); !errors.Is(err, repo.ErrConflict) {
+	if _, err := r.CreateUser(ctx, repo.NewUser{UUID: "uuid-1", Username: "user-x", TokenHash: "other"}); !errors.Is(err, repo.ErrConflict) {
 		t.Fatalf("expected conflict on duplicate uuid, got %v", err)
 	}
-	if _, err := r.CreateUser(ctx, repo.NewUser{UUID: "uuid-2", TokenHash: "hash-uuid-1"}); !errors.Is(err, repo.ErrConflict) {
+	if _, err := r.CreateUser(ctx, repo.NewUser{UUID: "uuid-2", Username: "user-y", TokenHash: "hash-uuid-1"}); !errors.Is(err, repo.ErrConflict) {
 		t.Fatalf("expected conflict on duplicate token hash, got %v", err)
+	}
+	if _, err := r.CreateUser(ctx, repo.NewUser{UUID: "uuid-3", Username: "user-uuid-1", TokenHash: "hash-uuid-3"}); !errors.Is(err, repo.ErrConflict) {
+		t.Fatalf("expected conflict on duplicate username, got %v", err)
 	}
 
 	if err := r.SetUserStatus(ctx, id, repo.UserStatusDisabled); err != nil {
@@ -151,6 +154,14 @@ func TestListUsersFilters(t *testing.T) {
 		t.Fatalf("unexpected query result: total=%d users=%+v", total, users)
 	}
 
+	users, total, err = r.ListUsers(ctx, repo.UserFilter{Query: "user-uuid-a"})
+	if err != nil {
+		t.Fatalf("list users by username: %v", err)
+	}
+	if total != 1 || len(users) != 1 || users[0].ID != id1 {
+		t.Fatalf("unexpected username query result: total=%d users=%+v", total, users)
+	}
+
 	past := time.Now().Add(-time.Hour)
 	if err := r.SetUserExpiry(ctx, id2, nil, &past); err != nil {
 		t.Fatalf("set expiry: %v", err)
@@ -213,7 +224,7 @@ func TestSetUserNodesIdempotent(t *testing.T) {
 		t.Fatalf("expected 1 node after authorize, got %v", ids)
 	}
 
-	if _, err := r.CreateUser(ctx, repo.NewUser{UUID: "uuid-cascade", TokenHash: "hash-cascade"}); err != nil {
+	if _, err := r.CreateUser(ctx, repo.NewUser{UUID: "uuid-cascade", Username: "user-cascade", TokenHash: "hash-cascade"}); err != nil {
 		t.Fatalf("create user: %v", err)
 	}
 	cascadeUser, _ := r.GetUserByUUID(ctx, "uuid-cascade")
@@ -498,7 +509,7 @@ func TestTxRollback(t *testing.T) {
 
 	err := repo.Tx(ctx, r.DB, func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO users (uuid, token_hash, created_at, updated_at) VALUES ('tx-u', 'tx-h', 1, 1)`); err != nil {
+			`INSERT INTO users (uuid, username, token_hash, created_at, updated_at) VALUES ('tx-u', 'user-tx-u', 'tx-h', 1, 1)`); err != nil {
 			t.Fatalf("insert in tx: %v", err)
 		}
 		return errors.New("boom")

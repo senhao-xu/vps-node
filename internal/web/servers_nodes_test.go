@@ -385,7 +385,7 @@ func TestRevisionBumpsOnMutations(t *testing.T) {
 	node2 := e.seedNode(t, server2, "n2", 443)
 
 	_, body := e.do(t, "POST", "/api/users", map[string]any{
-		"node_ids": []int64{node1, node2},
+		"username": "revuser", "node_ids": []int64{node1, node2},
 	}, cookie)
 	userID := int64(jsonMap(t, body)["id"].(float64))
 

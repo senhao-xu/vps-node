@@ -53,7 +53,7 @@ func TestSweepRemovesOnlyExpiredRows(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create server: %v", err)
 	}
-	userID, err := f.repo.CreateUser(ctx, repo.NewUser{UUID: "u1", TokenHash: "h1", Status: repo.UserStatusActive})
+	userID, err := f.repo.CreateUser(ctx, repo.NewUser{UUID: "u1", Username: "user-u1", TokenHash: "h1", Status: repo.UserStatusActive})
 	if err != nil {
 		t.Fatalf("create user: %v", err)
 	}
@@ -161,7 +161,7 @@ func TestSweepHonorsSettingsOverride(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create server: %v", err)
 	}
-	userID, err := f.repo.CreateUser(ctx, repo.NewUser{UUID: "u1", TokenHash: "h1", Status: repo.UserStatusActive})
+	userID, err := f.repo.CreateUser(ctx, repo.NewUser{UUID: "u1", Username: "user-u1", TokenHash: "h1", Status: repo.UserStatusActive})
 	if err != nil {
 		t.Fatalf("create user: %v", err)
 	}
@@ -200,7 +200,7 @@ func TestSweepEnforcesStorageCaps(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create server: %v", err)
 	}
-	userID, err := f.repo.CreateUser(ctx, repo.NewUser{UUID: "u1", TokenHash: "h1", Status: repo.UserStatusActive})
+	userID, err := f.repo.CreateUser(ctx, repo.NewUser{UUID: "u1", Username: "user-u1", TokenHash: "h1", Status: repo.UserStatusActive})
 	if err != nil {
 		t.Fatalf("create user: %v", err)
 	}

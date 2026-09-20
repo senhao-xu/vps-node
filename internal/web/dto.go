@@ -21,6 +21,7 @@ func rfc3339Ptr(t *time.Time) *string {
 type userDTO struct {
 	ID           int64   `json:"id"`
 	UUID         string  `json:"uuid"`
+	Username     string  `json:"username"`
 	Status       string  `json:"status"`
 	QuotaBytes   int64   `json:"quota_bytes"`
 	UsedBytes    int64   `json:"used_bytes"`
@@ -41,6 +42,7 @@ func toUserDTO(u repo.User, nodeCount, sessionCount int64) userDTO {
 	return userDTO{
 		ID:           u.ID,
 		UUID:         u.UUID,
+		Username:     u.Username,
 		Status:       u.Status,
 		QuotaBytes:   u.QuotaBytes,
 		UsedBytes:    u.UsedBytes,

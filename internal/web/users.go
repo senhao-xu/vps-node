@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
+	"strings"
 	"time"
 
 	"vps-node/internal/adminauth"
@@ -17,6 +19,19 @@ var validUserStatuses = map[string]bool{
 	repo.UserStatusActive:   true,
 	repo.UserStatusDisabled: true,
 	repo.UserStatusExpired:  true,
+}
+
+var usernamePattern = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
+
+func validateUsername(raw string) (string, error) {
+	username := strings.TrimSpace(raw)
+	if username == "" {
+		return "", errValidation("username is required")
+	}
+	if !usernamePattern.MatchString(username) {
+		return "", errValidation("username must be 1-64 characters of letters, digits, '_', '-' or '.'")
+	}
+	return username, nil
 }
 
 type optInt64 struct {
@@ -123,6 +138,7 @@ func (h *Handler) handleUserList(w http.ResponseWriter, r *http.Request) {
 }
 
 type createUserRequest struct {
+	Username   string  `json:"username"`
 	QuotaBytes *int64  `json:"quota_bytes"`
 	StartedAt  *string `json:"started_at"`
 	ExpiresAt  *string `json:"expires_at"`
@@ -148,6 +164,11 @@ func (h *Handler) handleUserCreate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		quota = *req.QuotaBytes
+	}
+	username, err := validateUsername(req.Username)
+	if err != nil {
+		writeErr(w, err)
+		return
 	}
 	startedAt, err := parseTimeBody(req.StartedAt, "started_at")
 	if err != nil {
@@ -178,6 +199,7 @@ func (h *Handler) handleUserCreate(w http.ResponseWriter, r *http.Request) {
 
 	id, err := h.repo.CreateUserWithNodes(r.Context(), repo.NewUser{
 		UUID:       uuid,
+		Username:   username,
 		TokenHash:  adminauth.HashToken(token),
 		Status:     repo.UserStatusActive,
 		QuotaBytes: quota,
@@ -230,6 +252,7 @@ func (h *Handler) handleUserGet(w http.ResponseWriter, r *http.Request) {
 
 type updateUserRequest struct {
 	Status     *string   `json:"status"`
+	Username   optString `json:"username"`
 	QuotaBytes optInt64  `json:"quota_bytes"`
 	StartedAt  optString `json:"started_at"`
 	ExpiresAt  optString `json:"expires_at"`
@@ -255,6 +278,19 @@ func (h *Handler) handleUserUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 		patch.SetStatus = true
 		patch.Status = *req.Status
+	}
+	if req.Username.Set {
+		if req.Username.Value == nil {
+			writeErr(w, errValidation("username cannot be null"))
+			return
+		}
+		username, err := validateUsername(*req.Username.Value)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		patch.SetUsername = true
+		patch.Username = username
 	}
 	if req.QuotaBytes.Set {
 		if req.QuotaBytes.Value < 0 {

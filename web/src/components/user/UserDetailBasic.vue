@@ -21,6 +21,9 @@ const emit = defineEmits<{
 const tokenRevealed = ref<string | null>(null)
 const statusDraft = ref<UserStatus>('active')
 const savingStatus = ref(false)
+const usernameDraft = ref('')
+const editingUsername = ref(false)
+const savingUsername = ref(false)
 const error = ref('')
 
 const showResetTokenConfirm = ref(false)
@@ -28,16 +31,50 @@ const resettingToken = ref(false)
 const showExpireConfirm = ref(false)
 const expiring = ref(false)
 
+const usernamePattern = /^[A-Za-z0-9_.-]{1,64}$/
+
 watch(
   () => props.user.id,
   () => {
     tokenRevealed.value = null
     statusDraft.value = props.user.status === 'disabled' ? 'disabled' : 'active'
+    usernameDraft.value = props.user.username
+    editingUsername.value = false
   },
   { immediate: true },
 )
 
+watch(
+  () => props.user.username,
+  (username) => {
+    if (!editingUsername.value) usernameDraft.value = username
+  },
+)
+
 const status = computed(() => displayUserStatus(props.user))
+
+async function saveUsername() {
+  const next = usernameDraft.value.trim()
+  if (next === props.user.username) {
+    editingUsername.value = false
+    return
+  }
+  if (!usernamePattern.test(next)) {
+    error.value = '用户名需为 1-64 个字符，仅限字母、数字、下划线、中划线或点'
+    return
+  }
+  savingUsername.value = true
+  error.value = ''
+  try {
+    const updated = await updateUser(props.user.id, { username: next })
+    editingUsername.value = false
+    emit('updated', updated)
+  } catch (err) {
+    error.value = errorMessage(err)
+  } finally {
+    savingUsername.value = false
+  }
+}
 
 async function saveStatus() {
   if (statusDraft.value === props.user.status) return
@@ -104,6 +141,51 @@ async function expireNow() {
           class="mono"
           :text="props.user.uuid"
         />
+      </div>
+      <div class="info-item">
+        <span class="info-label">用户名</span>
+        <span
+          v-if="!editingUsername"
+          class="status-row"
+        >
+          <span>{{ props.user.username }}</span>
+          <button
+            type="button"
+            class="btn link small"
+            @click="editingUsername = true"
+          >
+            编辑
+          </button>
+        </span>
+        <span
+          v-else
+          class="username-edit"
+        >
+          <input
+            v-model="usernameDraft"
+            type="text"
+            maxlength="64"
+            :disabled="savingUsername"
+            @keyup.enter="saveUsername"
+            @keyup.esc="editingUsername = false"
+          >
+          <button
+            type="button"
+            class="btn small"
+            :disabled="savingUsername"
+            @click="saveUsername"
+          >
+            保存
+          </button>
+          <button
+            type="button"
+            class="btn secondary small"
+            :disabled="savingUsername"
+            @click="editingUsername = false; usernameDraft = props.user.username"
+          >
+            取消
+          </button>
+        </span>
       </div>
       <div class="info-item">
         <span class="info-label">状态</span>
@@ -210,6 +292,17 @@ async function expireNow() {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
+}
+
+.username-edit {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
+.username-edit input {
+  width: 200px;
 }
 
 .token-body {

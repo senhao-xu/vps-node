@@ -7,6 +7,8 @@ import (
 )
 
 type UserPatch struct {
+	SetUsername  bool
+	Username     string
 	SetStatus    bool
 	Status       string
 	SetQuota     bool
@@ -139,15 +141,25 @@ func (r *Repo) UpdateUserAndBump(ctx context.Context, userID int64, p UserPatch)
 		if p.SetExpiresAt {
 			expiresAt = p.ExpiresAt
 		}
+		username := existing.Username
+		if p.SetUsername {
+			username = p.Username
+		}
 
 		res, err := tx.ExecContext(ctx,
-			`UPDATE users SET status = ?, quota_bytes = ?, started_at = ?, expires_at = ?, updated_at = ? WHERE id = ?`,
-			status, quota, timeArg(startedAt), timeArg(expiresAt), nowUnix(), userID)
+			`UPDATE users SET username = ?, status = ?, quota_bytes = ?, started_at = ?, expires_at = ?, updated_at = ? WHERE id = ?`,
+			username, status, quota, timeArg(startedAt), timeArg(expiresAt), nowUnix(), userID)
 		if err != nil {
 			return mapErr(err)
 		}
 		if rowsAffected(res) == 0 {
 			return ErrNotFound
+		}
+
+		affectsEligibility := p.SetStatus || p.SetQuota || p.SetStartedAt || p.SetExpiresAt
+		if !affectsEligibility {
+			u, err = getUserExec(ctx, tx, userID)
+			return err
 		}
 
 		serverIDs, err := listServerIDsByUserExec(ctx, tx, userID)
