@@ -1,0 +1,3 @@
+{"file":"docs/api-contract.md","reason":"Binding agent API contract; containerized agent must speak identical payloads (register/heartbeat/config/telemetry)."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Validation commands, forbidden patterns, and review gates that Docker work must not violate."}
+{"file":"deploy/agent.example.yaml","reason":"Authoritative agent config keys (singbox.check_bin/reload_command/state_path) that image env defaults must mirror."}

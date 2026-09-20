@@ -1,0 +1,59 @@
+services:
+  panel:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.panel
+    image: vps-node-panel:latest
+    container_name: vps-node-panel
+    restart: unless-stopped
+    ports:
+      - "${PANEL_PORT:-8080}:8080"
+    environment:
+      PANEL_LISTEN: ":8080"
+      PANEL_DB_PATH: /data/panel.db
+      PANEL_APP_KEY: "${PANEL_APP_KEY:?set PANEL_APP_KEY to a 32-byte hex key: openssl rand -hex 32}"
+      PANEL_ADMIN_USER: ${PANEL_ADMIN_USER:-admin}
+      PANEL_ADMIN_PASSWORD: "${PANEL_ADMIN_PASSWORD:?set PANEL_ADMIN_PASSWORD}"
+      PANEL_LOG_LEVEL: ${PANEL_LOG_LEVEL:-info}
+    volumes:
+      - panel-data:/data
+
+  panel-agent:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.agent
+    image: vps-node-agent:latest
+    container_name: vps-node-agent
+    restart: unless-stopped
+    init: true
+    depends_on:
+      - panel
+    environment:
+      AGENT_PANEL_URL: http://panel:8080
+      AGENT_SERVER_ID: "${AGENT_SERVER_ID:-}"
+      AGENT_REGISTER_TOKEN: "${AGENT_REGISTER_TOKEN:-}"
+      AGENT_TOKEN: "${AGENT_TOKEN:-}"
+      AGENT_LOG_LEVEL: ${AGENT_LOG_LEVEL:-info}
+    ports:
+      - "${NODE_PORT:-8388}:8388/tcp"
+      - "${NODE_PORT:-8388}:8388/udp"
+    volumes:
+      - agent-state:/var/lib/panel-agent
+
+volumes:
+  panel-data:
+  agent-state:
+
+# Single-node all-in-one deployment (panel + its agent on one host).
+#
+# First start (from deploy/, compose auto-loads .env):
+#   1. cp .env.example .env and fill in PANEL_APP_KEY / PANEL_ADMIN_PASSWORD
+#   2. docker compose -f docker-compose.all-in-one.yml up -d panel
+#   3. Log in to http://<host>:${PANEL_PORT:-8080}, create the server (note its
+#      id N), create at least one node on port 8388, then generate a register token.
+#   4. Add AGENT_SERVER_ID=N and AGENT_REGISTER_TOKEN=<token> to .env
+#   5. docker compose -f docker-compose.all-in-one.yml up -d panel-agent
+#
+# Panel traffic stays on the compose-internal network (http://panel:8080);
+# publish 8080 only for admin UI access and put a TLS reverse proxy in front
+# for anything reachable from the internet.

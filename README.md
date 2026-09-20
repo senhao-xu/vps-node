@@ -92,6 +92,101 @@ All keys have `AGENT_*` environment equivalents (e.g. `AGENT_PANEL_URL`, `AGENT_
 
 Reload privileges: `systemctl restart sing-box` as the non-root `panel-agent` user needs polkit/sudo. Prefer a privilege-free strategy (sing-box watchdog or signal-based reload via a small helper) — the agent only ever executes the one allowlisted command from its own config file, never anything from the Panel.
 
+## Docker deployment
+
+Docker is the second supported deployment path next to systemd. Two images are built from the repo root:
+
+| Image | Contents | Base |
+| --- | --- | --- |
+| `vps-node-panel` | Panel binary with the web UI embedded (`embed_ui`) + `/panel-healthcheck` helper | `scratch` |
+| `vps-node-agent` | `panel-agent` + pinned `sing-box` + `singbox-reload` helper + CA certs | `scratch` |
+
+The agent image is self-contained: sing-box ships inside it, and `singbox-reload` (a tiny Go binary, no shell) starts/stops sing-box via the pid file `/run/singbox/singbox.pid` whenever the agent applies a new config. All binaries are static (CGO off), so the runtime base is `FROM scratch`.
+
+### Build
+
+```sh
+make docker-panel                                        # vps-node-panel:latest
+make docker-agent                                        # vps-node-agent:latest, sing-box at the pinned default below
+make docker-agent SINGBOX_VERSION=1.13.7 \
+    SINGBOX_SHA256_AMD64=<sha256> SINGBOX_SHA256_ARM64=<sha256>   # bump sing-box (checksums from its GitHub release)
+```
+
+sing-box is downloaded at build time from the official GitHub release (`ARG SINGBOX_VERSION`, the static `*-musl` build, amd64/arm64 via `TARGETARCH`) and verified against pinned sha256 checksums (`SINGBOX_SHA256_AMD64`/`SINGBOX_SHA256_ARM64`, matching the default version). When you bump `SINGBOX_VERSION`, pass the matching checksums for the two `*-musl.tar.gz` files — a mismatch fails the build. Set `SINGBOX_DOWNLOAD_URL` to a mirror if GitHub is unreachable from your builder (the mirror must serve byte-identical tarballs for the checksums to pass).
+
+### Run: Panel only
+
+```sh
+cd deploy
+cp .env.example .env      # then fill in PANEL_APP_KEY and PANEL_ADMIN_PASSWORD
+docker compose up -d      # panel on :8080, SQLite in volume panel-data
+```
+
+Compose auto-loads `deploy/.env`; prefer it over shell exports so variables survive new shells and reboots (`PANEL_APP_KEY`/`PANEL_ADMIN_PASSWORD` are hard-required on every `up`). Set `PANEL_PORT` to publish a host port other than 8080 (e.g. when 8080 is taken).
+
+Data lives in the `panel-data` volume (`/data/panel.db` inside the container). Back up the volume together with `PANEL_APP_KEY` — the key encrypts node secrets at rest. TLS terminates in a reverse proxy; a commented Caddy example is included in `deploy/docker-compose.yml` (the panel itself serves plain HTTP on :8080 only).
+
+### Run: Agent on a node server
+
+```sh
+cd deploy
+cp .env.example .env      # set AGENT_PANEL_URL, AGENT_SERVER_ID and one of the tokens
+docker compose -f agent.docker-compose.yml up -d
+```
+
+The agent registers on first start and stores its identity in the `agent-state` volume (`/var/lib/panel-agent/state.json`); delete that volume to re-register. After the first config apply the agent spawns sing-box itself via `singbox-reload` — there is no separate sing-box container. Publish one port pair (`tcp`+`udp`) per node, e.g. `8388:8388/tcp` and `8388:8388/udp` (override the host side with `NODE_PORT`); with many nodes consider `network_mode: host`. Ports ≤1024 additionally require root (the container runs as root by default).
+
+### Run: All-in-one (panel + agent on one host)
+
+```sh
+cd deploy
+cp .env.example .env      # fill in the panel vars; up -d panel first, then the agent vars
+docker compose -f docker-compose.all-in-one.yml up -d panel
+# create the server (note its id N), a node on port 8388, then a register token in the UI
+# add AGENT_SERVER_ID=N and AGENT_REGISTER_TOKEN=<token> to .env
+docker compose -f docker-compose.all-in-one.yml up -d panel-agent
+```
+
+Panel↔agent traffic stays on the compose-internal network (`http://panel:8080`); only the admin port and node ports are published.
+
+### Measured footprint
+
+Measured with sing-box 1.14.1 on linux/amd64 (Docker 29.7.2), idle all-in-one stack:
+
+| Item | Unpacked (`docker images`) | Serialized (`docker save` ≈ pull size) |
+| --- | --- | --- |
+| `vps-node-panel` | 24.5 MB | 7.4 MB |
+| `vps-node-agent` | 138 MB | 37.1 MB |
+
+Idle memory: panel ≈ 6.5 MiB; agent container incl. running sing-box ≈ 16 MiB (sing-box grows with active connections — size it accordingly).
+
+> The 60 MB agent-image target refers to pull/transfer size (37 MB ✓). The unpacked 138 MB is dominated by the official sing-box 1.14.1 binary itself (~92 MB unpacked; 1.13.x ≈ 68 MB — no current official release ships smaller). To shrink further, build sing-box from source with minimal feature tags (`with_quic,with_utls,with_clash_api`) in place of the release download.
+
+### Upgrades
+
+- **Panel**: `git pull && make docker-panel && docker compose up -d` — the image is replaced, the `panel-data` volume is untouched; roll back by re-deploying the previous image (no data migration either way).
+- **Agent**: `make docker-agent SINGBOX_VERSION=<new>` then `docker compose -f agent.docker-compose.yml up -d`. The state volume (identity, applied revision, batch sequences) survives; traffic idempotency is preserved across upgrades. To change sing-box only, rebuild with a new `SINGBOX_VERSION` — the agent re-checks and re-applies its config on start.
+
+### Notes and caveats
+
+- The runtime base is `scratch`: no shell, no busybox. Debug with `docker exec <c> /usr/local/bin/sing-box version` style direct execs, `docker cp`, or `docker top` (processes are visible from the host).
+- sing-box is a child of the agent. Each reload replaces the running sing-box: the previous process is SIGTERMed by `singbox-reload` and would linger as a zombie, because the agent (a plain Go binary) does not reap reparented orphans. The compose files therefore set `init: true`, which runs Docker's built-in init as PID 1 to reap it — keep that setting. If you run the image with bare `docker run`, pass `--init` for the same effect; without it every config apply leaks one zombie process until the container restarts. Note that `docker top` does not show defunct processes — check for zombies with `ps aux | grep defunct` on the host. `docker stop` SIGTERMs the agent; any remaining sing-box is killed when the container's PID namespace goes away.
+- The agent reads host-style `/proc` metrics (`cpu`, `meminfo`, `uptime`), so reported CPU/memory percentages reflect the host, not the cgroup limit.
+- Container env defaults mirror `deploy/agent.example.yaml` container paths: `AGENT_STATE_PATH=/var/lib/panel-agent/state.json`, `AGENT_SINGBOX_CONFIG_PATH=/etc/sing-box/config.json`, `AGENT_SINGBOX_CHECK_BIN=/usr/local/bin/sing-box`, `AGENT_SINGBOX_RELOAD_COMMAND=/usr/local/bin/singbox-reload`. Env overrides the YAML file, so bind-mounting an `agent.yaml` into this image only works for keys not pinned by these envs.
+
+### systemd vs Docker
+
+| | systemd | Docker |
+| --- | --- | --- |
+| Isolation | hardened units (`ProtectSystem=strict`, non-root) | container boundary, root user by default |
+| sing-box lifecycle | host package + `systemctl restart` | pinned version inside the image, helper-managed |
+| Upgrades | replace binary + restart | replace image + restart container |
+| Data | filesystem paths | named volumes |
+| Best for | long-lived dedicated VPS | fast provisioning, reproducible nodes, all-in-one test stacks |
+
+Both paths are fully supported and produce identical panel-side behavior (same agent API). Pick systemd where the hardened non-root setup matters; pick Docker for repeatability and one-command bring-up.
+
+
 ## Data collection model
 
 - **Traffic** is reported as per-interval **deltas** per (user, node), computed from sing-box Clash API `/connections` totals. Every batch carries a monotonically increasing `batch_seq` per kind; the Panel treats `(agent, batch_seq)` as the idempotency key, so resend-on-uncertainty never double counts (worst case undercounts one interval). Sequence numbers are persisted only after a confirmed ack.
@@ -133,6 +228,8 @@ make test-integration   # go test -tags integration ./... (skips when sing-box i
 make ui                 # build the Vue frontend (web/dist)
 make build-embed        # frontend embedded into the panel binary
 make release-agent      # linux amd64/arm64/386 release tarballs in dist/
+make docker-panel       # build vps-node-panel image (web UI embedded)
+make docker-agent       # build vps-node-agent image (agent + sing-box + reload helper)
 ```
 
 Module layout:
@@ -148,12 +245,13 @@ internal/agentruntime agent-side runtime: config applier, metrics, Clash collect
 internal/agentstate  agent state file (identity, revision, batch seqs)
 internal/webui       web/dist embedding (build tag embed_ui)
 internal/e2e         end-to-end smoke test + sing-box integration tests
-deploy/              systemd units, example configs, installer
+deploy/              systemd units, example configs, installer, Dockerfiles + compose files
 ```
 
 ## Deploy notes
 
-- Production Agent↔Panel traffic must use **HTTPS with certificate verification**.
+- Production Agent↔Panel traffic must use **HTTPS with certificate verification** (behind a reverse proxy for Docker, e.g. Caddy — see the Docker section).
 - systemd units are hardened (`NoNewPrivileges`, `ProtectSystem=strict`, `PrivateTmp`, non-root users, minimal `ReadWritePaths`).
 - SQLite backups must copy the WAL/SHM set and preserve the `app_key` (it encrypts protocol secrets at rest).
 - Start with one Panel and one canary Agent; pin the sing-box version on the canary before scaling.
+- Node listen ports >1024 need no container privileges; ports ≤1024 require root (or `NET_BIND_SERVICE`). Node ports are published with `ports:` one pair per node, or `network_mode: host` when exposing many.

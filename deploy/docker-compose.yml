@@ -1,0 +1,50 @@
+services:
+  panel:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.panel
+    image: vps-node-panel:latest
+    container_name: vps-node-panel
+    restart: unless-stopped
+    ports:
+      - "${PANEL_PORT:-8080}:8080"
+    environment:
+      PANEL_LISTEN: ":8080"
+      PANEL_DB_PATH: /data/panel.db
+      PANEL_APP_KEY: "${PANEL_APP_KEY:?set PANEL_APP_KEY to a 32-byte hex key: openssl rand -hex 32}"
+      PANEL_ADMIN_USER: ${PANEL_ADMIN_USER:-admin}
+      PANEL_ADMIN_PASSWORD: "${PANEL_ADMIN_PASSWORD:?set PANEL_ADMIN_PASSWORD}"
+      PANEL_LOG_LEVEL: ${PANEL_LOG_LEVEL:-info}
+    volumes:
+      - panel-data:/data
+
+volumes:
+  panel-data:
+
+# Recommended: terminate TLS with Caddy in front of the panel (the panel serves plain HTTP).
+# Uncomment the service below and create a Caddyfile next to this compose file:
+#
+#   panel.example.com {
+#       reverse_proxy panel:8080
+#   }
+#
+# services:
+#   caddy:
+#     image: caddy:2-alpine
+#     container_name: vps-node-caddy
+#     restart: unless-stopped
+#     depends_on:
+#       - panel
+#     ports:
+#       - "80:80"
+#       - "443:443"
+#     volumes:
+#       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+#       - caddy-data:/data
+#       - caddy-config:/config
+#
+# volumes:
+#   caddy-data:
+#   caddy-config:
+#
+# When Caddy is enabled, remove the panel "ports" mapping so :8080 is not exposed directly.

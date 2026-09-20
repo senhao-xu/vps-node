@@ -3,8 +3,13 @@ BINARY_AGENT ?= panel-agent
 GO ?= go
 VERSION ?= $(shell date -u +%Y%m%d)
 DOWNLOAD_BASE ?= https://example.com/downloads/vps-node
+SINGBOX_VERSION ?= 1.14.1
+SINGBOX_SHA256_AMD64 ?=
+SINGBOX_SHA256_ARM64 ?=
+PANEL_IMAGE ?= vps-node-panel:latest
+AGENT_IMAGE ?= vps-node-agent:latest
 
-.PHONY: all build agent panel ui build-embed test test-race vet test-integration release-agent clean
+.PHONY: all build agent panel ui build-embed test test-race vet test-integration release-agent docker-panel docker-agent clean
 
 all: build
 
@@ -46,6 +51,15 @@ release-agent:
 			panel-agent panel-agent.service install-agent.sh; \
 	done
 	@echo "release tarballs in dist/ (set DOWNLOAD_BASE/VERSION when installing)"
+
+docker-panel:
+	docker build -f deploy/Dockerfile.panel -t $(PANEL_IMAGE) .
+
+docker-agent:
+	docker build -f deploy/Dockerfile.agent --build-arg SINGBOX_VERSION=$(SINGBOX_VERSION) \
+		$(if $(SINGBOX_SHA256_AMD64),--build-arg SINGBOX_SHA256_AMD64=$(SINGBOX_SHA256_AMD64)) \
+		$(if $(SINGBOX_SHA256_ARM64),--build-arg SINGBOX_SHA256_ARM64=$(SINGBOX_SHA256_ARM64)) \
+		-t $(AGENT_IMAGE) .
 
 clean:
 	rm -rf dist $(BINARY_PANEL) $(BINARY_AGENT)

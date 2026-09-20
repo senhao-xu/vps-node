@@ -1,0 +1,2 @@
+{"file":"docs/api-contract.md","reason":"Verify container agent/panel flows against the unchanged binding contract."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Quality gate: full validation command list must stay green; no business-code drift."}
