@@ -46,7 +46,7 @@ const freshRegisterToken = computed(() => registerTokenResult.value?.register_to
 
 const installNotes: Record<InstallTab, string> = {
   binary: 'install 脚本目前随 release tarball 分发，脚本地址需按实际发布渠道替换。',
-  docker: '镜像需自行构建或在节点可见的 registry 中拉取；端口映射请按节点实际端口修改。',
+  docker: '镜像从 GitHub Container Registry（ghcr.io）拉取；端口映射请按节点实际端口修改。',
 }
 
 const activeInstallCommand = computed(() =>
@@ -147,6 +147,20 @@ async function generateRegisterToken() {
   }
 }
 
+async function autoGenerateRegisterToken() {
+  if (registerTokenResult.value || generatingRegisterToken.value) return
+  const current = server.value
+  if (!current) return
+  generatingRegisterToken.value = true
+  try {
+    registerTokenResult.value = await createRegisterToken(current.id)
+  } catch {
+    registerTokenResult.value = null
+  } finally {
+    generatingRegisterToken.value = false
+  }
+}
+
 async function confirmDeleteServer() {
   const current = server.value
   if (!current) return
@@ -185,11 +199,15 @@ function onSaved() {
 watch(serverId, () => {
   agentTokenResult.value = null
   registerTokenResult.value = null
-  void load()
+  void load().then(() => {
+    void autoGenerateRegisterToken()
+  })
 })
 
 onMounted(() => {
-  void load()
+  void load().then(() => {
+    void autoGenerateRegisterToken()
+  })
 })
 </script>
 
@@ -387,13 +405,13 @@ onMounted(() => {
             v-if="freshRegisterToken === ''"
             class="install-hint"
           >
-            先生成 Register Token，生成后命令会自动内嵌真实 token（当前为占位符）。
+            {{ generatingRegisterToken ? '正在生成注册 Token…' : '注册 Token 生成失败，请点击上方「生成注册 Token」重试。' }}
           </p>
           <p
             v-else
             class="install-hint ok"
           >
-            已内嵌本次生成的 Register Token。
+            已自动内嵌注册 Token，有效期至 {{ registerTokenResult ? formatDateTime(registerTokenResult.expires_at) : '' }}。
           </p>
           <div class="install-code-head">
             <span class="text-secondary">安装命令</span>

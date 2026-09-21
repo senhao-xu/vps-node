@@ -21,6 +21,6 @@ export function dockerInstallCommand(origin: string, serverId: number, token: st
     `  -e AGENT_SERVER_ID=${serverId} \\`,
     `  -e AGENT_REGISTER_TOKEN=${resolved} \\`,
     '  -p 8388:8388 -p 8388:8388/udp \\',
-    '  vps-node-agent:latest',
+    '  ghcr.io/senhao-xu/vps-node-agent:latest',
   ].join('\n')
 }

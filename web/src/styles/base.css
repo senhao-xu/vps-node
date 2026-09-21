@@ -225,6 +225,25 @@ select:disabled {
   cursor: not-allowed;
 }
 
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 32px;
+  background-image: var(--select-chevron);
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 14px;
+  cursor: pointer;
+}
+
+select:hover:not(:disabled) {
+  border-color: var(--color-border-strong);
+}
+
+select:disabled {
+  background-image: none;
+}
+
 ::placeholder {
   color: var(--color-text-secondary);
   opacity: 0.7;
