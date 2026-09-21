@@ -21,6 +21,7 @@ const (
 	ProtocolShadowsocks = "shadowsocks"
 	ProtocolVLESS       = "vless"
 	ProtocolHysteria2   = "hysteria2"
+	ProtocolAnyTLS      = "anytls"
 
 	SSMethod2022Aes128Gcm = "2022-blake3-aes-128-gcm"
 	SSMethod2022Aes256Gcm = "2022-blake3-aes-256-gcm"
@@ -114,6 +115,8 @@ func renderInbound(appKey []byte, n Node) (map[string]any, error) {
 		return renderVLESS(n)
 	case ProtocolHysteria2:
 		return renderHysteria2(n)
+	case ProtocolAnyTLS:
+		return renderAnyTLS(n)
 	default:
 		return nil, fmt.Errorf("%w: node %d: unknown protocol %q", ErrUnrenderable, n.ID, n.Protocol)
 	}
@@ -230,6 +233,33 @@ func renderHysteria2(n Node) (map[string]any, error) {
 		inbound["obfs"] = map[string]any{"type": "salamander", "password": obfsPassword}
 	}
 	return inbound, nil
+}
+
+func renderAnyTLS(n Node) (map[string]any, error) {
+	serverName := SettingString(n.Settings, "server_name")
+	certificate := SettingString(n.Secret, "certificate")
+	privateKey := SettingString(n.Secret, "private_key")
+	users := make([]map[string]any, 0, len(n.Users))
+	for _, u := range n.Users {
+		users = append(users, map[string]any{
+			"name":     "u-" + strconv.FormatInt(u.ID, 10),
+			"password": u.UUID,
+		})
+	}
+	tls := map[string]any{"enabled": true}
+	if serverName != "" && certificate != "" && privateKey != "" {
+		tls["server_name"] = serverName
+		tls["certificate"] = strings.Split(certificate, "\n")
+		tls["key"] = strings.Split(privateKey, "\n")
+	}
+	return map[string]any{
+		"type":        ProtocolAnyTLS,
+		"tag":         inboundTag(n),
+		"listen":      "::",
+		"listen_port": n.Port,
+		"users":       users,
+		"tls":         tls,
+	}, nil
 }
 
 func SettingString(m map[string]any, key string) string {

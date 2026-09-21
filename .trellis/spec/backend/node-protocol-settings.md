@@ -45,6 +45,15 @@ Reality generation response:
 | Unknown protocol setting field | `422 validation` |
 | Reality generation without admin session | `401 unauthorized` |
 
+## 4.2 AnyTLS
+
+- Fourth protocol (`anytls`), reuses the Hysteria2 TLS-certificate pattern: allowlist is `server_name` (plain) + `certificate`/`private_key` (secret) + reserved `password` (secret); hy2-only fields (`up_mbps`/`down_mbps`/`obfs_password`/`hop_ports`) and vless fields are rejected.
+- TLS validation is shared with Hysteria2 via `validateTLSMaterial` in `internal/web/nodes.go` (key pair match, validity window, `VerifyHostname`).
+- User UUID is the anytls password; sing-box inbound is `type: anytls` with inline PEM `certificate`/`key` split on `\n` (same shape as hy2).
+- Subscriptions: `anytls://<uuid>@host:port?sni=<server_name>#<name>` URI, Clash `{type: anytls, password, sni, skip-cert-verify: false, udp: true}`, template placeholder `__ANYTLS_PROXIES__`.
+- Requires sing-box >= 1.12 on agents (image pins 1.14.1).
+- Adding a new protocol requires a DB migration that rebuilds `nodes` to widen the `protocol` CHECK (see `0006_nodes_anytls_protocol.sql`: back up dependent tables `sessions`/`user_nodes`, drop in FK order, rebuild, restore, `foreign_key_check`).
+
 ## 4.1 Extended Hysteria2 Settings (obfs / hop)
 
 Both are **plain settings** (never `secretFields`) and optional everywhere (create + patch):

@@ -17,8 +17,8 @@ Browser --HTTPS/Admin session--> Panel API + Web UI --SQLite
 
 - **Panel** owns users, servers, nodes, authorizations, traffic totals, sessions and connection logs. It is the single source of truth.
 - **Server** is a physical VPS with exactly **one** Agent; it may host **many** protocol Nodes.
-- **Node** is one sing-box inbound (Shadowsocks 2022 / VLESS Reality / Hysteria2) with a port and protocol settings.
-- **User ⇄ Node** is N:N (`user_nodes`). A user has one global UUID; VLESS/Hysteria2 use it directly, Shadowsocks credentials are derived by the Panel per node+UUID.
+- **Node** is one sing-box inbound (Shadowsocks 2022 / VLESS Reality / Hysteria2 / AnyTLS) with a port and protocol settings. AnyTLS requires sing-box ≥ 1.12 (the pinned agent image already satisfies this; binary installs must provide it themselves).
+- **User ⇄ Node** is N:N (`user_nodes`). A user has one global UUID; VLESS/Hysteria2/AnyTLS use it directly, Shadowsocks credentials are derived by the Panel per node+UUID.
 - **Agent** polls the Panel for versioned, server-scoped config, validates it with `sing-box check`, atomically replaces the config file, and reports traffic, sessions and connection logs. The Agent never stores business data.
 
 Control flow (design contract):

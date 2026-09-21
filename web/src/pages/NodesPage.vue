@@ -177,7 +177,7 @@ function restoreFromQuery() {
   const serverId = typeof raw['server_id'] === 'string' ? Number(raw['server_id']) : NaN
   if (Number.isInteger(serverId) && serverId > 0) serverFilter.value = String(serverId)
   const protocol = raw['protocol']
-  if (protocol === 'shadowsocks' || protocol === 'vless' || protocol === 'hysteria2') {
+  if (protocol === 'shadowsocks' || protocol === 'vless' || protocol === 'hysteria2' || protocol === 'anytls') {
     protocolFilter.value = protocol
   }
   const status = raw['status']
@@ -273,6 +273,9 @@ onMounted(() => {
           </option>
           <option value="hysteria2">
             {{ protocolLabel('hysteria2') }}
+          </option>
+          <option value="anytls">
+            {{ protocolLabel('anytls') }}
           </option>
         </select>
         <select

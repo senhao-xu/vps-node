@@ -69,6 +69,8 @@ export function protocolLabel(protocol: Protocol): string {
       return 'VLESS'
     case 'hysteria2':
       return 'Hysteria2'
+    case 'anytls':
+      return 'AnyTLS'
     default:
       return protocol
   }

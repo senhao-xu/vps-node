@@ -47,6 +47,7 @@ const (
 	ProtocolShadowsocks = "shadowsocks"
 	ProtocolVLESS       = "vless"
 	ProtocolHysteria2   = "hysteria2"
+	ProtocolAnyTLS      = "anytls"
 )
 
 const nodeSelect = `SELECT id, server_id, name, protocol, port, settings, secret_enc, status, created_at, updated_at FROM nodes`

@@ -38,11 +38,12 @@ const vlessServerNames = ref('')
 
 const hy2Up = ref<number | null>(null)
 const hy2Down = ref<number | null>(null)
-const hy2ServerName = ref('')
-const hy2Certificate = ref('')
-const hy2PrivateKey = ref('')
 const hy2ObfsPassword = ref('')
 const hy2HopPorts = ref('')
+
+const tlsServerName = ref('')
+const tlsCertificate = ref('')
+const tlsPrivateKey = ref('')
 
 const submitting = ref(false)
 const generatingReality = ref(false)
@@ -71,11 +72,11 @@ watch(
     vlessServerNames.value = ''
     hy2Up.value = null
     hy2Down.value = null
-    hy2ServerName.value = ''
-    hy2Certificate.value = ''
-    hy2PrivateKey.value = ''
     hy2ObfsPassword.value = ''
     hy2HopPorts.value = ''
+    tlsServerName.value = ''
+    tlsCertificate.value = ''
+    tlsPrivateKey.value = ''
     serverChoice.value = null
     if (!isEdit.value && props.serverId === undefined) {
       void loadServers()
@@ -109,18 +110,20 @@ const settingsPayload = computed<NodeSettingsInput | undefined>(() => {
       .map((item) => item.trim())
       .filter((item) => item.length > 0)
     if (names.length > 0) payload['server_names'] = names
-  } else {
-    if (hy2Up.value !== null && !Number.isNaN(hy2Up.value) && hy2Up.value >= 0) {
-      payload['up_mbps'] = hy2Up.value
+  } else if (protocol.value === 'hysteria2' || protocol.value === 'anytls') {
+    if (protocol.value === 'hysteria2') {
+      if (hy2Up.value !== null && !Number.isNaN(hy2Up.value) && hy2Up.value >= 0) {
+        payload['up_mbps'] = hy2Up.value
+      }
+      if (hy2Down.value !== null && !Number.isNaN(hy2Down.value) && hy2Down.value >= 0) {
+        payload['down_mbps'] = hy2Down.value
+      }
+      if (hy2ObfsPassword.value) payload['obfs_password'] = hy2ObfsPassword.value
+      if (hy2HopPorts.value.trim()) payload['hop_ports'] = hy2HopPorts.value.trim()
     }
-    if (hy2Down.value !== null && !Number.isNaN(hy2Down.value) && hy2Down.value >= 0) {
-      payload['down_mbps'] = hy2Down.value
-    }
-    if (hy2ServerName.value) payload['server_name'] = hy2ServerName.value.trim()
-    if (hy2Certificate.value) payload['certificate'] = hy2Certificate.value
-    if (hy2PrivateKey.value) payload['private_key'] = hy2PrivateKey.value
-    if (hy2ObfsPassword.value) payload['obfs_password'] = hy2ObfsPassword.value
-    if (hy2HopPorts.value.trim()) payload['hop_ports'] = hy2HopPorts.value.trim()
+    if (tlsServerName.value) payload['server_name'] = tlsServerName.value.trim()
+    if (tlsCertificate.value) payload['certificate'] = tlsCertificate.value
+    if (tlsPrivateKey.value) payload['private_key'] = tlsPrivateKey.value
   }
   if (Object.keys(payload).length === 0) return undefined
   return payload
@@ -144,27 +147,30 @@ const validationMessage = computed(() => {
     if (vlessShortId.value && !/^(?:[0-9a-fA-F]{2}){1,8}$/.test(vlessShortId.value)) {
       return 'Short ID 必须是 2-16 位偶数长度十六进制字符'
     }
-  } else if (protocol.value === 'hysteria2') {
-    for (const value of [hy2Up.value, hy2Down.value]) {
-      if (value !== null && (!Number.isInteger(value) || value < 0)) {
-        return '带宽必须是非负整数'
+  } else if (protocol.value === 'hysteria2' || protocol.value === 'anytls') {
+    if (protocol.value === 'hysteria2') {
+      for (const value of [hy2Up.value, hy2Down.value]) {
+        if (value !== null && (!Number.isInteger(value) || value < 0)) {
+          return '带宽必须是非负整数'
+        }
+      }
+      if (hy2ObfsPassword.value.length > 64) return 'obfs 混淆密码最长 64 个字符'
+      const hop = hy2HopPorts.value.trim()
+      if (hop) {
+        const match = /^(\d+)-(\d+)$/.exec(hop)
+        if (!match) return '端口跳跃格式应为 start-end，例如 30000-40000'
+        const start = Number(match[1])
+        const end = Number(match[2])
+        if (start < 1 || end > 65535 || start > end) {
+          return '端口跳跃范围必须在 1-65535 之间且起始端口不大于结束端口'
+        }
       }
     }
-    if (!isEdit.value && !hy2ServerName.value.trim()) return '请填写 Hysteria2 Server Name'
-    if (!isEdit.value && (!hy2Certificate.value || !hy2PrivateKey.value)) return '请填写 Hysteria2 PEM 证书链和私钥'
-    if ((hy2Certificate.value && !hy2PrivateKey.value) || (!hy2Certificate.value && hy2PrivateKey.value)) return '证书链和私钥必须成对提交'
-    if (hy2ServerName.value && !/^[A-Za-z0-9.-]+$/.test(hy2ServerName.value.trim())) return 'Server Name 格式不正确'
-    if (hy2ObfsPassword.value.length > 64) return 'obfs 混淆密码最长 64 个字符'
-    const hop = hy2HopPorts.value.trim()
-    if (hop) {
-      const match = /^(\d+)-(\d+)$/.exec(hop)
-      if (!match) return '端口跳跃格式应为 start-end，例如 30000-40000'
-      const start = Number(match[1])
-      const end = Number(match[2])
-      if (start < 1 || end > 65535 || start > end) {
-        return '端口跳跃范围必须在 1-65535 之间且起始端口不大于结束端口'
-      }
-    }
+    const tlsLabel = protocolLabel(protocol.value)
+    if (!isEdit.value && !tlsServerName.value.trim()) return `请填写 ${tlsLabel} Server Name`
+    if (!isEdit.value && (!tlsCertificate.value || !tlsPrivateKey.value)) return `请填写 ${tlsLabel} PEM 证书链和私钥`
+    if ((tlsCertificate.value && !tlsPrivateKey.value) || (!tlsCertificate.value && tlsPrivateKey.value)) return '证书链和私钥必须成对提交'
+    if (tlsServerName.value && !/^[A-Za-z0-9.-]+$/.test(tlsServerName.value.trim())) return 'Server Name 格式不正确'
   }
   return ''
 })
@@ -178,11 +184,11 @@ function changeProtocol() {
   vlessServerNames.value = ''
   hy2Up.value = null
   hy2Down.value = null
-  hy2ServerName.value = ''
-  hy2Certificate.value = ''
-  hy2PrivateKey.value = ''
   hy2ObfsPassword.value = ''
   hy2HopPorts.value = ''
+  tlsServerName.value = ''
+  tlsCertificate.value = ''
+  tlsPrivateKey.value = ''
   error.value = ''
 }
 
@@ -325,6 +331,9 @@ async function submit() {
               <option value="hysteria2">
                 {{ protocolLabel('hysteria2') }}
               </option>
+              <option value="anytls">
+                {{ protocolLabel('anytls') }}
+              </option>
             </select>
           </div>
           <div
@@ -447,13 +456,16 @@ async function submit() {
         </div>
 
         <div
-          v-else
+          v-else-if="protocol === 'hysteria2' || protocol === 'anytls'"
           class="settings-box"
         >
           <p class="protocol-note">
-            用户 UUID 直接作为认证凭据；带宽留空表示不限制。
+            用户 UUID 直接作为认证凭据{{ protocol === 'hysteria2' ? '；带宽留空表示不限制' : '' }}。
           </p>
-          <div class="form-row">
+          <div
+            v-if="protocol === 'hysteria2'"
+            class="form-row"
+          >
             <div class="field">
               <label for="hy2-up">上行带宽（Mbps）</label>
               <input
@@ -474,30 +486,32 @@ async function submit() {
                 placeholder="选填"
               >
             </div>
+          </div>
+          <div class="form-row">
             <div class="field">
-              <label for="hy2-server-name">TLS Server Name{{ isEdit ? '（留空保持不变）' : '' }}</label>
+              <label for="tls-server-name">TLS Server Name{{ isEdit ? '（留空保持不变）' : '' }}</label>
               <input
-                id="hy2-server-name"
-                v-model="hy2ServerName"
+                id="tls-server-name"
+                v-model="tlsServerName"
                 type="text"
-                placeholder="例如 hy2.example.com"
+                placeholder="例如 tls.example.com"
               >
             </div>
           </div>
           <div class="field">
-            <label for="hy2-certificate">PEM 证书链{{ isEdit ? '（留空保持不变）' : '' }}</label>
+            <label for="tls-certificate">PEM 证书链{{ isEdit ? '（留空保持不变）' : '' }}</label>
             <textarea
-              id="hy2-certificate"
-              v-model="hy2Certificate"
+              id="tls-certificate"
+              v-model="tlsCertificate"
               rows="5"
               :placeholder="isEdit ? '留空保持不变' : '-----BEGIN CERTIFICATE-----'"
             />
           </div>
           <div class="field">
-            <label for="hy2-private-key">PEM 私钥{{ isEdit ? '（留空保持不变）' : '' }}</label>
+            <label for="tls-private-key">PEM 私钥{{ isEdit ? '（留空保持不变）' : '' }}</label>
             <textarea
-              id="hy2-private-key"
-              v-model="hy2PrivateKey"
+              id="tls-private-key"
+              v-model="tlsPrivateKey"
               rows="5"
               :placeholder="isEdit ? '留空保持不变' : '-----BEGIN PRIVATE KEY-----'"
             />
@@ -505,35 +519,37 @@ async function submit() {
           <p class="field-hint">
             证书和私钥会加密保存，并由 Panel 以内联 TLS 配置下发 Agent；编辑时两个字段必须一起替换。
           </p>
-          <div class="form-row">
-            <div class="field">
-              <label for="hy2-obfs-password">obfs 混淆密码{{ isEdit ? '（留空保持不变）' : '' }}</label>
-              <input
-                id="hy2-obfs-password"
-                v-model="hy2ObfsPassword"
-                type="text"
-                placeholder="选填，最长 64 字符"
-              >
+          <template v-if="protocol === 'hysteria2'">
+            <div class="form-row">
+              <div class="field">
+                <label for="hy2-obfs-password">obfs 混淆密码{{ isEdit ? '（留空保持不变）' : '' }}</label>
+                <input
+                  id="hy2-obfs-password"
+                  v-model="hy2ObfsPassword"
+                  type="text"
+                  placeholder="选填，最长 64 字符"
+                >
+              </div>
+              <div class="field">
+                <label for="hy2-hop-ports">端口跳跃{{ isEdit ? '（留空保持不变）' : '' }}</label>
+                <input
+                  id="hy2-hop-ports"
+                  v-model="hy2HopPorts"
+                  type="text"
+                  placeholder="选填，如 30000-40000"
+                >
+              </div>
             </div>
-            <div class="field">
-              <label for="hy2-hop-ports">端口跳跃{{ isEdit ? '（留空保持不变）' : '' }}</label>
-              <input
-                id="hy2-hop-ports"
-                v-model="hy2HopPorts"
-                type="text"
-                placeholder="选填，如 30000-40000"
-              >
-            </div>
-          </div>
-          <p class="field-hint">
-            启用 obfs 后使用 Salamander 混淆，客户端需同步填写相同密码。
-          </p>
-          <p class="field-hint hop-warning">
-            端口跳跃仅影响订阅客户端，需在服务器上自行配置 NAT 端口转发，否则客户端无法连通。
-          </p>
-          <p class="field-hint">
-            留空表示不限制带宽，单位为 Mbps。
-          </p>
+            <p class="field-hint">
+              启用 obfs 后使用 Salamander 混淆，客户端需同步填写相同密码。
+            </p>
+            <p class="field-hint hop-warning">
+              端口跳跃仅影响订阅客户端，需在服务器上自行配置 NAT 端口转发，否则客户端无法连通。
+            </p>
+            <p class="field-hint">
+              留空表示不限制带宽，单位为 Mbps。
+            </p>
+          </template>
         </div>
       </section>
 

@@ -238,6 +238,50 @@ func TestRenderHysteria2(t *testing.T) {
 	}
 }
 
+func TestRenderAnyTLS(t *testing.T) {
+	node := singbox.Node{
+		ID:       51,
+		Name:     "hk-anytls",
+		Protocol: singbox.ProtocolAnyTLS,
+		Port:     9443,
+		Settings: map[string]any{"server_name": "anytls.example.com"},
+		Secret: map[string]any{
+			"certificate": "-----BEGIN CERTIFICATE-----\nline1\nline2\n-----END CERTIFICATE-----",
+			"private_key": "-----BEGIN PRIVATE KEY-----\nkey1\n-----END PRIVATE KEY-----",
+		},
+		Users: []singbox.User{{ID: 7, UUID: "uuid-7"}},
+	}
+	config, err := singbox.Render(testAppKey, []singbox.Node{node}, singbox.ClashAPI{Port: 29090, Secret: "s"})
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	inbound := config["inbounds"].([]map[string]any)[0]
+	if inbound["type"] != "anytls" || inbound["tag"] != "anytls-51" || inbound["listen_port"] != 9443 {
+		t.Fatalf("unexpected inbound: %+v", inbound)
+	}
+	users := inbound["users"].([]map[string]any)
+	if len(users) != 1 || users[0]["name"] != "u-7" || users[0]["password"] != "uuid-7" {
+		t.Fatalf("anytls users must use uuid as password with u-<id> name, got %+v", users)
+	}
+	tlsMap := inbound["tls"].(map[string]any)
+	if tlsMap["enabled"] != true || tlsMap["server_name"] != "anytls.example.com" {
+		t.Fatalf("unexpected tls: %+v", tlsMap)
+	}
+	certLines := tlsMap["certificate"].([]string)
+	if len(certLines) != 4 || certLines[1] != "line1" {
+		t.Fatalf("certificate must be split into lines, got %v", certLines)
+	}
+	keyLines := tlsMap["key"].([]string)
+	if len(keyLines) != 3 || keyLines[1] != "key1" {
+		t.Fatalf("private key must be split into lines, got %v", keyLines)
+	}
+	for _, absent := range []string{"up_mbps", "down_mbps", "obfs", "padding_scheme"} {
+		if _, has := inbound[absent]; has {
+			t.Fatalf("anytls inbound must not contain %q: %+v", absent, inbound)
+		}
+	}
+}
+
 func TestRenderMultipleNodesShapeAndClashAPI(t *testing.T) {
 	nodes := []singbox.Node{
 		{ID: 41, Protocol: singbox.ProtocolHysteria2, Port: 10001,

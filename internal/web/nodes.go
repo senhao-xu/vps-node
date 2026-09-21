@@ -26,6 +26,7 @@ var validProtocols = map[string]bool{
 	repo.ProtocolShadowsocks: true,
 	repo.ProtocolVLESS:       true,
 	repo.ProtocolHysteria2:   true,
+	repo.ProtocolAnyTLS:      true,
 }
 
 var shadowsocksMethods = map[string]bool{
@@ -49,7 +50,7 @@ func (h *Handler) handleNodeList(w http.ResponseWriter, r *http.Request) {
 	}
 	if raw := r.URL.Query().Get("protocol"); raw != "" {
 		if !validProtocols[raw] {
-			writeErr(w, errInvalid("invalid protocol, want shadowsocks, vless or hysteria2"))
+			writeErr(w, errInvalid("invalid protocol, want shadowsocks, vless, hysteria2 or anytls"))
 			return
 		}
 		filter.Protocol = raw
@@ -157,7 +158,7 @@ func validateNodeSpec(name, protocol string, port int) error {
 		return errValidation("name must be 1-128 characters")
 	}
 	if !validProtocols[protocol] {
-		return errInvalid("invalid protocol, want shadowsocks, vless or hysteria2")
+		return errInvalid("invalid protocol, want shadowsocks, vless, hysteria2 or anytls")
 	}
 	if port < 1 || port > 65535 {
 		return errValidation("port must be 1-65535")
@@ -313,11 +314,11 @@ func (h *Handler) buildNodeSettings(protocol string, raw json.RawMessage, curren
 			return "", nil, errValidation("settings must be a JSON object")
 		}
 	}
-	if protocol == repo.ProtocolHysteria2 {
+	if protocol == repo.ProtocolHysteria2 || protocol == repo.ProtocolAnyTLS {
 		_, certSet := parsed["certificate"]
 		_, keySet := parsed["private_key"]
 		if certSet != keySet {
-			return "", nil, errValidation("hysteria2 certificate and private_key must be supplied together")
+			return "", nil, errValidation(protocol + " certificate and private_key must be supplied together")
 		}
 	}
 	for key, value := range parsed {
@@ -408,6 +409,29 @@ func (h *Handler) buildNodeSettings(protocol string, raw json.RawMessage, curren
 			default:
 				return "", nil, errValidation(fmt.Sprintf("unknown settings field %q for hysteria2", key))
 			}
+		case repo.ProtocolAnyTLS:
+			switch key {
+			case "password":
+				s, err := secretString(value, "settings.password")
+				if err != nil {
+					return "", nil, err
+				}
+				secretFields[key] = s
+			case "server_name":
+				s, err := secretString(value, "settings.server_name")
+				if err != nil {
+					return "", nil, err
+				}
+				plain[key] = s
+			case "certificate", "private_key":
+				s, ok := value.(string)
+				if !ok || s == "" || len(s) > 256*1024 {
+					return "", nil, errValidation("settings." + key + " must be a non-empty PEM string")
+				}
+				secretFields[key] = s
+			default:
+				return "", nil, errValidation(fmt.Sprintf("unknown settings field %q for anytls", key))
+			}
 		default:
 			return "", nil, errInvalid("invalid protocol")
 		}
@@ -478,23 +502,32 @@ func validateProtocolSettings(protocol string, plain, secretFields map[string]an
 				return errValidation("settings.short_id must be an even-length hexadecimal string of at most 16 characters")
 			}
 		}
-	case repo.ProtocolHysteria2:
-		name, _ := plain["server_name"].(string)
-		certificate, certOK := secretFields["certificate"].(string)
-		privateKey, keyOK := secretFields["private_key"].(string)
-		if name == "" || !certOK || !keyOK {
-			return errValidation("hysteria2 requires server_name, certificate and private_key")
-		}
-		pair, err := tls.X509KeyPair([]byte(certificate), []byte(privateKey))
-		if err != nil || len(pair.Certificate) == 0 {
-			return errValidation("hysteria2 certificate and private_key must match")
-		}
-		cert, err := x509.ParseCertificate(pair.Certificate[0])
-		if err != nil || cert.NotBefore.After(time.Now()) || cert.NotAfter.Before(time.Now()) || cert.VerifyHostname(name) != nil {
-			return errValidation("hysteria2 certificate does not cover server_name")
-		}
+	case repo.ProtocolHysteria2, repo.ProtocolAnyTLS:
+		return validateTLSMaterial(protocol, plain, secretFields)
 	default:
 		return errInvalid("invalid protocol")
+	}
+	return nil
+}
+
+// validateTLSMaterial enforces the custom-certificate TLS contract shared by
+// hysteria2 and anytls: server_name is required, certificate/private_key must
+// form a valid key pair, the leaf certificate must be within its validity
+// window and must cover server_name.
+func validateTLSMaterial(protocol string, plain, secretFields map[string]any) error {
+	name, _ := plain["server_name"].(string)
+	certificate, certOK := secretFields["certificate"].(string)
+	privateKey, keyOK := secretFields["private_key"].(string)
+	if name == "" || !certOK || !keyOK {
+		return errValidation(protocol + " requires server_name, certificate and private_key")
+	}
+	pair, err := tls.X509KeyPair([]byte(certificate), []byte(privateKey))
+	if err != nil || len(pair.Certificate) == 0 {
+		return errValidation(protocol + " certificate and private_key must match")
+	}
+	cert, err := x509.ParseCertificate(pair.Certificate[0])
+	if err != nil || cert.NotBefore.After(time.Now()) || cert.NotAfter.Before(time.Now()) || cert.VerifyHostname(name) != nil {
+		return errValidation(protocol + " certificate does not cover server_name")
 	}
 	return nil
 }

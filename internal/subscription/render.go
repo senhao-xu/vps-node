@@ -141,6 +141,13 @@ func renderURI(appKey []byte, userUUID string, n Node) (string, error) {
 			q.Set("mport", hopPorts)
 		}
 		return "hysteria2://" + url.PathEscape(userUUID) + "@" + host + "?" + q.Encode() + "#" + name, nil
+	case singbox.ProtocolAnyTLS:
+		serverName := singbox.SettingString(n.Settings, "server_name")
+		if serverName == "" {
+			return "", fmt.Errorf("anytls node %d has no server name", n.ID)
+		}
+		q := url.Values{"sni": {serverName}}
+		return "anytls://" + url.PathEscape(userUUID) + "@" + host + "?" + q.Encode() + "#" + name, nil
 	default:
 		return "", fmt.Errorf("unsupported protocol %q", n.Protocol)
 	}
@@ -264,6 +271,14 @@ func renderProxy(appKey []byte, userUUID string, n Node) (map[string]any, error)
 		if hopPorts := singbox.SettingString(n.Settings, "hop_ports"); hopPorts != "" {
 			p["ports"] = hopPorts
 		}
+	case singbox.ProtocolAnyTLS:
+		serverName := singbox.SettingString(n.Settings, "server_name")
+		if serverName == "" {
+			return nil, fmt.Errorf("anytls node %d has no server name", n.ID)
+		}
+		p["password"], p["sni"] = userUUID, serverName
+		p["skip-cert-verify"] = false
+		p["udp"] = true
 	default:
 		return nil, fmt.Errorf("unsupported protocol %q", n.Protocol)
 	}
@@ -296,7 +311,7 @@ func expandGroups(config map[string]any, names map[string][]string, validating b
 			}
 		}
 	}
-	placeholders := map[string]string{"__ALL_PROXIES__": "all", "__SHADOWSOCKS_PROXIES__": singbox.ProtocolShadowsocks, "__VLESS_PROXIES__": singbox.ProtocolVLESS, "__HYSTERIA2_PROXIES__": singbox.ProtocolHysteria2}
+	placeholders := map[string]string{"__ALL_PROXIES__": "all", "__SHADOWSOCKS_PROXIES__": singbox.ProtocolShadowsocks, "__VLESS_PROXIES__": singbox.ProtocolVLESS, "__HYSTERIA2_PROXIES__": singbox.ProtocolHysteria2, "__ANYTLS_PROXIES__": singbox.ProtocolAnyTLS}
 	for _, rawGroup := range groups {
 		group := rawGroup.(map[string]any)
 		items, ok := group["proxies"].([]any)

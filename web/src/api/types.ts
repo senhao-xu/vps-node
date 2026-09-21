@@ -1,7 +1,7 @@
 export type UserStatus = 'active' | 'disabled' | 'expired'
 export type ServerStatus = 'active' | 'disabled' | 'offline'
 export type NodeStatus = 'active' | 'disabled'
-export type Protocol = 'shadowsocks' | 'vless' | 'hysteria2'
+export type Protocol = 'shadowsocks' | 'vless' | 'hysteria2' | 'anytls'
 export type ConnectionLogStatus = 'active' | 'closed'
 export type TrafficBucket = 'hour' | 'day'
 export type UserExpiryFilter = 'valid' | 'expired'

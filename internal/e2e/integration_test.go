@@ -5,8 +5,14 @@ package e2e
 import (
 	"context"
 	"crypto/ecdh"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/base64"
+	"encoding/pem"
 	"fmt"
+	"math/big"
 	"net/http"
 	"os"
 	"os/exec"
@@ -33,7 +39,7 @@ func requireSingBox(t *testing.T) string {
 	return bin
 }
 
-func seedThreeProtocols(t *testing.T) (env *panelEnv, cookie *http.Cookie, registerToken string) {
+func seedProtocols(t *testing.T) (env *panelEnv, cookie *http.Cookie, registerToken string) {
 	t.Helper()
 	env = newPanelEnv(t)
 	cookie = env.login()
@@ -43,11 +49,14 @@ func seedThreeProtocols(t *testing.T) (env *panelEnv, cookie *http.Cookie, regis
 	}, cookie)
 	serverID := int64(out["id"].(float64))
 
-	key, err := ecdh.X25519().GenerateKey(nil)
+	key, err := ecdh.X25519().GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatalf("x25519: %v", err)
 	}
-	privateKey := base64.StdEncoding.EncodeToString(key.Bytes())
+	privateKey := base64.RawURLEncoding.EncodeToString(key.Bytes())
+
+	now := time.Now()
+	cert, tlsKey := e2eTLSMaterial(t, "full01.example.com", now.Add(-time.Hour), now.Add(24*time.Hour))
 
 	_, out = env.do("POST", "/api/nodes", map[string]any{
 		"server_id": serverID, "name": "SS", "protocol": "shadowsocks", "port": 8388,
@@ -67,12 +76,23 @@ func seedThreeProtocols(t *testing.T) (env *panelEnv, cookie *http.Cookie, regis
 
 	_, out = env.do("POST", "/api/nodes", map[string]any{
 		"server_id": serverID, "name": "HY2", "protocol": "hysteria2", "port": 8443,
-		"settings": map[string]any{"up_mbps": 100, "down_mbps": 200},
+		"settings": map[string]any{
+			"server_name": "full01.example.com", "certificate": cert, "private_key": tlsKey,
+			"up_mbps": 100, "down_mbps": 200,
+		},
 	}, cookie)
 	hy2ID := int64(out["id"].(float64))
 
+	_, out = env.do("POST", "/api/nodes", map[string]any{
+		"server_id": serverID, "name": "ANYTLS", "protocol": "anytls", "port": 8444,
+		"settings": map[string]any{
+			"server_name": "full01.example.com", "certificate": cert, "private_key": tlsKey,
+		},
+	}, cookie)
+	anytlsID := int64(out["id"].(float64))
+
 	expires := time.Now().AddDate(0, 0, 30).UTC().Format(time.RFC3339)
-	for _, nodeIDs := range [][]int64{{ssID, vlessID, hy2ID}, {vlessID}} {
+	for _, nodeIDs := range [][]int64{{ssID, vlessID, hy2ID, anytlsID}, {vlessID}} {
 		_, out = env.do("POST", "/api/users", map[string]any{
 			"quota_bytes": 1 << 30,
 			"started_at":  time.Now().Add(-time.Hour).UTC().Format(time.RFC3339),
@@ -89,9 +109,25 @@ func seedThreeProtocols(t *testing.T) (env *panelEnv, cookie *http.Cookie, regis
 	return env, cookie, registerToken
 }
 
+func e2eTLSMaterial(t *testing.T, host string, notBefore, notAfter time.Time) (string, string) {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpl := &x509.Certificate{SerialNumber: new(big.Int).SetInt64(time.Now().UnixNano()), Subject: pkix.Name{CommonName: host}, DNSNames: []string{host}, NotBefore: notBefore, NotAfter: notAfter, KeyUsage: x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cert := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+	private := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
+	return string(cert), string(private)
+}
+
 func TestSingBoxCheckOnRenderedPanelPayload(t *testing.T) {
 	bin := requireSingBox(t)
-	env, _, registerToken := seedThreeProtocols(t)
+	env, _, registerToken := seedProtocols(t)
 
 	state, err := agentstate.Load(filepath.Join(t.TempDir(), "state.json"))
 	if err != nil {

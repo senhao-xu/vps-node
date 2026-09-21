@@ -26,8 +26,8 @@ func TestRenderGeneralIncludesAllProtocolsWithoutPrivateKey(t *testing.T) {
 	if _, err := rand.Read(key); err != nil {
 		t.Fatal(err)
 	}
-	nodes := []Node{testNode(t, "shadowsocks"), testNode(t, "vless"), testNode(t, "hysteria2")}
-	nodes[1].ID, nodes[2].ID = 2, 3
+	nodes := []Node{testNode(t, "shadowsocks"), testNode(t, "vless"), testNode(t, "hysteria2"), testNode(t, "anytls")}
+	nodes[1].ID, nodes[2].ID, nodes[3].ID = 2, 3, 4
 	encoded, err := RenderGeneral(key, "user-uuid", nodes)
 	if err != nil {
 		t.Fatal(err)
@@ -37,13 +37,57 @@ func TestRenderGeneralIncludesAllProtocolsWithoutPrivateKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(raw)
-	for _, prefix := range []string{"ss://", "vless://", "hysteria2://"} {
+	for _, prefix := range []string{"ss://", "vless://", "hysteria2://", "anytls://"} {
 		if !strings.Contains(text, prefix) {
 			t.Fatalf("missing %s in %q", prefix, text)
 		}
 	}
 	if strings.Contains(text, "private_key") {
 		t.Fatal("private key leaked")
+	}
+}
+
+func TestRenderAnyTLSLinkAndProxy(t *testing.T) {
+	key := make([]byte, 32)
+	node := testNode(t, "anytls")
+
+	encoded, err := RenderGeneral(key, "user-uuid", []Node{node})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	link := string(raw)
+	if !strings.HasPrefix(link, "anytls://user-uuid@[2001:db8::1]:443?sni=example.com#") {
+		t.Fatalf("unexpected anytls link: %q", link)
+	}
+
+	template := "proxy-groups:\n  - {name: anytls, type: select, proxies: [__ANYTLS_PROXIES__]}\n"
+	out, err := RenderClash(key, "user-uuid", template, []Node{node})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config map[string]any
+	if err := yaml.Unmarshal(out, &config); err != nil {
+		t.Fatal(err)
+	}
+	proxy := config["proxies"].([]any)[0].(map[string]any)
+	if proxy["type"] != "anytls" || proxy["password"] != "user-uuid" || proxy["sni"] != "example.com" ||
+		proxy["skip-cert-verify"] != false || proxy["udp"] != true {
+		t.Fatalf("unexpected anytls clash proxy: %+v", proxy)
+	}
+	groups := config["proxy-groups"].([]any)
+	expanded := groups[0].(map[string]any)["proxies"].([]any)
+	if len(expanded) != 1 || expanded[0].(string) != "node one" {
+		t.Fatalf("__ANYTLS_PROXIES__ must expand to the anytls node, got %v", expanded)
+	}
+
+	broken := testNode(t, "anytls")
+	broken.Settings["server_name"] = ""
+	if _, err := RenderGeneral(key, "user-uuid", []Node{broken}); err == nil {
+		t.Fatal("anytls node without server_name must fail to render")
 	}
 }
 

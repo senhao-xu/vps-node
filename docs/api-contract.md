@@ -54,7 +54,7 @@ List endpoints accept `?page=` (default 1) and `?page_size=` (default 20, max 10
 - User status: `active`, `disabled`, `expired`.
 - Server status: `active`, `disabled`, `offline` (`offline` is computed from heartbeat, not stored by admins).
 - Node status: `active`, `disabled`.
-- Protocols: `shadowsocks`, `vless`, `hysteria2`.
+- Protocols: `shadowsocks`, `vless`, `hysteria2`, `anytls`.
 - Connection log status: `active`, `closed`.
 
 A user is **eligible** for a node iff `status = active` AND `expires_at > now` AND (`quota_bytes = 0` OR `used_bytes < quota_bytes`). Only eligible users authorized on the node's server are included in agent payloads.
@@ -273,7 +273,7 @@ Rotates the agent token of the server's agent. Response `200`: `{ "agent_token":
 
 ### GET /api/nodes
 
-Query (all optional, combinable): `server_id` (exact match), `protocol` (`shadowsocks|vless|hysteria2`), `status` (`active|disabled`), `q` (case-insensitive substring match on node name), plus `page` / `page_size`. Invalid enum values return `400 invalid_request`. Paginated node DTOs:
+Query (all optional, combinable): `server_id` (exact match), `protocol` (`shadowsocks|vless|hysteria2|anytls`), `status` (`active|disabled`), `q` (case-insensitive substring match on node name), plus `page` / `page_size`. Invalid enum values return `400 invalid_request`. Paginated node DTOs:
 
 ```json
 { "id": 1, "server_id": 1, "name": "HK-SS", "protocol": "shadowsocks", "port": 8388, "status": "active", "server": { "id": 1, "name": "HK-1" }, "created_at": "..." }
@@ -289,7 +289,7 @@ Protocol secrets are never exposed.
 { "server_id": 1, "name": "HK-SS", "protocol": "shadowsocks", "port": 8388, "settings": { "method": "2022-blake3-aes-128-gcm" } }
 ```
 
-`settings` is a protocol-specific structured object validated against an allowlist. Shadowsocks requires a supported `method`; its server password may be omitted and derived by Panel. VLESS requires a valid X25519 `private_key` and at least one `server_names` entry; optional `short_id` is an even-length hexadecimal string of at most 16 characters. Hysteria2 accepts optional non-negative integer `up_mbps` and `down_mbps`. Secrets submitted here are encrypted at rest by Panel. Response `201`: node DTO.
+`settings` is a protocol-specific structured object validated against an allowlist. Shadowsocks requires a supported `method`; its server password may be omitted and derived by Panel. VLESS requires a valid X25519 `private_key` and at least one `server_names` entry; optional `short_id` is an even-length hexadecimal string of at most 16 characters. Hysteria2 accepts optional non-negative integer `up_mbps` and `down_mbps`. Hysteria2 and AnyTLS both require `server_name` plus a matching PEM `certificate`/`private_key` pair covering that name. Secrets submitted here are encrypted at rest by Panel. Response `201`: node DTO.
 
 ### POST /api/nodes/reality-keypair
 
