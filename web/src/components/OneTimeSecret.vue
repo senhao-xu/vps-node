@@ -44,8 +44,8 @@ async function copy() {
   gap: var(--spacing-xs);
   padding: var(--spacing-md);
   border: 1px dashed var(--color-warning);
-  border-radius: var(--radius-sm);
-  background: rgba(217, 119, 6, 0.06);
+  border-radius: var(--radius-md);
+  background: var(--color-warning-soft);
 }
 
 .secret-label {
@@ -68,6 +68,13 @@ async function copy() {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   padding: var(--spacing-xs) var(--spacing-sm);
+}
+
+@media (max-width: 560px) {
+  .secret-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 
 .secret-hint {

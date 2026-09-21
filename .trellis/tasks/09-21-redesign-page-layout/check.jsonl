@@ -1,0 +1,1 @@
+{"id":"frontend-quality-gate","source":"web/package.json and frontend specs","scope":"web/src","checks":["npm run lint --prefix web","npm run typecheck --prefix web","npm run build --prefix web","verify responsive tables/dialogs/focus states","verify no API or route behavior changes"]}

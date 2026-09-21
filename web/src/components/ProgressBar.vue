@@ -52,7 +52,7 @@ const tone = computed(() => {
   min-width: 60px;
   height: 8px;
   border-radius: 999px;
-  background: rgba(144, 147, 153, 0.2);
+  background: var(--color-muted-soft);
   overflow: hidden;
 }
 

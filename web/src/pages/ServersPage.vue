@@ -101,9 +101,14 @@ onMounted(() => {
 <template>
   <section class="page">
     <div class="page-header">
-      <h1 class="page-title">
-        服务器
-      </h1>
+      <div>
+        <p class="eyebrow">
+          INFRASTRUCTURE
+        </p>
+        <h1 class="page-title">
+          服务器
+        </h1>
+      </div>
       <button
         type="button"
         class="btn"
@@ -118,6 +123,9 @@ onMounted(() => {
     />
 
     <div class="card">
+      <div class="toolbar-label">
+        服务器目录 <span>{{ total }} 台服务器</span>
+      </div>
       <DataTable
         :columns="columns"
         :rows="items"
@@ -231,6 +239,28 @@ onMounted(() => {
   flex-direction: column;
   gap: 3px;
   min-width: 190px;
+}
+
+.eyebrow {
+  margin: 0 0 var(--spacing-xs);
+  color: var(--color-primary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.toolbar-label {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-md);
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.toolbar-label span {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 400;
 }
 
 .uptime {

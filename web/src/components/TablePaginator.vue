@@ -77,6 +77,7 @@ function changePageSize(size: number) {
   gap: var(--spacing-sm);
   padding-top: var(--spacing-md);
   font-size: var(--font-size-sm);
+  flex-wrap: wrap;
 }
 
 .spacer {
@@ -88,5 +89,15 @@ function changePageSize(size: number) {
   align-items: center;
   gap: var(--spacing-xs);
   color: var(--color-text-secondary);
+}
+
+@media (max-width: 560px) {
+  .spacer {
+    display: none;
+  }
+
+  .paginator > :first-child {
+    width: 100%;
+  }
 }
 </style>

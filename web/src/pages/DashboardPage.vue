@@ -54,9 +54,27 @@ function toCards(data: Dashboard): StatCard[] {
 
 <template>
   <section class="page">
-    <h1 class="page-title">
-      仪表盘
-    </h1>
+    <div class="page-header dashboard-header">
+      <div>
+        <p class="eyebrow">
+          OPERATIONS OVERVIEW
+        </p>
+        <h1 class="page-title">
+          仪表盘
+        </h1>
+        <p class="page-intro">
+          实时掌握用户、节点与系统连接健康状态。
+        </p>
+      </div>
+      <span
+        v-if="stats"
+        class="health-pill"
+        :class="{ attention: stats.servers_online < stats.servers_total }"
+      >
+        <i />
+        {{ stats.servers_online === stats.servers_total ? '系统运行正常' : '有服务器需要关注' }}
+      </span>
+    </div>
     <ErrorBanner
       :message="error"
       @dismiss="error = ''"
@@ -69,6 +87,7 @@ function toCards(data: Dashboard): StatCard[] {
         v-for="card in toCards(stats)"
         :key="card.label"
         class="card stat-card"
+        :class="{ priority: card.label === '在线 Server' || card.label === '当前连接数' }"
       >
         <div class="stat-label">
           {{ card.label }}
@@ -103,8 +122,74 @@ function toCards(data: Dashboard): StatCard[] {
   gap: var(--spacing-md);
 }
 
+.dashboard-header {
+  align-items: flex-end;
+}
+
+.eyebrow {
+  margin: 0 0 var(--spacing-xs);
+  color: var(--color-primary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.page-intro {
+  margin: calc(var(--spacing-sm) * -1) 0 0;
+  color: var(--color-text-secondary);
+}
+
+.health-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: 7px 11px;
+  border: 1px solid var(--color-primary-border);
+  border-radius: 999px;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.health-pill i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-success);
+}
+
+.health-pill.attention {
+  border-color: #fde68a;
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+}
+
+.health-pill.attention i {
+  background: var(--color-warning);
+}
+
 .stat-card {
-  padding: var(--spacing-md);
+  position: relative;
+  min-height: 112px;
+  padding: var(--spacing-lg);
+  overflow: hidden;
+}
+
+.stat-card::after {
+  position: absolute;
+  top: var(--spacing-md);
+  right: var(--spacing-md);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-primary-border);
+  box-shadow: 0 0 0 6px var(--color-primary-soft);
+  content: '';
+}
+
+.stat-card.priority {
+  border-top: 3px solid var(--color-primary);
 }
 
 .stat-label {
@@ -114,8 +199,9 @@ function toCards(data: Dashboard): StatCard[] {
 
 .stat-value {
   font-size: var(--font-size-xl);
-  font-weight: 600;
-  margin-top: var(--spacing-xs);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  margin-top: var(--spacing-sm);
 }
 
 .refresh-tip {

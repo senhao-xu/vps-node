@@ -40,3 +40,26 @@ web/src/
 - Vite dev proxy: `/api` → `PANEL_API_TARGET` (default `http://127.0.0.1:8080`).
 - Scripts: `dev | build | typecheck (vue-tsc --noEmit) | lint (eslint flat)`. All must pass before reporting done.
 - `web/` has a nested `go.mod` barrier so root `go ./...` never traverses `node_modules` — do not remove it.
+
+## Visual System
+
+- `styles/tokens.css` owns reusable color, radius, shadow, spacing, and control-size values. Shared components use semantic tokens such as `--color-primary-soft` and `--color-danger-soft` instead of repeating literal translucent colors.
+- `styles/base.css` owns page containers, cards, buttons, form controls, common action groups, focus states, and shared mobile behavior. Page-scoped CSS should contain only business-specific layout or presentation.
+- `AppLayout.vue`, `ModalDialog.vue`, `DataTable.vue`, and status/feedback components own their responsive behavior. A parent component must not target a child component's internal DOM with an ordinary scoped selector; move the rule to the child owner or use `:deep()` explicitly.
+- Management tables remain semantic tables inside a horizontal scroll container on narrow screens. Do not globally convert them into cards or add `overflow: hidden` to a parent card.
+- At narrow widths, page headers and multi-field rows collapse vertically while controls remain usable. Shared dialog footers stack their buttons in `ModalDialog.vue`, so individual forms do not duplicate that rule.
+- Dialogs keep `role="dialog"`, `aria-modal="true"`, and an `aria-labelledby` relationship with the visible title.
+
+```css
+/* Shared state color: use the semantic token. */
+.notice {
+  border-color: var(--color-primary-border);
+  background: var(--color-primary-soft);
+}
+
+/* Wrong: a parent scoped rule cannot reliably style child component internals. */
+.dialog-footer .btn { width: 100%; }
+
+/* Correct when the child cannot own the rule. */
+:deep(.dialog-footer .btn) { width: 100%; }
+```

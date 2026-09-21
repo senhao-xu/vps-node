@@ -119,4 +119,11 @@ onMounted(() => {
   margin: 0 0 var(--spacing-sm);
   font-size: var(--font-size-sm);
 }
+
+@media (max-width: 560px) {
+  .card-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
 </style>

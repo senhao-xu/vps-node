@@ -96,6 +96,10 @@ const hasData = computed(() => props.series.some((p) => p.upload_bytes > 0 || p.
   display: flex;
   flex-direction: column;
   gap: var(--spacing-xs);
+  padding: var(--spacing-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
 }
 
 .legend {

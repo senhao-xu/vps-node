@@ -154,4 +154,12 @@ async function save() {
   flex-wrap: wrap;
   margin-top: var(--spacing-md);
 }
+
+@media (max-width: 560px) {
+  .card-head,
+  .expiry-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
 </style>

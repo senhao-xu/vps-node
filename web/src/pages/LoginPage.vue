@@ -39,6 +39,9 @@ async function submit() {
       class="card login-form"
       @submit.prevent="submit"
     >
+      <div class="login-brand">
+        <span>V</span> VPS NODE
+      </div>
       <h1 class="login-title">
         VPS Node 管理面板
       </h1>
@@ -89,19 +92,48 @@ async function submit() {
   align-items: center;
   justify-content: center;
   padding: var(--spacing-lg);
+  background: var(--color-bg);
 }
 
 .login-form {
-  width: 340px;
+  width: min(380px, 100%);
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
+  padding: var(--spacing-xl);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-dialog);
+}
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.login-brand span {
+  display: inline-block;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 17px;
+  letter-spacing: 0;
+  line-height: 30px;
+  text-align: center;
 }
 
 .login-title {
   margin: 0;
   font-size: var(--font-size-xl);
   text-align: center;
+  letter-spacing: -0.03em;
 }
 
 .login-sub {
@@ -111,8 +143,8 @@ async function submit() {
 }
 
 .login-error {
-  background: rgba(220, 38, 38, 0.08);
-  border: 1px solid rgba(220, 38, 38, 0.35);
+  background: var(--color-danger-soft);
+  border: 1px solid #fecaca;
   color: var(--color-danger);
   border-radius: var(--radius-sm);
   padding: var(--spacing-xs) var(--spacing-sm);

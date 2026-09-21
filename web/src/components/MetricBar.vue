@@ -19,7 +19,7 @@ defineProps<{
 .metric {
   display: flex;
   align-items: center;
-  gap: var(--spacing-md);
+  gap: var(--spacing-sm);
 }
 
 .metric-label {

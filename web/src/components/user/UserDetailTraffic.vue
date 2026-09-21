@@ -220,4 +220,12 @@ async function resetTraffic() {
   flex-wrap: wrap;
   margin-top: var(--spacing-md);
 }
+
+@media (max-width: 560px) {
+  .card-head,
+  .traffic-detail {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
 </style>

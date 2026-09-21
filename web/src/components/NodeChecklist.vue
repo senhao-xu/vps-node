@@ -94,8 +94,9 @@ function toggle(node: NodeBrief, checked: boolean) {
   max-height: 280px;
   overflow-y: auto;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--color-surface-muted);
 }
 
 .group-title {
@@ -108,7 +109,7 @@ function toggle(node: NodeBrief, checked: boolean) {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  padding: 2px 0;
+  padding: var(--spacing-xs) 0;
   cursor: pointer;
 }
 
@@ -123,5 +124,21 @@ function toggle(node: NodeBrief, checked: boolean) {
 
 .node-item .meta {
   font-size: var(--font-size-sm);
+}
+
+@media (max-width: 560px) {
+  .node-item {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .node-item .name {
+    min-width: 0;
+  }
+
+  .node-item .meta {
+    width: 100%;
+    padding-left: 24px;
+  }
 }
 </style>

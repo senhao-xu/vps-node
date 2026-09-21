@@ -140,4 +140,13 @@ onMounted(() => {
   font-size: var(--font-size-sm);
   margin: var(--spacing-sm) 0;
 }
+
+@media (max-width: 560px) {
+  .card-head,
+  .controls,
+  .totals {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
 </style>

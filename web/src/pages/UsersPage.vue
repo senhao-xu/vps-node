@@ -134,9 +134,14 @@ onMounted(() => {
 <template>
   <section class="page">
     <div class="page-header">
-      <h1 class="page-title">
-        用户
-      </h1>
+      <div>
+        <p class="eyebrow">
+          ACCESS MANAGEMENT
+        </p>
+        <h1 class="page-title">
+          用户
+        </h1>
+      </div>
       <button
         type="button"
         class="btn"
@@ -151,12 +156,15 @@ onMounted(() => {
     />
 
     <div class="card">
+      <div class="toolbar-label">
+        用户目录 <span>{{ total }} 个用户</span>
+      </div>
       <div class="filters">
         <input
           v-model="query"
+          class="search-input"
           type="text"
           placeholder="按 用户名 / UUID / Token 精确搜索"
-          style="width: 260px"
           @keyup.enter="applyFilters"
         >
         <select
@@ -296,6 +304,28 @@ onMounted(() => {
   min-width: 150px;
 }
 
+.eyebrow {
+  margin: 0 0 var(--spacing-xs);
+  color: var(--color-primary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.toolbar-label {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-md);
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.toolbar-label span {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 400;
+}
+
 .traffic-text {
   font-size: var(--font-size-sm);
 }
@@ -313,5 +343,15 @@ onMounted(() => {
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-sm);
+}
+
+.search-input {
+  width: min(300px, 100%);
+}
+
+@media (max-width: 700px) {
+  .search-input {
+    width: 100%;
+  }
 }
 </style>

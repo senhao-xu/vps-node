@@ -1,0 +1,2 @@
+{"id":"frontend-visual-system","source":".trellis/spec/frontend/directory-structure.md","scope":"web/src/styles, web/src/components, web/src/pages","guidance":"Use tokens.css for reusable visual values, base.css for shared primitives, preserve semantic tables and component ownership, and keep zh-CN UI text."}
+{"id":"frontend-type-safety","source":".trellis/spec/frontend/type-safety.md","scope":"web/src","guidance":"Do not alter typed API boundaries or introduce any; preserve existing API types and component props while changing presentation."}

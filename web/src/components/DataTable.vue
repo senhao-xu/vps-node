@@ -93,12 +93,16 @@ function display(value: unknown): string {
 <style scoped>
 .table-wrap {
   overflow-x: auto;
+  margin: 0 calc(var(--spacing-md) * -1);
+  padding: 0 var(--spacing-md);
+  scrollbar-color: var(--color-border-strong) transparent;
 }
 
 .data-table {
   width: 100%;
   border-collapse: collapse;
   font-size: var(--font-size-md);
+  min-width: 760px;
 }
 
 .data-table th {
@@ -106,19 +110,23 @@ function display(value: unknown): string {
   font-weight: 600;
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
-  padding: var(--spacing-sm) var(--spacing-sm);
+  padding: 10px var(--spacing-sm);
   border-bottom: 1px solid var(--color-border);
   white-space: nowrap;
+  background: var(--color-surface-muted);
+  position: sticky;
+  top: 0;
+  letter-spacing: 0.02em;
 }
 
 .data-table td {
-  padding: var(--spacing-sm) var(--spacing-sm);
+  padding: 12px var(--spacing-sm);
   border-bottom: 1px solid var(--color-border);
   vertical-align: middle;
 }
 
 .data-table tbody tr:hover {
-  background: rgba(37, 99, 235, 0.03);
+  background: var(--color-table-hover);
 }
 
 .data-table tbody tr:last-child td {
