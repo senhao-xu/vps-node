@@ -24,6 +24,7 @@ export default tseslint.config(
         setInterval: 'readonly',
         clearInterval: 'readonly',
         console: 'readonly',
+        KeyboardEvent: 'readonly',
       },
     },
   },

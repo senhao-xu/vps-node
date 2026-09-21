@@ -1,5 +1,7 @@
 <script setup lang="ts">
-defineProps<{
+import { onBeforeUnmount, watch } from 'vue'
+
+const props = defineProps<{
   open: boolean
   title: string
   width?: number
@@ -8,6 +10,25 @@ defineProps<{
 const emit = defineEmits<{
   (e: 'close'): void
 }>()
+
+function onKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    event.stopPropagation()
+    emit('close')
+  }
+}
+
+watch(
+  () => props.open,
+  (open) => {
+    if (open) window.addEventListener('keydown', onKeydown)
+    else window.removeEventListener('keydown', onKeydown)
+  },
+)
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeydown)
+})
 </script>
 
 <template>
