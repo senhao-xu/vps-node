@@ -18,7 +18,7 @@ vps-node/
 │   ├── panel/main.go        # wiring: config → db → repos → web.Handler → janitor → webui
 │   └── agent/main.go        # wiring: config → agentstate → agentclient → agentruntime loop
 ├── internal/
-│   ├── config/              # YAML + env overrides (PANEL_*/AGENT_*); required app_key (32-byte hex)
+│   ├── config/              # YAML + env overrides (PANEL_*/AGENT_*); optional app_key (32-byte hex), auto-generated into settings table on first boot (env > yaml > database)
 │   ├── db/                  # sqlite open (WAL, FK ON), embedded migration runner, migrations/*.sql
 │   ├── repo/                # context-aware repositories; Tx helper; mutation+bump helpers
 │   ├── web/                 # panel HTTP handlers: router, admin auth, users, servers, nodes,

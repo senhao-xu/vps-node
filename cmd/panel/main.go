@@ -66,6 +66,23 @@ func run() error {
 	}
 
 	store := repo.New(database.DB)
+
+	if err := cfg.ResolveAppKey(context.Background(),
+		func(ctx context.Context) (string, error) {
+			value, err := store.GetSetting(ctx, config.AppKeySettingKey)
+			if errors.Is(err, repo.ErrNotFound) {
+				return "", nil
+			}
+			return value, err
+		},
+		func(ctx context.Context, value string) error {
+			return store.SetSetting(ctx, config.AppKeySettingKey, value)
+		},
+	); err != nil {
+		return err
+	}
+	logger.Info("app key resolved", "source", cfg.AppKeySource())
+
 	sessions := adminauth.NewSessions(database.DB, 24*time.Hour, cfg.SecureCookie)
 	limiter := adminauth.NewLimiter(5, 15*time.Minute, 15*time.Minute)
 

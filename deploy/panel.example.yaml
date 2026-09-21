@@ -1,7 +1,9 @@
 listen: ":8080"
 db_path: data/panel.db
 log_level: info
-app_key: 0000000000000000000000000000000000000000000000000000000000000000
+# Optional. When omitted, a random key is generated on first start and
+# persisted in the database (settings table).
+# app_key: 0000000000000000000000000000000000000000000000000000000000000000
 retention:
   raw_log_days: 7
   aggregate_days: 90

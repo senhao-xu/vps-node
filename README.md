@@ -34,14 +34,13 @@ Control flow (design contract):
 ### Panel
 
 ```sh
-openssl rand -hex 32          # app key
-cp deploy/panel.example.yaml panel.yaml   # edit app_key + admin password
+cp deploy/panel.example.yaml panel.yaml   # edit admin password (app_key optional)
 
 make panel                    # go build -o panel ./cmd/panel
 PANEL_ADMIN_PASSWORD=... ./panel
 ```
 
-Panel config keys (yaml or `PANEL_*` env): `listen`, `db_path`, `log_level`, `app_key` (32-byte hex, required; encrypts protocol secrets at rest), `secure_cookie`, `admin.username`, `admin.password`, `retention.raw_log_days`, `retention.aggregate_days`, `retention.sweep_interval_seconds`, `retention.max_connection_logs`, `retention.max_traffic_records`.
+Panel config keys (yaml or `PANEL_*` env): `listen`, `db_path`, `log_level`, `app_key` (optional 32-byte hex; encrypts protocol secrets at rest — when omitted, one is auto-generated on first start and persisted in the `settings` table), `secure_cookie`, `admin.username`, `admin.password`, `retention.raw_log_days`, `retention.aggregate_days`, `retention.sweep_interval_seconds`, `retention.max_connection_logs`, `retention.max_traffic_records`. Precedence: `PANEL_APP_KEY` env > yaml > database.
 
 ### Web UI
 
@@ -118,13 +117,13 @@ sing-box is downloaded at build time from the official GitHub release (`ARG SING
 
 ```sh
 cd deploy
-cp .env.example .env      # then fill in PANEL_APP_KEY and PANEL_ADMIN_PASSWORD
+cp .env.example .env      # then fill in PANEL_ADMIN_PASSWORD
 docker compose up -d      # panel on :8080, SQLite in volume panel-data
 ```
 
-Compose auto-loads `deploy/.env`; prefer it over shell exports so variables survive new shells and reboots (`PANEL_APP_KEY`/`PANEL_ADMIN_PASSWORD` are hard-required on every `up`). Set `PANEL_PORT` to publish a host port other than 8080 (e.g. when 8080 is taken).
+Compose auto-loads `deploy/.env`; prefer it over shell exports so variables survive new shells and reboots (`PANEL_ADMIN_PASSWORD` is hard-required on every `up`). Set `PANEL_PORT` to publish a host port other than 8080 (e.g. when 8080 is taken). To pull a prebuilt image instead of building locally, set `PANEL_IMAGE` (e.g. `ghcr.io/<owner>/vps-node-panel:latest`) and run `docker compose pull` first.
 
-Data lives in the `panel-data` volume (`/data/panel.db` inside the container). Back up the volume together with `PANEL_APP_KEY` — the key encrypts node secrets at rest. TLS terminates in a reverse proxy; a commented Caddy example is included in `deploy/docker-compose.yml` (the panel itself serves plain HTTP on :8080 only).
+`PANEL_APP_KEY` is optional: without it the panel generates a random key on first boot and stores it in the database (`settings` table). Note the security trade-off: the key then lives next to the data it protects, so a stolen database can be decrypted; set an explicit key if that matters, and either way back up the `panel-data` volume — the key encrypts node secrets at rest. TLS terminates in a reverse proxy; a commented Caddy example is included in `deploy/docker-compose.yml` (the panel itself serves plain HTTP on :8080 only).
 
 ### Run: Agent on a node server
 
@@ -252,6 +251,6 @@ deploy/              systemd units, example configs, installer, Dockerfiles + co
 
 - Production Agent↔Panel traffic must use **HTTPS with certificate verification** (behind a reverse proxy for Docker, e.g. Caddy — see the Docker section).
 - systemd units are hardened (`NoNewPrivileges`, `ProtectSystem=strict`, `PrivateTmp`, non-root users, minimal `ReadWritePaths`).
-- SQLite backups must copy the WAL/SHM set and preserve the `app_key` (it encrypts protocol secrets at rest).
+- SQLite backups must copy the WAL/SHM set; when `app_key` is auto-generated it lives in the same database (`settings` table), so the backup already contains it — when set via env/yaml, preserve the key alongside the backup (it encrypts protocol secrets at rest).
 - Start with one Panel and one canary Agent; pin the sing-box version on the canary before scaling.
 - Node listen ports >1024 need no container privileges; ports ≤1024 require root (or `NET_BIND_SERVICE`). Node ports are published with `ports:` one pair per node, or `network_mode: host` when exposing many.

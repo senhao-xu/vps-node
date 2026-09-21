@@ -1,6 +1,8 @@
 package config
 
 import (
+	"context"
+	"crypto/rand"
 	"encoding/hex"
 	"fmt"
 	"log/slog"
@@ -37,6 +39,17 @@ const (
 	defaultMaxTrafficRecords = 5_000_000
 )
 
+// AppKeySettingKey is the settings-table key used to persist an
+// auto-generated panel app_key.
+const AppKeySettingKey = "app_key"
+
+const (
+	appKeySourceEnv      = "env"
+	appKeySourceFile     = "file"
+	appKeySourceDatabase = "database"
+	appKeySourceAuto     = "auto"
+)
+
 type Retention struct {
 	RawLogDays    int
 	AggregateDays int
@@ -60,10 +73,50 @@ type Panel struct {
 	Admin        Admin
 	SecureCookie bool
 	appKey       []byte
+	appKeySource string
 }
 
 func (p *Panel) AppKey() []byte {
 	return append([]byte(nil), p.appKey...)
+}
+
+// AppKeySource reports where the app key came from:
+// "env", "file", "database", "auto", or "" when unresolved.
+func (p *Panel) AppKeySource() string {
+	return p.appKeySource
+}
+
+// ResolveAppKey fills the panel app key when it was not provided via
+// environment or config file. It first tries the persisted value (get
+// returns "" when absent) and otherwise generates a fresh random key and
+// persists it via set so restarts keep encrypting existing data.
+func (p *Panel) ResolveAppKey(ctx context.Context, get func(context.Context) (string, error), set func(context.Context, string) error) error {
+	if len(p.appKey) != 0 {
+		return nil
+	}
+	stored, err := get(ctx)
+	if err != nil {
+		return fmt.Errorf("load persisted app_key: %w", err)
+	}
+	if stored != "" {
+		key, err := decodeAppKey(stored)
+		if err != nil {
+			return fmt.Errorf("persisted app_key invalid: %w", err)
+		}
+		p.appKey = key
+		p.appKeySource = appKeySourceDatabase
+		return nil
+	}
+	key := make([]byte, appKeySize)
+	if _, err := rand.Read(key); err != nil {
+		return fmt.Errorf("generate app_key: %w", err)
+	}
+	if err := set(ctx, hex.EncodeToString(key)); err != nil {
+		return fmt.Errorf("persist app_key: %w", err)
+	}
+	p.appKey = key
+	p.appKeySource = appKeySourceAuto
+	return nil
 }
 
 type SingBox struct {
@@ -255,11 +308,18 @@ func LoadPanel(path string) (*Panel, error) {
 	}
 
 	appKeyHex := firstNonEmpty(os.Getenv("PANEL_APP_KEY"), fileAppKey)
-	key, err := decodeAppKey(appKeyHex)
-	if err != nil {
-		return nil, err
+	if appKeyHex != "" {
+		key, err := decodeAppKey(appKeyHex)
+		if err != nil {
+			return nil, err
+		}
+		cfg.appKey = key
+		if os.Getenv("PANEL_APP_KEY") != "" {
+			cfg.appKeySource = appKeySourceEnv
+		} else {
+			cfg.appKeySource = appKeySourceFile
+		}
 	}
-	cfg.appKey = key
 
 	if cfg.Listen == "" {
 		return nil, fmt.Errorf("listen address is required")
@@ -421,7 +481,7 @@ func LoadAgent(path string) (*Agent, error) {
 
 func decodeAppKey(hexStr string) ([]byte, error) {
 	if hexStr == "" {
-		return nil, fmt.Errorf("app_key is required (%d-byte hex)", appKeySize)
+		return nil, fmt.Errorf("app_key must be %d-byte hex", appKeySize)
 	}
 	key, err := hex.DecodeString(hexStr)
 	if err != nil {

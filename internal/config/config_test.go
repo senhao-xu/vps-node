@@ -1,6 +1,9 @@
 package config_test
 
 import (
+	"bytes"
+	"context"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"testing"
@@ -85,8 +88,15 @@ func TestLoadPanelEnvOverridesFile(t *testing.T) {
 }
 
 func TestLoadPanelMissingAppKey(t *testing.T) {
-	if _, err := config.LoadPanel(""); err == nil {
-		t.Fatal("expected error for missing app_key")
+	cfg, err := config.LoadPanel("")
+	if err != nil {
+		t.Fatalf("load without app_key should succeed, got: %v", err)
+	}
+	if len(cfg.AppKey()) != 0 {
+		t.Fatalf("expected empty app key before resolution, got %d bytes", len(cfg.AppKey()))
+	}
+	if cfg.AppKeySource() != "" {
+		t.Fatalf("expected empty app key source, got %q", cfg.AppKeySource())
 	}
 }
 
@@ -109,6 +119,117 @@ func TestLoadPanelInvalidLogLevel(t *testing.T) {
 	t.Setenv("PANEL_LOG_LEVEL", "verbose")
 	if _, err := config.LoadPanel(""); err == nil {
 		t.Fatal("expected error for invalid log level")
+	}
+}
+
+func TestLoadPanelAppKeySources(t *testing.T) {
+	t.Setenv("PANEL_APP_KEY", validAppKey)
+	cfg, err := config.LoadPanel("")
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.AppKeySource() != "env" {
+		t.Fatalf("expected env source, got %q", cfg.AppKeySource())
+	}
+}
+
+func TestLoadPanelAppKeyFromFile(t *testing.T) {
+	path := writePanelConfig(t, "app_key: "+validAppKey+"\n")
+	cfg, err := config.LoadPanel(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.AppKeySource() != "file" {
+		t.Fatalf("expected file source, got %q", cfg.AppKeySource())
+	}
+}
+
+func TestResolveAppKeyGeneratesAndPersists(t *testing.T) {
+	cfg, err := config.LoadPanel("")
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	var persisted string
+	err = cfg.ResolveAppKey(context.Background(),
+		func(context.Context) (string, error) { return "", nil },
+		func(_ context.Context, value string) error { persisted = value; return nil },
+	)
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if cfg.AppKeySource() != "auto" {
+		t.Fatalf("expected auto source, got %q", cfg.AppKeySource())
+	}
+	if len(cfg.AppKey()) != 32 {
+		t.Fatalf("expected 32-byte key, got %d", len(cfg.AppKey()))
+	}
+	decoded, err := hex.DecodeString(persisted)
+	if err != nil || len(decoded) != 32 {
+		t.Fatalf("persisted value not valid 32-byte hex: %v", err)
+	}
+	if !bytes.Equal(decoded, cfg.AppKey()) {
+		t.Fatal("persisted key does not match resolved key")
+	}
+}
+
+func TestResolveAppKeyUsesPersisted(t *testing.T) {
+	cfg, err := config.LoadPanel("")
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	setCalled := false
+	err = cfg.ResolveAppKey(context.Background(),
+		func(context.Context) (string, error) { return validAppKey, nil },
+		func(context.Context, string) error { setCalled = true; return nil },
+	)
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if cfg.AppKeySource() != "database" {
+		t.Fatalf("expected database source, got %q", cfg.AppKeySource())
+	}
+	if setCalled {
+		t.Fatal("set must not be called when a persisted key exists")
+	}
+	want, _ := hex.DecodeString(validAppKey)
+	if !bytes.Equal(want, cfg.AppKey()) {
+		t.Fatal("resolved key does not match persisted key")
+	}
+}
+
+func TestResolveAppKeySkipsWhenConfigured(t *testing.T) {
+	t.Setenv("PANEL_APP_KEY", validAppKey)
+	cfg, err := config.LoadPanel("")
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	called := false
+	err = cfg.ResolveAppKey(context.Background(),
+		func(context.Context) (string, error) { called = true; return "", nil },
+		func(context.Context, string) error { called = true; return nil },
+	)
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if called {
+		t.Fatal("get/set must not be called when key comes from env")
+	}
+	if cfg.AppKeySource() != "env" {
+		t.Fatalf("expected env source, got %q", cfg.AppKeySource())
+	}
+}
+
+func TestResolveAppKeyRejectsBadPersisted(t *testing.T) {
+	cfg, err := config.LoadPanel("")
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	err = cfg.ResolveAppKey(context.Background(),
+		func(context.Context) (string, error) { return "not-hex", nil },
+		func(context.Context, string) error { return nil },
+	)
+	if err == nil {
+		t.Fatal("expected error for invalid persisted key")
 	}
 }
 

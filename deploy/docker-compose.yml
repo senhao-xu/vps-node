@@ -5,7 +5,7 @@ services:
       dockerfile: deploy/Dockerfile.panel
       args:
         APP_VERSION: "${APP_VERSION:-dev}"
-    image: vps-node-panel:latest
+    image: ${PANEL_IMAGE:-vps-node-panel:latest}
     container_name: vps-node-panel
     restart: unless-stopped
     ports:
@@ -13,7 +13,7 @@ services:
     environment:
       PANEL_LISTEN: ":8080"
       PANEL_DB_PATH: /data/panel.db
-      PANEL_APP_KEY: "${PANEL_APP_KEY:?set PANEL_APP_KEY to a 32-byte hex key: openssl rand -hex 32}"
+      PANEL_APP_KEY: "${PANEL_APP_KEY:-}"
       PANEL_ADMIN_USER: ${PANEL_ADMIN_USER:-admin}
       PANEL_ADMIN_PASSWORD: "${PANEL_ADMIN_PASSWORD:?set PANEL_ADMIN_PASSWORD}"
       PANEL_LOG_LEVEL: ${PANEL_LOG_LEVEL:-info}
