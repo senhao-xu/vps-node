@@ -143,6 +143,34 @@ export type Dashboard = {
   sessions_current: number
 }
 
+export type DashboardUserTrafficRange = 'today' | 'total'
+
+export type DashboardUserNodeTraffic = {
+  node_id: number
+  node_name: string
+  server_id: number
+  server_name: string
+  upload_bytes: number
+  download_bytes: number
+  total_bytes: number
+}
+
+export type DashboardUserTrafficItem = {
+  user_id: number
+  username: string
+  status: UserStatus
+  quota_bytes: number
+  upload_bytes: number
+  download_bytes: number
+  total_bytes: number
+  nodes: DashboardUserNodeTraffic[]
+}
+
+export type DashboardUserTraffic = {
+  range: DashboardUserTrafficRange
+  items: DashboardUserTrafficItem[]
+}
+
 export type Settings = {
   retention_raw_log_days: number
   retention_aggregate_days: number

@@ -169,6 +169,7 @@ func (h *Handler) registerAdminRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/nodes/{id}", h.requireAdmin(h.handleNodeDelete))
 
 	mux.HandleFunc("GET /api/dashboard", h.requireAdmin(h.handleDashboard))
+	mux.HandleFunc("GET /api/dashboard/user-traffic", h.requireAdmin(h.handleDashboardUserTraffic))
 	mux.HandleFunc("GET /api/settings", h.requireAdmin(h.handleSettingsGet))
 	mux.HandleFunc("PUT /api/settings", h.requireAdmin(h.handleSettingsPut))
 }

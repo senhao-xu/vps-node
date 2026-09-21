@@ -336,6 +336,45 @@ Response `200`:
 
 `users_online` = distinct users with a fresh session. `servers_online` = servers with heartbeat within the offline threshold. Heartbeat is the only liveness source; traffic/session reports never mark a server online.
 
+### GET /api/dashboard/user-traffic?range=today|total
+
+Per-user traffic overview with per-node drill-down. `range` defaults to `today`; any other value → `400 invalid_request`.
+
+Response `200`:
+
+```json
+{
+  "range": "today",
+  "items": [
+    {
+      "user_id": 1001,
+      "username": "alice",
+      "status": "active",
+      "quota_bytes": 107374182400,
+      "upload_bytes": 100,
+      "download_bytes": 200,
+      "total_bytes": 300,
+      "nodes": [
+        {
+          "node_id": 3,
+          "node_name": "hy2-443",
+          "server_id": 1,
+          "server_name": "HK01",
+          "upload_bytes": 60,
+          "download_bytes": 120,
+          "total_bytes": 180
+        }
+      ]
+    }
+  ]
+}
+```
+
+`items` contains every user (zero-traffic users appear with zeroed counters and `nodes: []`), sorted by `total_bytes` descending then `user_id` ascending.
+
+- `range=today`: user totals and node details both come from `traffic_records` with `created_at >=` today 00:00 UTC (same basis as `traffic_today_bytes`).
+- `range=total`: user `total_bytes` is `users.used_bytes` (same basis as the user list, reset together with traffic reset), while `upload_bytes`/`download_bytes` and node details come from all retained `traffic_records`. Node details are bounded by retention and unaffected by traffic reset, so their sum may differ from `total_bytes` — this is an accepted discrepancy.
+
 ## Settings
 
 ### GET /api/settings

@@ -49,26 +49,36 @@ func (r *Repo) InsertTrafficRecords(ctx context.Context, records []NewTrafficRec
 }
 
 func trafficWhere(f TrafficFilter) (string, []any) {
+	return trafficWherePrefixed(f, "")
+}
+
+func trafficWherePrefixed(f TrafficFilter, prefix string) (string, []any) {
+	col := func(name string) string {
+		if prefix == "" {
+			return name
+		}
+		return prefix + "." + name
+	}
 	where := []string{"1 = 1"}
 	args := []any{}
 	if f.UserID != 0 {
-		where = append(where, "user_id = ?")
+		where = append(where, col("user_id")+" = ?")
 		args = append(args, f.UserID)
 	}
 	if f.NodeID != 0 {
-		where = append(where, "node_id = ?")
+		where = append(where, col("node_id")+" = ?")
 		args = append(args, f.NodeID)
 	}
 	if f.ServerID != 0 {
-		where = append(where, "server_id = ?")
+		where = append(where, col("server_id")+" = ?")
 		args = append(args, f.ServerID)
 	}
 	if f.From != nil {
-		where = append(where, "created_at >= ?")
+		where = append(where, col("created_at")+" >= ?")
 		args = append(args, f.From.Unix())
 	}
 	if f.To != nil {
-		where = append(where, "created_at < ?")
+		where = append(where, col("created_at")+" < ?")
 		args = append(args, f.To.Unix())
 	}
 	return strings.Join(where, " AND "), args

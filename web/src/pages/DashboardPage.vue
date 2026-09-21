@@ -1,16 +1,41 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
-import { getDashboard } from '@/api/dashboard'
+import { getDashboard, getDashboardUserTraffic } from '@/api/dashboard'
 import { errorMessage } from '@/api/http'
-import type { Dashboard } from '@/api/types'
+import type {
+  Dashboard,
+  DashboardUserTraffic,
+  DashboardUserTrafficItem,
+  DashboardUserTrafficRange,
+} from '@/api/types'
 import ErrorBanner from '@/components/ErrorBanner.vue'
+import ProgressBar from '@/components/ProgressBar.vue'
+import StatusBadge from '@/components/StatusBadge.vue'
 import { formatBytes } from '@/utils/format'
+import { userStatusInfo } from '@/utils/labels'
 
 const stats = ref<Dashboard | null>(null)
 const loading = ref(false)
 const error = ref('')
 
+const traffic = ref<DashboardUserTraffic | null>(null)
+const trafficRange = ref<DashboardUserTrafficRange>('today')
+const trafficLoading = ref(false)
+const expandedUsers = ref<Set<number>>(new Set())
+
 let timer: ReturnType<typeof setInterval> | null = null
+
+async function loadTraffic() {
+  trafficLoading.value = true
+  error.value = ''
+  try {
+    traffic.value = await getDashboardUserTraffic(trafficRange.value)
+  } catch (err) {
+    error.value = errorMessage(err)
+  } finally {
+    trafficLoading.value = false
+  }
+}
 
 async function load() {
   loading.value = true
@@ -22,6 +47,34 @@ async function load() {
   } finally {
     loading.value = false
   }
+  await loadTraffic()
+}
+
+function setRange(range: DashboardUserTrafficRange) {
+  if (range === trafficRange.value) return
+  trafficRange.value = range
+  expandedUsers.value = new Set()
+  void loadTraffic()
+}
+
+function toggleExpand(userId: number) {
+  const next = new Set(expandedUsers.value)
+  if (next.has(userId)) {
+    next.delete(userId)
+  } else {
+    next.add(userId)
+  }
+  expandedUsers.value = next
+}
+
+function quotaPercent(item: DashboardUserTrafficItem): number {
+  if (item.quota_bytes <= 0) return 0
+  return Math.min(100, (item.total_bytes / item.quota_bytes) * 100)
+}
+
+function quotaText(item: DashboardUserTrafficItem): string {
+  if (item.quota_bytes <= 0) return `${formatBytes(item.total_bytes)} / 不限`
+  return `${formatBytes(item.total_bytes)} / ${formatBytes(item.quota_bytes)}`
 }
 
 onMounted(() => {
@@ -109,6 +162,177 @@ function toCards(data: Dashboard): StatCard[] {
     >
       暂无数据
     </p>
+
+    <div class="card traffic-card">
+      <div class="traffic-header">
+        <div class="toolbar-label">
+          用户流量 <span>{{ trafficRange === 'today' ? '今日（UTC 0 点起）' : '累计' }}</span>
+        </div>
+        <div
+          class="range-switch"
+          role="group"
+          aria-label="时间范围"
+        >
+          <button
+            type="button"
+            class="range-btn"
+            :class="{ active: trafficRange === 'today' }"
+            @click="setRange('today')"
+          >
+            今日
+          </button>
+          <button
+            type="button"
+            class="range-btn"
+            :class="{ active: trafficRange === 'total' }"
+            @click="setRange('total')"
+          >
+            累计
+          </button>
+        </div>
+      </div>
+
+      <div class="traffic-table-wrap">
+        <table class="traffic-table">
+          <thead>
+            <tr>
+              <th>用户</th>
+              <th>状态</th>
+              <th class="num">
+                上传
+              </th>
+              <th class="num">
+                下载
+              </th>
+              <th class="num">
+                合计
+              </th>
+              <th>配额使用</th>
+              <th class="expand-col" />
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="trafficLoading && !traffic">
+              <td
+                colspan="7"
+                class="empty-tip"
+              >
+                加载中…
+              </td>
+            </tr>
+            <tr v-else-if="!traffic || traffic.items.length === 0">
+              <td
+                colspan="7"
+                class="empty-tip"
+              >
+                暂无用户
+              </td>
+            </tr>
+            <template
+              v-for="item in traffic?.items ?? []"
+              :key="item.user_id"
+            >
+              <tr
+                class="user-row"
+                @click="toggleExpand(item.user_id)"
+              >
+                <td>
+                  <span class="username">{{ item.username }}</span>
+                  <span class="text-secondary user-id">#{{ item.user_id }}</span>
+                </td>
+                <td>
+                  <StatusBadge v-bind="userStatusInfo(item.status)" />
+                </td>
+                <td class="num">
+                  {{ formatBytes(item.upload_bytes) }}
+                </td>
+                <td class="num">
+                  {{ formatBytes(item.download_bytes) }}
+                </td>
+                <td class="num">
+                  {{ formatBytes(item.total_bytes) }}
+                </td>
+                <td>
+                  <div class="quota-cell">
+                    <span class="quota-text">{{ quotaText(item) }}</span>
+                    <ProgressBar
+                      :percent="quotaPercent(item)"
+                      compact
+                    />
+                  </div>
+                </td>
+                <td class="expand-col">
+                  <button
+                    type="button"
+                    class="expand-btn"
+                    :aria-expanded="expandedUsers.has(item.user_id)"
+                    :aria-label="`展开 ${item.username} 的节点明细`"
+                    @click.stop="toggleExpand(item.user_id)"
+                  >
+                    <span
+                      class="chevron"
+                      :class="{ open: expandedUsers.has(item.user_id) }"
+                    >▸</span>
+                  </button>
+                </td>
+              </tr>
+              <tr
+                v-if="expandedUsers.has(item.user_id)"
+                class="detail-row"
+              >
+                <td colspan="7">
+                  <p
+                    v-if="item.nodes.length === 0"
+                    class="empty-tip"
+                  >
+                    该范围内无流量记录
+                  </p>
+                  <table
+                    v-else
+                    class="node-table"
+                  >
+                    <thead>
+                      <tr>
+                        <th>节点</th>
+                        <th>所属服务器</th>
+                        <th class="num">
+                          上传
+                        </th>
+                        <th class="num">
+                          下载
+                        </th>
+                        <th class="num">
+                          合计
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr
+                        v-for="node in item.nodes"
+                        :key="node.node_id"
+                      >
+                        <td>{{ node.node_name }}</td>
+                        <td>{{ node.server_name }}</td>
+                        <td class="num">
+                          {{ formatBytes(node.upload_bytes) }}
+                        </td>
+                        <td class="num">
+                          {{ formatBytes(node.download_bytes) }}
+                        </td>
+                        <td class="num">
+                          {{ formatBytes(node.total_bytes) }}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <p class="text-secondary refresh-tip">
       每 30 秒自动刷新
     </p>
@@ -207,5 +431,198 @@ function toCards(data: Dashboard): StatCard[] {
 .refresh-tip {
   font-size: var(--font-size-sm);
   margin-top: var(--spacing-md);
+}
+
+.traffic-card {
+  margin-top: var(--spacing-lg);
+}
+
+.traffic-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+  margin-bottom: var(--spacing-md);
+}
+
+.toolbar-label {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.toolbar-label span {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 400;
+}
+
+.range-switch {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-muted-soft);
+  gap: 2px;
+}
+
+.range-btn {
+  padding: 4px 14px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.range-btn:hover {
+  color: var(--color-text);
+}
+
+.range-btn.active {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.traffic-table-wrap {
+  overflow-x: auto;
+  margin: 0 calc(var(--spacing-md) * -1);
+  padding: 0 var(--spacing-md);
+  scrollbar-color: var(--color-border-strong) transparent;
+}
+
+.traffic-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-md);
+  min-width: 760px;
+}
+
+.traffic-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  padding: 10px var(--spacing-sm);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+  background: var(--color-surface-muted);
+  letter-spacing: 0.02em;
+}
+
+.traffic-table td {
+  padding: 12px var(--spacing-sm);
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: middle;
+}
+
+.traffic-table th.num,
+.traffic-table td.num {
+  text-align: right;
+}
+
+.traffic-table tbody .user-row:hover {
+  background: var(--color-table-hover);
+}
+
+.traffic-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.user-row {
+  cursor: pointer;
+}
+
+.username {
+  font-weight: 600;
+}
+
+.user-id {
+  margin-left: var(--spacing-xs);
+  font-size: var(--font-size-sm);
+}
+
+.quota-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 160px;
+}
+
+.quota-text {
+  font-size: var(--font-size-sm);
+}
+
+.expand-col {
+  width: 40px;
+  text-align: center;
+}
+
+.expand-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.expand-btn:hover {
+  background: var(--color-muted-soft);
+  color: var(--color-text);
+}
+
+.chevron {
+  display: inline-block;
+  transition: transform 0.15s ease;
+}
+
+.chevron.open {
+  transform: rotate(90deg);
+}
+
+.detail-row td {
+  background: var(--color-surface-muted);
+  padding: var(--spacing-md) var(--spacing-lg);
+}
+
+.node-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+}
+
+.node-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  padding: 6px var(--spacing-sm);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.node-table td {
+  padding: 8px var(--spacing-sm);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.node-table th.num,
+.node-table td.num {
+  text-align: right;
+}
+
+.node-table tbody tr:last-child td {
+  border-bottom: none;
 }
 </style>

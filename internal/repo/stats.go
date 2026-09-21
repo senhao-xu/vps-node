@@ -36,3 +36,66 @@ func (r *Repo) SumTrafficSince(ctx context.Context, since time.Time) (upload, do
 		 FROM traffic_records WHERE created_at >= ?`, since.Unix()).Scan(&upload, &download)
 	return upload, download, mapErr(err)
 }
+
+type UserTrafficSum struct {
+	UserID        int64
+	UploadBytes   int64
+	DownloadBytes int64
+}
+
+func (r *Repo) SumTrafficByUser(ctx context.Context, f TrafficFilter) ([]UserTrafficSum, error) {
+	whereSQL, args := trafficWhere(f)
+	rows, err := r.DB.QueryContext(ctx,
+		`SELECT user_id, COALESCE(SUM(upload_bytes), 0), COALESCE(SUM(download_bytes), 0)
+		 FROM traffic_records WHERE `+whereSQL+` GROUP BY user_id ORDER BY user_id`, args...)
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	defer rows.Close()
+
+	sums := []UserTrafficSum{}
+	for rows.Next() {
+		var s UserTrafficSum
+		if err := rows.Scan(&s.UserID, &s.UploadBytes, &s.DownloadBytes); err != nil {
+			return nil, mapErr(err)
+		}
+		sums = append(sums, s)
+	}
+	return sums, rows.Err()
+}
+
+type UserNodeTrafficSum struct {
+	UserID        int64
+	NodeID        int64
+	NodeName      string
+	ServerID      int64
+	ServerName    string
+	UploadBytes   int64
+	DownloadBytes int64
+}
+
+func (r *Repo) SumTrafficByUserNode(ctx context.Context, f TrafficFilter) ([]UserNodeTrafficSum, error) {
+	whereSQL, args := trafficWherePrefixed(f, "tr")
+	rows, err := r.DB.QueryContext(ctx,
+		`SELECT tr.user_id, tr.node_id, n.name, n.server_id, s.name,
+		        COALESCE(SUM(tr.upload_bytes), 0), COALESCE(SUM(tr.download_bytes), 0)
+		 FROM traffic_records tr
+		 JOIN nodes n ON n.id = tr.node_id
+		 JOIN servers s ON s.id = n.server_id
+		 WHERE `+whereSQL+` GROUP BY tr.user_id, tr.node_id ORDER BY tr.user_id, tr.node_id`, args...)
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	defer rows.Close()
+
+	sums := []UserNodeTrafficSum{}
+	for rows.Next() {
+		var s UserNodeTrafficSum
+		if err := rows.Scan(&s.UserID, &s.NodeID, &s.NodeName, &s.ServerID, &s.ServerName,
+			&s.UploadBytes, &s.DownloadBytes); err != nil {
+			return nil, mapErr(err)
+		}
+		sums = append(sums, s)
+	}
+	return sums, rows.Err()
+}

@@ -59,6 +59,14 @@ repo.Tx(ctx, func(tx repo.DBTX) error {
 
 ---
 
+## Convention: Aggregate queries over traffic_records
+
+- Per-user / per-(user,node) rollups live in `internal/repo/stats.go`: `SumTrafficByUser`, `SumTrafficByUserNode` (JOINs `nodes` + `servers` for display names). Both reuse the shared `TrafficFilter` via `trafficWherePrefixed(f, prefix)` — the prefixed variant exists because JOINed queries make bare `server_id` / `created_at` ambiguous; pass `""` to get the original behavior.
+- Dashboard "total" semantics: user-level total = `users.used_bytes` (matches the user list; resets with traffic reset), while per-node splits always come from retained `traffic_records` (bounded by `retention.aggregate_days`, unaffected by resets). The two sums may legitimately differ; state this in the API contract when adding such endpoints.
+- Dashboard "today" boundary is `time.Now().UTC().Truncate(24 * time.Hour)` — reuse this exact expression so all dashboard figures share one timezone basis.
+
+---
+
 ## Gotcha: SQLite table rebuild inside tx-based migrations
 
 > **Warning**: the migration runner wraps each file in a transaction and the DSN sets `foreign_keys(1)`. Inside that transaction `PRAGMA foreign_keys=off` and `PRAGMA legacy_alter_table` are **no-ops**, so a plain create-copy-drop-rename on a parent table cascade-wipes or dangles its children.

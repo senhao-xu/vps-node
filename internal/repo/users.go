@@ -142,6 +142,24 @@ func (r *Repo) ListUsers(ctx context.Context, f UserFilter) ([]User, int64, erro
 	return users, total, rows.Err()
 }
 
+func (r *Repo) ListUsersAll(ctx context.Context) ([]User, error) {
+	rows, err := r.DB.QueryContext(ctx, userSelect+` ORDER BY id ASC`)
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	defer rows.Close()
+
+	users := []User{}
+	for rows.Next() {
+		u, err := scanUser(rows.Scan)
+		if err != nil {
+			return nil, mapErr(err)
+		}
+		users = append(users, u)
+	}
+	return users, rows.Err()
+}
+
 func (r *Repo) CountUsers(ctx context.Context) (int64, error) {
 	var n int64
 	err := r.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM users`).Scan(&n)

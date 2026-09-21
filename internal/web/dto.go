@@ -226,6 +226,32 @@ type dashboardDTO struct {
 	SessionsCurrent   int64 `json:"sessions_current"`
 }
 
+type dashboardUserNodeTrafficDTO struct {
+	NodeID        int64  `json:"node_id"`
+	NodeName      string `json:"node_name"`
+	ServerID      int64  `json:"server_id"`
+	ServerName    string `json:"server_name"`
+	UploadBytes   int64  `json:"upload_bytes"`
+	DownloadBytes int64  `json:"download_bytes"`
+	TotalBytes    int64  `json:"total_bytes"`
+}
+
+type dashboardUserTrafficItemDTO struct {
+	UserID        int64                         `json:"user_id"`
+	Username      string                        `json:"username"`
+	Status        string                        `json:"status"`
+	QuotaBytes    int64                         `json:"quota_bytes"`
+	UploadBytes   int64                         `json:"upload_bytes"`
+	DownloadBytes int64                         `json:"download_bytes"`
+	TotalBytes    int64                         `json:"total_bytes"`
+	Nodes         []dashboardUserNodeTrafficDTO `json:"nodes"`
+}
+
+type dashboardUserTrafficDTO struct {
+	Range string                        `json:"range"`
+	Items []dashboardUserTrafficItemDTO `json:"items"`
+}
+
 type settingsDTO struct {
 	RetentionRawLogDays       int    `json:"retention_raw_log_days"`
 	RetentionAggregateDays    int    `json:"retention_aggregate_days"`
