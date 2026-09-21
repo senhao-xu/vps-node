@@ -31,6 +31,11 @@ export const router = createRouter({
       component: () => import('@/pages/ServersPage.vue'),
     },
     {
+      path: '/nodes',
+      name: 'nodes',
+      component: () => import('@/pages/NodesPage.vue'),
+    },
+    {
       path: '/servers/:id',
       name: 'server-detail',
       component: () => import('@/pages/ServerDetailPage.vue'),

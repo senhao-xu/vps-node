@@ -39,6 +39,7 @@ export type UserDetail = User & {
 
 export type UserCreated = UserDetail & {
   token: string
+  subscription_url: string
 }
 
 export type NodeBrief = {
@@ -49,6 +50,7 @@ export type NodeBrief = {
   port: number
   status: NodeStatus
   created_at: string
+  server: NodeRef
 }
 
 export type NodeRef = {
@@ -147,7 +149,12 @@ export type Settings = {
   collection_connection_logs: boolean
   session_freshness_seconds: number
   server_offline_after_seconds: number
+  subscribe_urls: string
+  subscribe_path: string
+  clash_meta_template: string
 }
+
+export type Subscription = { configured: boolean; url: string | null }
 
 export type RegisterTokenResult = {
   register_token: string
@@ -160,6 +167,12 @@ export type AgentTokenResult = {
 }
 
 export type NodeSettingsInput = Record<string, unknown>
+
+export type RealityKeypair = {
+  private_key: string
+  public_key: string
+  short_id: string
+}
 
 export type CreateUserInput = {
   username: string

@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端改动的质量门（测试、vet）"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端改动的质量门与禁用模式"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "检查是否重复造轮子，应复用现有组件与工具函数"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "验收时核对 api-contract、DTO、前端类型三方一致"}

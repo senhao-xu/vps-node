@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "后端分层约定：repo 纯 SQL、web 只做 HTTP 装配"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "handleNodeList 新查询参数的错误返回需遵循统一错误规范"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "ListNodesPage 动态 WHERE 必须参数化，遵循数据库访问规范"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "新增 NodesPage 与 api 类型扩展需遵循 api/components/pages 单一归属约定"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "NodeBrief 增加 server 字段、listNodes 参数扩展需遵循类型规范"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "NodeFormDialog 改造与新页面复用 DataTable/StatusBadge 等组件的模式"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "DTO/类型跨后端-前端联动变更的检查思路"}
