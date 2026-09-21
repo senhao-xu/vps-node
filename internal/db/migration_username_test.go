@@ -68,8 +68,8 @@ func TestUsernameMigrationBackfillPreservesDependents(t *testing.T) {
 	if err := d.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations`).Scan(&versionCount); err != nil {
 		t.Fatalf("count versions: %v", err)
 	}
-	if versionCount != 4 {
-		t.Fatalf("expected 4 recorded versions, got %d", versionCount)
+	if versionCount != 5 {
+		t.Fatalf("expected 5 recorded versions, got %d", versionCount)
 	}
 
 	type row struct {

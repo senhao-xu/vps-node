@@ -3,6 +3,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { getSettings, updateSettings } from '@/api/settings'
 import { errorMessage } from '@/api/http'
 import ErrorBanner from '@/components/ErrorBanner.vue'
+import { DefaultClashMetaTemplate } from '@/utils/defaults'
 
 const form = reactive({
   retention_raw_log_days: 7,
@@ -10,12 +11,16 @@ const form = reactive({
   collection_connection_logs: true,
   session_freshness_seconds: 300,
   server_offline_after_seconds: 60,
+  subscribe_urls: '',
+  subscribe_path: 's',
+  clash_meta_template: DefaultClashMetaTemplate,
 })
 
 const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
 const saved = ref(false)
+const defaultClashTemplate = DefaultClashMetaTemplate
 
 async function load() {
   loading.value = true
@@ -59,6 +64,9 @@ async function save() {
       collection_connection_logs: form.collection_connection_logs,
       session_freshness_seconds: form.session_freshness_seconds,
       server_offline_after_seconds: form.server_offline_after_seconds,
+      subscribe_urls: form.subscribe_urls,
+      subscribe_path: form.subscribe_path,
+      clash_meta_template: form.clash_meta_template,
     })
     Object.assign(form, data)
     saved.value = true
@@ -76,9 +84,16 @@ onMounted(() => {
 
 <template>
   <section class="page">
-    <h1 class="page-title">
-      设置
-    </h1>
+    <div class="page-header">
+      <div>
+        <p class="eyebrow">
+          SYSTEM PREFERENCES
+        </p>
+        <h1 class="page-title">
+          设置
+        </h1>
+      </div>
+    </div>
     <ErrorBanner
       :message="error"
       @dismiss="error = ''"
@@ -117,6 +132,57 @@ onMounted(() => {
           采集连接日志（关闭后不再记录新的连接日志）
         </label>
       </div>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">
+        订阅设置
+      </h2>
+      <div class="form-grid">
+        <div class="field">
+          <label for="subscribe-urls">订阅基地址</label>
+          <input
+            id="subscribe-urls"
+            v-model="form.subscribe_urls"
+            type="text"
+            placeholder="https://panel.example.com,https://backup.example.com"
+          >
+          <span class="text-secondary hint">多个地址使用英文逗号分隔；必须是无路径、无凭据的 HTTP(S) Origin。</span>
+        </div>
+        <div class="field">
+          <label for="subscribe-path">订阅路径</label>
+          <input
+            id="subscribe-path"
+            v-model="form.subscribe_path"
+            type="text"
+            maxlength="32"
+          >
+          <span class="text-secondary hint">安全单路径段，修改后立即生效，例如 s 或 subscribe。</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">
+        Clash Meta 覆写模板
+      </h2>
+      <div class="field">
+        <label for="clash-template">受限 YAML</label>
+        <textarea
+          id="clash-template"
+          v-model="form.clash_meta_template"
+          rows="18"
+          spellcheck="false"
+        />
+        <span class="text-secondary hint">允许 DNS、代理组、规则、规则集和基础运行参数。代理组使用 __ALL_PROXIES__、__SHADOWSOCKS_PROXIES__、__VLESS_PROXIES__、__HYSTERIA2_PROXIES__ 注入动态节点；不得添加 proxies、proxy-providers、监听器或控制接口。</span>
+      </div>
+      <button
+        type="button"
+        class="btn secondary small"
+        @click="form.clash_meta_template = defaultClashTemplate"
+      >
+        恢复默认模板
+      </button>
     </div>
 
     <div class="card">
@@ -166,12 +232,27 @@ onMounted(() => {
   </section>
 </template>
 
+
 <style scoped>
 .form-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: var(--spacing-md) var(--spacing-lg);
   align-items: start;
+}
+
+.eyebrow {
+  margin: 0 0 var(--spacing-xs);
+  color: var(--color-primary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.card-title {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
 }
 
 .toggle {
@@ -193,5 +274,20 @@ onMounted(() => {
 .saved-tip {
   color: var(--color-success);
   font-size: var(--font-size-sm);
+}
+
+@media (max-width: 700px) {
+  .form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .toggle {
+    align-self: start;
+    margin-top: 0;
+  }
+
+  .save-row .btn {
+    flex: 1;
+  }
 }
 </style>

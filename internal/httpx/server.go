@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"runtime/debug"
+	"strings"
 	"time"
 )
 
@@ -80,9 +81,14 @@ func loggingMiddleware(logger *slog.Logger, next http.Handler) http.Handler {
 		start := time.Now()
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rec, r)
+		path := r.URL.Path
+		parts := strings.Split(strings.Trim(path, "/"), "/")
+		if len(parts) == 2 && parts[0] != "api" && parts[0] != "healthz" && parts[1] != "" {
+			path = "/" + parts[0] + "/:token"
+		}
 		logger.Info("http request",
 			"method", r.Method,
-			"path", r.URL.Path,
+			"path", path,
 			"status", rec.status,
 			"duration_ms", time.Since(start).Milliseconds(),
 		)
@@ -93,9 +99,14 @@ func recoveryMiddleware(logger *slog.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if rec := recover(); rec != nil {
+				path := r.URL.Path
+				parts := strings.Split(strings.Trim(path, "/"), "/")
+				if len(parts) == 2 && parts[0] != "api" && parts[0] != "healthz" && parts[1] != "" {
+					path = "/" + parts[0] + "/:token"
+				}
 				logger.Error("http panic",
 					"method", r.Method,
-					"path", r.URL.Path,
+					"path", path,
 					"panic", rec,
 					"stack", string(debug.Stack()),
 				)

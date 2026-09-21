@@ -62,6 +62,32 @@ func TestNewTokenAndHash(t *testing.T) {
 	}
 }
 
+func TestNewURLToken(t *testing.T) {
+	a, err := NewURLToken(16)
+	if err != nil {
+		t.Fatalf("new url token: %v", err)
+	}
+	b, _ := NewURLToken(16)
+	if a == b {
+		t.Fatal("expected unique tokens")
+	}
+	if len(a) != 22 {
+		t.Fatalf("expected 22-char base64url token, got %d (%q)", len(a), a)
+	}
+	for _, r := range a {
+		if !('A' <= r && r <= 'Z' || 'a' <= r && r <= 'z' || '0' <= r && r <= '9' || r == '-' || r == '_') {
+			t.Fatalf("token contains non-URL-safe character %q", r)
+		}
+	}
+	if _, err := NewURLToken(15); err == nil {
+		t.Fatal("expected error below 16 bytes of entropy")
+	}
+	long, err := NewURLToken(32)
+	if err != nil || len(long) != 43 {
+		t.Fatalf("32-byte token: len=%d err=%v", len(long), err)
+	}
+}
+
 func TestSessionsLifecycle(t *testing.T) {
 	d := newTestDB(t)
 	ctx := context.Background()

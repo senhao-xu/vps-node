@@ -147,7 +147,8 @@ type createUserRequest struct {
 
 type userCreatedDTO struct {
 	userDetailDTO
-	Token string `json:"token"`
+	Token           string `json:"token"`
+	SubscriptionURL string `json:"subscription_url"`
 }
 
 func (h *Handler) handleUserCreate(w http.ResponseWriter, r *http.Request) {
@@ -197,7 +198,12 @@ func (h *Handler) handleUserCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := h.repo.CreateUserWithNodes(r.Context(), repo.NewUser{
+	subToken, subHash, subEnc, err := h.newSubscriptionCredential()
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	id, err := h.repo.CreateUserWithNodesAndSubscription(r.Context(), repo.NewUser{
 		UUID:       uuid,
 		Username:   username,
 		TokenHash:  adminauth.HashToken(token),
@@ -205,7 +211,7 @@ func (h *Handler) handleUserCreate(w http.ResponseWriter, r *http.Request) {
 		QuotaBytes: quota,
 		StartedAt:  startedAt,
 		ExpiresAt:  expiresAt,
-	}, nodeIDs)
+	}, nodeIDs, subHash, subEnc)
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -216,7 +222,12 @@ func (h *Handler) handleUserCreate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusCreated, userCreatedDTO{userDetailDTO: dto, Token: token})
+	subURL, err := h.subscriptionURL(r, subToken)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusCreated, userCreatedDTO{userDetailDTO: dto, Token: token, SubscriptionURL: subURL})
 }
 
 func (h *Handler) userDetail(ctx context.Context, id int64) (userDetailDTO, error) {

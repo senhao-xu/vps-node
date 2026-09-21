@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"net/http"
@@ -33,6 +34,20 @@ func NewToken() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(buf), nil
+}
+
+// NewURLToken returns a base64url token carrying n bytes of entropy
+// (n must be at least 16). Use it for public secret links where a shorter
+// URL matters; it is still hashed with HashToken before storage.
+func NewURLToken(n int) (string, error) {
+	if n < 16 {
+		return "", errors.New("url token entropy must be at least 16 bytes")
+	}
+	buf := make([]byte, n)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
 
 func HashToken(token string) string {

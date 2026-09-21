@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { expireUserNow, resetUserToken, updateUser } from '@/api/users'
+import { createUserSubscription, expireUserNow, getUserSubscription, resetUserToken, rotateUserSubscription, updateUser } from '@/api/users'
 import { errorMessage } from '@/api/http'
-import type { UserDetail, UserStatus } from '@/api/types'
+import type { UserDetail, UserStatus, Subscription } from '@/api/types'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import CopyText from '@/components/CopyText.vue'
 import OneTimeSecret from '@/components/OneTimeSecret.vue'
@@ -25,6 +25,9 @@ const usernameDraft = ref('')
 const editingUsername = ref(false)
 const savingUsername = ref(false)
 const error = ref('')
+const subscription = ref<Subscription>({ configured: false, url: null })
+const loadingSubscription = ref(false)
+const rotatingSubscription = ref(false)
 
 const showResetTokenConfirm = ref(false)
 const resettingToken = ref(false)
@@ -35,14 +38,31 @@ const usernamePattern = /^[A-Za-z0-9_.-]{1,64}$/
 
 watch(
   () => props.user.id,
-  () => {
+  async () => {
     tokenRevealed.value = null
     statusDraft.value = props.user.status === 'disabled' ? 'disabled' : 'active'
     usernameDraft.value = props.user.username
     editingUsername.value = false
+    loadingSubscription.value = true
+    try { subscription.value = await getUserSubscription(props.user.id) } catch (err) { error.value = errorMessage(err) } finally { loadingSubscription.value = false }
   },
   { immediate: true },
 )
+
+async function provisionSubscription() {
+  loadingSubscription.value = true
+  try { subscription.value = await createUserSubscription(props.user.id) } catch (err) { error.value = errorMessage(err) } finally { loadingSubscription.value = false }
+}
+
+async function rotateSubscription() {
+  if (!window.confirm('轮换后旧订阅链接将立即失效，确定继续吗？')) return
+  rotatingSubscription.value = true
+  try { subscription.value = await rotateUserSubscription(props.user.id) } catch (err) { error.value = errorMessage(err) } finally { rotatingSubscription.value = false }
+}
+
+async function copySubscription() {
+  if (subscription.value.url) await navigator.clipboard.writeText(subscription.value.url)
+}
 
 watch(
   () => props.user.username,
@@ -130,6 +150,43 @@ async function expireNow() {
     >
       {{ error }}
     </p>
+    <div class="info-item token-item">
+      <span class="info-label">订阅链接</span>
+      <span v-if="loadingSubscription">加载中…</span>
+      <span
+        v-else-if="subscription.url"
+        class="status-row"
+      >
+        <input
+          class="mono"
+          readonly
+          :value="subscription.url"
+        >
+        <button
+          type="button"
+          class="btn small"
+          @click="copySubscription"
+        >
+          复制
+        </button>
+        <button
+          type="button"
+          class="btn secondary small"
+          :disabled="rotatingSubscription"
+          @click="rotateSubscription"
+        >
+          轮换
+        </button>
+      </span>
+      <button
+        v-else
+        type="button"
+        class="btn small"
+        @click="provisionSubscription"
+      >
+        生成订阅链接
+      </button>
+    </div>
     <div class="info-grid">
       <div class="info-item">
         <span class="info-label">用户 ID</span>
@@ -221,6 +278,11 @@ async function expireNow() {
           class="token-body"
         >
           <span class="masked">••••••••••••</span>
+        </span>
+      </div>
+      <div class="info-item">
+        <span class="info-label">操作</span>
+        <span class="actions-row">
           <button
             type="button"
             class="btn secondary small"
@@ -228,17 +290,14 @@ async function expireNow() {
           >
             重置 Token
           </button>
+          <button
+            type="button"
+            class="btn danger secondary small"
+            @click="showExpireConfirm = true"
+          >
+            立即过期
+          </button>
         </span>
-      </div>
-      <div class="info-item">
-        <span class="info-label">操作</span>
-        <button
-          type="button"
-          class="btn danger secondary small"
-          @click="showExpireConfirm = true"
-        >
-          立即过期
-        </button>
       </div>
     </div>
 
@@ -292,6 +351,13 @@ async function expireNow() {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
+}
+
+.actions-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
 }
 
 .username-edit {

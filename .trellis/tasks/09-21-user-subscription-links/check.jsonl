@@ -1,0 +1,9 @@
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"Verify additive migration, unique token lookup, cascade deletion, and atomic create/rotation behavior."}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Audit public/admin auth boundaries, stable errors, encrypted credentials, and request-log redaction."}
+{"file":".trellis/spec/backend/node-protocol-settings.md","reason":"Verify Hysteria2 PEM validation, partial update retention, revision bump, and secret non-disclosure."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Run complete Go/Web quality gates and audit forbidden template/runtime inputs."}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Check centralized DTOs and strict typing across subscription/settings UI flows."}
+{"file":".trellis/tasks/09-21-user-subscription-links/research/xboard-subscription-research.md","reason":"Check that only the approved XBoard subscription-link behaviors were copied."}
+{"file":".trellis/tasks/09-21-user-subscription-links/research/clash-override-research.md","reason":"Audit restricted template protected keys, placeholders, merge order, and reference validation."}
+{"file":".trellis/tasks/09-21-user-subscription-links/research/hysteria2-tls-research.md","reason":"Verify generated inbound/outbound TLS fields against pinned sing-box behavior."}
+{"file":"docs/api-contract.md","reason":"Check implementation, Go DTOs, TypeScript types, routes, status codes, and examples for drift."}

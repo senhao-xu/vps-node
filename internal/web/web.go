@@ -13,6 +13,7 @@ import (
 	"vps-node/internal/adminauth"
 	"vps-node/internal/httpx"
 	"vps-node/internal/repo"
+	"vps-node/internal/subscription"
 )
 
 const (
@@ -21,6 +22,9 @@ const (
 	settingCollectionLogs     = "collection.connection_logs"
 	settingSessionFreshness   = "session.freshness_seconds"
 	settingServerOfflineAfter = "server.offline_after_seconds"
+	settingSubscribeURLs      = "subscribe_urls"
+	settingSubscribePath      = "subscribe_path"
+	settingClashTemplate      = "clash_meta_template"
 )
 
 var weakPasswords = map[string]bool{
@@ -87,9 +91,28 @@ func New(o Options) (http.Handler, error) {
 
 	mux := http.NewServeMux()
 	mux.Handle("GET /healthz", httpx.Healthz())
+	mux.HandleFunc("GET /", h.handlePublicSubscriptionDispatcher)
 	h.registerAdminRoutes(mux)
 	h.registerAgentRoutes(mux)
 	return mux, nil
+}
+
+func (h *Handler) handlePublicSubscriptionDispatcher(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.NotFound(w, r)
+		return
+	}
+	settings, err := h.settingsDTO(r.Context())
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(parts) != 2 || parts[0] != settings.SubscribePath || parts[1] == "" {
+		http.NotFound(w, r)
+		return
+	}
+	h.handlePublicSubscription(w, r, parts[1])
 }
 
 func intervalSeconds(d time.Duration, fallback int) int {
@@ -126,6 +149,9 @@ func (h *Handler) registerAdminRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/users/{id}/sessions", h.requireAdmin(h.handleUserSessions))
 	mux.HandleFunc("GET /api/users/{id}/connection-logs", h.requireAdmin(h.handleUserConnectionLogs))
 	mux.HandleFunc("GET /api/users/{id}/traffic", h.requireAdmin(h.handleUserTraffic))
+	mux.HandleFunc("GET /api/users/{id}/subscription", h.requireAdmin(h.handleSubscriptionGet))
+	mux.HandleFunc("POST /api/users/{id}/subscription", h.requireAdmin(h.handleSubscriptionCreate))
+	mux.HandleFunc("POST /api/users/{id}/subscription/rotate", h.requireAdmin(h.handleSubscriptionRotate))
 
 	mux.HandleFunc("GET /api/servers", h.requireAdmin(h.handleServerList))
 	mux.HandleFunc("POST /api/servers", h.requireAdmin(h.handleServerCreate))
@@ -137,6 +163,7 @@ func (h *Handler) registerAdminRoutes(mux *http.ServeMux) {
 
 	mux.HandleFunc("GET /api/nodes", h.requireAdmin(h.handleNodeList))
 	mux.HandleFunc("POST /api/nodes", h.requireAdmin(h.handleNodeCreate))
+	mux.HandleFunc("POST /api/nodes/reality-keypair", h.requireAdmin(h.handleRealityKeypairGenerate))
 	mux.HandleFunc("GET /api/nodes/{id}", h.requireAdmin(h.handleNodeGet))
 	mux.HandleFunc("PUT /api/nodes/{id}", h.requireAdmin(h.handleNodeUpdate))
 	mux.HandleFunc("DELETE /api/nodes/{id}", h.requireAdmin(h.handleNodeDelete))
@@ -213,7 +240,17 @@ func settingsFromMap(raw map[string]string) settingsDTO {
 		CollectionConnectionLogs:  settingBool(raw, settingCollectionLogs, true),
 		SessionFreshnessSeconds:   settingInt(raw, settingSessionFreshness, 300, 1),
 		ServerOfflineAfterSeconds: settingInt(raw, settingServerOfflineAfter, 60, 1),
+		SubscribeURLs:             raw[settingSubscribeURLs],
+		SubscribePath:             settingString(raw, settingSubscribePath, "s"),
+		ClashMetaTemplate:         settingString(raw, settingClashTemplate, subscription.DefaultClashMetaTemplate),
 	}
+}
+
+func settingString(raw map[string]string, key, fallback string) string {
+	if value := raw[key]; value != "" {
+		return value
+	}
+	return fallback
 }
 
 func settingInt(raw map[string]string, key string, fallback, min int) int {

@@ -33,14 +33,15 @@ func TestMigrateIdempotent(t *testing.T) {
 	if err := d.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations`).Scan(&count); err != nil {
 		t.Fatalf("count migrations: %v", err)
 	}
-	if count != 4 {
-		t.Fatalf("expected 4 applied migrations, got %d", count)
+	if count != 5 {
+		t.Fatalf("expected 5 applied migrations, got %d", count)
 	}
 
 	for _, table := range []string{
 		"admins", "users", "servers", "agents", "nodes", "user_nodes",
 		"sessions", "connection_logs", "traffic_records", "server_revisions",
 		"traffic_batches", "connection_log_batches", "settings", "admin_sessions",
+		"user_subscriptions",
 	} {
 		var name string
 		err := d.QueryRowContext(ctx,
@@ -62,6 +63,36 @@ func TestMigrationContentAppliedOnce(t *testing.T) {
 
 	if _, err := d.ExecContext(ctx, `INSERT INTO users (uuid, username, token_hash, created_at, updated_at) VALUES ('u1', 'user-u1', 'h1', 1, 1)`); err != nil {
 		t.Fatalf("insert user: %v", err)
+	}
+}
+
+func TestUserSubscriptionsConstraintsAndCascade(t *testing.T) {
+	d := openTestDB(t)
+	ctx := context.Background()
+	if _, err := d.ExecContext(ctx, `INSERT INTO users (uuid, username, token_hash, created_at, updated_at) VALUES ('sub-u', 'sub-user', 'user-hash', 1, 1)`); err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+	if _, err := d.ExecContext(ctx, `INSERT INTO users (uuid, username, token_hash, created_at, updated_at) VALUES ('sub-u2', 'sub-user2', 'user-hash2', 1, 1)`); err != nil {
+		t.Fatalf("insert second user: %v", err)
+	}
+	if _, err := d.ExecContext(ctx, `INSERT INTO user_subscriptions (user_id, token_hash, token_enc, created_at, updated_at) VALUES (1, 'sub-hash', X'01', 1, 1)`); err != nil {
+		t.Fatalf("insert subscription: %v", err)
+	}
+	if _, err := d.ExecContext(ctx, `INSERT INTO user_subscriptions (user_id, token_hash, token_enc, created_at, updated_at) VALUES (1, 'other-hash', X'02', 1, 1)`); err == nil {
+		t.Fatal("accepted duplicate user subscription")
+	}
+	if _, err := d.ExecContext(ctx, `INSERT INTO user_subscriptions (user_id, token_hash, token_enc, created_at, updated_at) VALUES (2, 'sub-hash', X'02', 1, 1)`); err == nil {
+		t.Fatal("accepted duplicate token hash")
+	}
+	if _, err := d.ExecContext(ctx, `DELETE FROM users WHERE id = 1`); err != nil {
+		t.Fatalf("delete user: %v", err)
+	}
+	var count int
+	if err := d.QueryRowContext(ctx, `SELECT COUNT(*) FROM user_subscriptions`).Scan(&count); err != nil {
+		t.Fatalf("count subscriptions: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("subscription did not cascade, count=%d", count)
 	}
 }
 

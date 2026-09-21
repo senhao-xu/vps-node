@@ -13,6 +13,7 @@ import type {
   UserExpiryFilter,
   UserNodes,
   UserStatus,
+  Subscription,
 } from './types'
 
 export interface UserListParams {
@@ -21,6 +22,18 @@ export interface UserListParams {
   expiry?: UserExpiryFilter
   page?: number
   pageSize?: number
+}
+
+export function getUserSubscription(userId: number): Promise<Subscription> {
+  return request<Subscription>(`/api/users/${userId}/subscription`)
+}
+
+export function createUserSubscription(userId: number): Promise<Subscription> {
+  return request<Subscription>(`/api/users/${userId}/subscription`, { method: 'POST' })
+}
+
+export function rotateUserSubscription(userId: number): Promise<Subscription> {
+  return request<Subscription>(`/api/users/${userId}/subscription/rotate`, { method: 'POST' })
 }
 
 export interface ConnectionLogParams {

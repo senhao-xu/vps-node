@@ -11,6 +11,7 @@ import ErrorBanner from '@/components/ErrorBanner.vue'
 import ModalDialog from '@/components/ModalDialog.vue'
 import NodeChecklist from '@/components/NodeChecklist.vue'
 import OneTimeSecret from '@/components/OneTimeSecret.vue'
+import CopyText from '@/components/CopyText.vue'
 
 const props = defineProps<{
   open: boolean
@@ -131,6 +132,14 @@ async function submit() {
         label="用户 Token"
         :value="created.token"
       />
+      <div class="subscription-secret">
+        <span class="text-secondary">订阅链接（可复制）</span>
+        <CopyText
+          class="subscription-url"
+          :text="created.subscription_url"
+          :display="created.subscription_url"
+        />
+      </div>
     </template>
     <template v-else>
       <ErrorBanner

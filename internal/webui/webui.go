@@ -46,6 +46,10 @@ func Wrap(api http.Handler, logger *slog.Logger) http.Handler {
 	} else {
 		index = []byte(fallbackHTML)
 	}
+	return wrapFS(sub, index, api)
+}
+
+func wrapFS(sub fs.FS, index []byte, api http.Handler) http.Handler {
 	fileServer := http.FileServerFS(sub)
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -65,8 +69,45 @@ func Wrap(api http.Handler, logger *slog.Logger) http.Handler {
 				return
 			}
 		}
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Header().Set("Cache-Control", "no-cache")
-		_, _ = w.Write(index)
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			api.ServeHTTP(w, r)
+			return
+		}
+		// Public API routes (e.g. subscription links) own these paths; the SPA
+		// fallback only applies when the API reports the route as not found.
+		rec := &spaFallback{ResponseWriter: w}
+		api.ServeHTTP(rec, r)
+		if rec.status == http.StatusNotFound {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-cache")
+			_, _ = w.Write(index)
+		}
 	})
+}
+
+// spaFallback hides a plain 404 (unknown route) from the client so the SPA
+// index can be written instead. A JSON 404 is an API business error (e.g. an
+// invalid subscription token) and passes through untouched.
+type spaFallback struct {
+	http.ResponseWriter
+	status   int
+	fallback bool
+}
+
+func (w *spaFallback) WriteHeader(code int) {
+	w.status = code
+	w.fallback = code == http.StatusNotFound && !strings.Contains(w.Header().Get("Content-Type"), "json")
+	if !w.fallback {
+		w.ResponseWriter.WriteHeader(code)
+	}
+}
+
+func (w *spaFallback) Write(b []byte) (int, error) {
+	if w.status == 0 {
+		w.status = http.StatusOK
+	}
+	if w.fallback {
+		return len(b), nil
+	}
+	return w.ResponseWriter.Write(b)
 }

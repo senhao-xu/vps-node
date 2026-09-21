@@ -85,6 +85,7 @@ onMounted(() => {
   <section class="page">
     <div class="page-header">
       <h1 class="page-title">
+        <span class="eyebrow">USER PROFILE</span>
         用户详情
         <template v-if="user">
           <span class="head-status">
@@ -158,6 +159,15 @@ onMounted(() => {
   vertical-align: middle;
 }
 
+.eyebrow {
+  display: block;
+  margin-bottom: var(--spacing-xs);
+  color: var(--color-primary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
 .meta-line {
   margin: 0 0 var(--spacing-md);
   font-size: var(--font-size-sm);
@@ -172,5 +182,11 @@ onMounted(() => {
 
 .two-col .card + .card {
   margin-top: 0;
+}
+
+@media (max-width: 700px) {
+  .two-col {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 </style>

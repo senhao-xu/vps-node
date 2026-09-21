@@ -1,0 +1,10 @@
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"Add subscription credential persistence without rebuilding users; preserve migration, FK, transaction, and index invariants."}
+{"file":".trellis/spec/backend/error-handling.md","reason":"Preserve error envelopes, auth separation, recoverable-secret encryption, and no-secret logging."}
+{"file":".trellis/spec/backend/node-protocol-settings.md","reason":"Extend Hysteria2 settings and encrypted secret merge semantics without exposing protocol secrets."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Apply allowlists to admin-controlled runtime templates and run the complete quality gate."}
+{"file":".trellis/spec/frontend/directory-structure.md","reason":"Keep API types centralized and use established settings, user detail, node dialog, and visual patterns."}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Maintain strict TypeScript boundaries for new subscription and settings DTOs."}
+{"file":".trellis/tasks/09-21-user-subscription-links/research/xboard-subscription-research.md","reason":"Reference only XBoard subscription URL, format negotiation, and admin copy behavior."}
+{"file":".trellis/tasks/09-21-user-subscription-links/research/clash-override-research.md","reason":"Use the researched template capability and security boundaries for the local restricted Clash design."}
+{"file":".trellis/tasks/09-21-user-subscription-links/research/hysteria2-tls-research.md","reason":"Follow pinned sing-box 1.14.1 TLS certificate requirements and current Panel-to-Agent secret flow."}
+{"file":"docs/api-contract.md","reason":"Binding cross-layer contract for users, nodes, settings, and new public/admin subscription endpoints."}
