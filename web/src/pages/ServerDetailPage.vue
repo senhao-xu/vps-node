@@ -46,7 +46,7 @@ const freshRegisterToken = computed(() => registerTokenResult.value?.register_to
 
 const installNotes: Record<InstallTab, string> = {
   binary: 'install 脚本目前随 release tarball 分发，脚本地址需按实际发布渠道替换。',
-  docker: '镜像从 GitHub Container Registry（ghcr.io）拉取；端口映射请按节点实际端口修改。',
+  docker: '使用 host 网络模式，节点端口直接生效无需映射；镜像从 GitHub Container Registry（ghcr.io）拉取。',
 }
 
 const activeInstallCommand = computed(() =>

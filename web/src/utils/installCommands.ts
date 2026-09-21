@@ -16,11 +16,11 @@ export function dockerInstallCommand(origin: string, serverId: number, token: st
   const resolved = tokenOrPlaceholder(token)
   return [
     'docker run -d --name panel-agent --init --restart unless-stopped \\',
+    '  --network host \\',
     '  -v panel-agent-state:/var/lib/panel-agent \\',
     `  -e AGENT_PANEL_URL=${origin} \\`,
     `  -e AGENT_SERVER_ID=${serverId} \\`,
     `  -e AGENT_REGISTER_TOKEN=${resolved} \\`,
-    '  -p 8388:8388 -p 8388:8388/udp \\',
     '  ghcr.io/senhao-xu/vps-node-agent:latest',
   ].join('\n')
 }
