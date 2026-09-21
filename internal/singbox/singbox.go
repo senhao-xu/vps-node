@@ -9,8 +9,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"net"
-	"regexp"
 	"strconv"
 	"strings"
 )
@@ -27,47 +25,7 @@ const (
 	SSMethod2022Aes128Gcm = "2022-blake3-aes-128-gcm"
 	SSMethod2022Aes256Gcm = "2022-blake3-aes-256-gcm"
 	SSMethod2022Chacha20  = "2022-blake3-chacha20-poly1305"
-
-	// FlowVision is the only supported VLESS flow control value.
-	FlowVision = "xtls-rprx-vision"
 )
-
-// VLESSFlow resolves the effective VLESS flow control for a node.
-// Compatibility rule: a missing settings key means vision (legacy nodes);
-// an explicit empty string disables flow (no flow field is emitted).
-func VLESSFlow(settings map[string]any) string {
-	raw, ok := settings["flow"]
-	if !ok {
-		return FlowVision
-	}
-	if s, _ := raw.(string); s == "" {
-		return ""
-	}
-	return FlowVision
-}
-
-var destHostPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.-]*$`)
-
-// ParseDest parses a Reality handshake destination "host" or "host:port".
-// A missing port defaults to 443.
-func ParseDest(dest string) (string, int, error) {
-	host, portStr, err := net.SplitHostPort(dest)
-	if err != nil {
-		host, portStr = dest, ""
-	}
-	if len(host) == 0 || len(host) > 253 || !destHostPattern.MatchString(host) {
-		return "", 0, fmt.Errorf("invalid dest host %q", host)
-	}
-	port := 443
-	if portStr != "" {
-		p, err := strconv.Atoi(portStr)
-		if err != nil || p < 1 || p > 65535 {
-			return "", 0, fmt.Errorf("invalid dest port %q", portStr)
-		}
-		port = p
-	}
-	return host, port, nil
-}
 
 var ssKeyLens = map[string]int{
 	SSMethod2022Aes128Gcm: 16,
@@ -215,21 +173,11 @@ func renderVLESS(n Node) (map[string]any, error) {
 		shortIDs = append(shortIDs, shortID)
 	}
 	users := make([]map[string]any, 0, len(n.Users))
-	flow := VLESSFlow(n.Settings)
 	for _, u := range n.Users {
-		user := map[string]any{"uuid": u.UUID}
-		if flow != "" {
-			user["flow"] = flow
-		}
-		users = append(users, user)
-	}
-	handshake := map[string]any{"server": serverName, "server_port": 443}
-	if dest := SettingString(n.Settings, "dest"); dest != "" {
-		host, port, err := ParseDest(dest)
-		if err != nil {
-			return nil, fmt.Errorf("%w: node %d: invalid vless dest %q", ErrUnrenderable, n.ID, dest)
-		}
-		handshake["server"], handshake["server_port"] = host, port
+		users = append(users, map[string]any{
+			"uuid": u.UUID,
+			"flow": "xtls-rprx-vision",
+		})
 	}
 	return map[string]any{
 		"type":        ProtocolVLESS,
@@ -242,7 +190,7 @@ func renderVLESS(n Node) (map[string]any, error) {
 			"server_name": serverName,
 			"reality": map[string]any{
 				"enabled":     true,
-				"handshake":   handshake,
+				"handshake":   map[string]any{"server": serverName, "server_port": 443},
 				"private_key": privateKey,
 				"short_id":    shortIDs,
 			},

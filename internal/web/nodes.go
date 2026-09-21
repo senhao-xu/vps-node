@@ -20,7 +20,6 @@ import (
 	"vps-node/internal/httpx"
 	"vps-node/internal/repo"
 	"vps-node/internal/secrets"
-	"vps-node/internal/singbox"
 )
 
 var validProtocols = map[string]bool{
@@ -360,23 +359,6 @@ func (h *Handler) buildNodeSettings(protocol string, raw json.RawMessage, curren
 					return "", nil, err
 				}
 				plain[key] = names
-			case "flow":
-				s, ok := value.(string)
-				if !ok || (s != "" && s != singbox.FlowVision) {
-					return "", nil, errValidation("settings.flow 只能是空字符串（不启用）或 xtls-rprx-vision")
-				}
-				plain[key] = s
-			case "dest":
-				s, ok := value.(string)
-				if !ok || len(s) > 253 {
-					return "", nil, errValidation("settings.dest 必须是 host 或 host:port 形式的字符串")
-				}
-				if s != "" {
-					if _, _, err := singbox.ParseDest(s); err != nil {
-						return "", nil, errValidation("settings.dest 格式不正确，应为合法域名/IP，可带 1-65535 端口，例如 www.example.com:443")
-					}
-				}
-				plain[key] = s
 			default:
 				return "", nil, errValidation(fmt.Sprintf("unknown settings field %q for vless", key))
 			}

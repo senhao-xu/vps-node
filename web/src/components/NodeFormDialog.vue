@@ -35,8 +35,6 @@ const vlessPrivateKey = ref('')
 const vlessPublicKey = ref('')
 const vlessShortId = ref('')
 const vlessServerNames = ref('')
-const vlessFlow = ref<'keep' | 'vision' | 'none'>('vision')
-const vlessDest = ref('')
 
 const hy2Up = ref<number | null>(null)
 const hy2Down = ref<number | null>(null)
@@ -71,8 +69,6 @@ watch(
     vlessPublicKey.value = ''
     vlessShortId.value = ''
     vlessServerNames.value = ''
-    vlessFlow.value = props.node !== null ? 'keep' : 'vision'
-    vlessDest.value = ''
     hy2Up.value = null
     hy2Down.value = null
     hy2ServerName.value = ''
@@ -113,10 +109,6 @@ const settingsPayload = computed<NodeSettingsInput | undefined>(() => {
       .map((item) => item.trim())
       .filter((item) => item.length > 0)
     if (names.length > 0) payload['server_names'] = names
-    if (!isEdit.value || vlessFlow.value !== 'keep') {
-      payload['flow'] = vlessFlow.value === 'none' ? '' : 'xtls-rprx-vision'
-    }
-    if (vlessDest.value.trim()) payload['dest'] = vlessDest.value.trim()
   } else {
     if (hy2Up.value !== null && !Number.isNaN(hy2Up.value) && hy2Up.value >= 0) {
       payload['up_mbps'] = hy2Up.value
@@ -152,14 +144,6 @@ const validationMessage = computed(() => {
     if (vlessShortId.value && !/^(?:[0-9a-fA-F]{2}){1,8}$/.test(vlessShortId.value)) {
       return 'Short ID 必须是 2-16 位偶数长度十六进制字符'
     }
-    const dest = vlessDest.value.trim()
-    if (dest) {
-      const match = /^([A-Za-z0-9][A-Za-z0-9.-]*)(?::([0-9]{1,5}))?$/.exec(dest)
-      const destPort = match?.[2] ? Number(match[2]) : 443
-      if (!match || destPort < 1 || destPort > 65535) {
-        return 'Dest 目标站格式应为 host 或 host:port（端口 1-65535），例如 www.example.com:443'
-      }
-    }
   } else if (protocol.value === 'hysteria2') {
     for (const value of [hy2Up.value, hy2Down.value]) {
       if (value !== null && (!Number.isInteger(value) || value < 0)) {
@@ -192,8 +176,6 @@ function changeProtocol() {
   vlessPublicKey.value = ''
   vlessShortId.value = ''
   vlessServerNames.value = ''
-  vlessFlow.value = isEdit.value ? 'keep' : 'vision'
-  vlessDest.value = ''
   hy2Up.value = null
   hy2Down.value = null
   hy2ServerName.value = ''
@@ -461,40 +443,6 @@ async function submit() {
           </div>
           <p class="field-hint vless-hint">
             Server Name 用逗号分隔；Short ID 为可选的 2–16 位偶数长度十六进制字符。
-          </p>
-          <div class="form-row vless-fields">
-            <div class="field">
-              <label for="vless-flow">Flow</label>
-              <select
-                id="vless-flow"
-                v-model="vlessFlow"
-              >
-                <option
-                  v-if="isEdit"
-                  value="keep"
-                >
-                  保持不变
-                </option>
-                <option value="vision">
-                  xtls-rprx-vision（默认）
-                </option>
-                <option value="none">
-                  不启用
-                </option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="vless-dest">Dest 目标站{{ isEdit ? '（留空保持不变）' : '' }}</label>
-              <input
-                id="vless-dest"
-                v-model="vlessDest"
-                type="text"
-                placeholder="默认使用 Server Name:443"
-              >
-            </div>
-          </div>
-          <p class="field-hint vless-hint">
-            Dest 是 Reality 回落的握手目标，可填 host 或 host:port（缺省 443）。
           </p>
         </div>
 

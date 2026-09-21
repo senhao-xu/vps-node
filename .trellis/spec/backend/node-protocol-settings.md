@@ -42,19 +42,16 @@ Reality generation response:
 | Hysteria2 bandwidth is negative, fractional, or not numeric | `422 validation` |
 | Hysteria2 `obfs_password` over 64 chars | `422 validation` |
 | Hysteria2 `hop_ports` not `start-end`, out of 1-65535, or start > end | `422 validation` |
-| VLESS `flow` not `""` or `xtls-rprx-vision` | `422 validation` |
-| VLESS `dest` host invalid (not domain/IPv4) or port out of 1-65535 | `422 validation` |
 | Unknown protocol setting field | `422 validation` |
 | Reality generation without admin session | `401 unauthorized` |
 
-## 4.1 Extended Protocol Settings (obfs / hop / flow / dest)
+## 4.1 Extended Hysteria2 Settings (obfs / hop)
 
-All four are **plain settings** (never `secretFields`) and all optional everywhere (create + patch):
+Both are **plain settings** (never `secretFields`) and optional everywhere (create + patch):
 
-- `obfs_password` (hysteria2): 1-64 chars; non-empty renders `"obfs": {"type":"salamander","password":...}` in the sing-box inbound and adds `obfs=salamander&obfs-password=` (URI) / `obfs`+`obfs-password` (Clash) to subscriptions.
-- `hop_ports` (hysteria2): `start-end` string, 1-65535, start<=end. **Subscription-only** (`mport` URI param, `ports` Clash field) — must never enter the sing-box inbound; server-side NAT redirect is the admin's job.
-- `flow` (vless): three-state via `singbox.VLESSFlow(settings)` — key absent → `xtls-rprx-vision` (legacy compat); explicit `""` → flow omitted; `"xtls-rprx-vision"` → vision. ALL four consumers must use this one helper: `renderVLESS` (users[].flow), subscription URI, Clash proxy, and `agentCredential`.
-- `dest` (vless): `host[:port]` (default port 443) parsed by `singbox.ParseDest`; non-empty drives `reality.handshake.server/server_port`, empty keeps `server_names[0]:443`. Host is restricted to domain/IPv4 chars (`^[A-Za-z0-9][A-Za-z0-9.-]*$`) — no IPv6 literals, no userinfo injection.
+- `obfs_password`: 1-64 chars; non-empty renders `"obfs": {"type":"salamander","password":...}` in the sing-box inbound and adds `obfs=salamander&obfs-password=` (URI) / `obfs`+`obfs-password` (Clash) to subscriptions.
+- `hop_ports`: `start-end` string, 1-65535, start<=end. **Subscription-only** (`mport` URI param, `ports` Clash field) — must never enter the sing-box inbound; server-side NAT redirect is the admin's job.
+- VLESS flow is hardcoded to `xtls-rprx-vision` and the Reality handshake target is always `server_names[0]:443`; configurable `flow`/`dest` settings were considered and rejected as unnecessary surface area.
 - Node DTOs never echo settings, so the edit form treats every new field as "blank = keep current"; there is no way to clear a once-set field via the UI.
 
 

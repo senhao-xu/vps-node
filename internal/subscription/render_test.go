@@ -163,55 +163,6 @@ func TestRenderHysteria2ObfsAndHopPorts(t *testing.T) {
 	}
 }
 
-func TestRenderVLESSFlowToggle(t *testing.T) {
-	key := make([]byte, 32)
-	template := "proxy-groups:\n  - {name: all, type: select, proxies: [__ALL_PROXIES__]}\n"
-
-	renderLink := func(t *testing.T, n Node) string {
-		t.Helper()
-		encoded, err := RenderGeneral(key, "user-uuid", []Node{n})
-		if err != nil {
-			t.Fatal(err)
-		}
-		raw, err := base64.StdEncoding.DecodeString(encoded)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return string(raw)
-	}
-	renderProxy := func(t *testing.T, n Node) map[string]any {
-		t.Helper()
-		out, err := RenderClash(key, "user-uuid", template, []Node{n})
-		if err != nil {
-			t.Fatal(err)
-		}
-		var config map[string]any
-		if err := yaml.Unmarshal(out, &config); err != nil {
-			t.Fatal(err)
-		}
-		return config["proxies"].([]any)[0].(map[string]any)
-	}
-
-	// Missing flow key defaults to vision in both URI and Clash.
-	legacy := testNode(t, "vless")
-	if link := renderLink(t, legacy); !strings.Contains(link, "flow=xtls-rprx-vision") {
-		t.Fatalf("legacy vless link must carry vision flow: %s", link)
-	}
-	if proxy := renderProxy(t, legacy); proxy["flow"] != "xtls-rprx-vision" {
-		t.Fatalf("legacy vless clash proxy must carry vision flow: %+v", proxy)
-	}
-
-	// Explicit empty flow omits the flow parameter everywhere.
-	disabled := testNode(t, "vless")
-	disabled.Settings["flow"] = ""
-	if link := renderLink(t, disabled); strings.Contains(link, "flow=") {
-		t.Fatalf("disabled flow must be omitted from the URI: %s", link)
-	}
-	if proxy := renderProxy(t, disabled); proxy["flow"] != nil {
-		t.Fatalf("disabled flow must be omitted from clash proxy: %+v", proxy)
-	}
-}
-
 func TestRenderFilteredSkipsBrokenNodes(t *testing.T) {
 	key := make([]byte, 32)
 	if _, err := rand.Read(key); err != nil {

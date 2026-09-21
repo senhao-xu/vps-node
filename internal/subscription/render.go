@@ -122,10 +122,7 @@ func renderURI(appKey []byte, userUUID string, n Node) (string, error) {
 		if len(names) == 0 {
 			return "", fmt.Errorf("vless node %d has no server name", n.ID)
 		}
-		q := url.Values{"security": {"reality"}, "encryption": {"none"}, "sni": {names[0]}, "pbk": {base64.RawURLEncoding.EncodeToString(privateKey.PublicKey().Bytes())}, "type": {"tcp"}}
-		if flow := singbox.VLESSFlow(n.Settings); flow != "" {
-			q.Set("flow", flow)
-		}
+		q := url.Values{"security": {"reality"}, "encryption": {"none"}, "flow": {"xtls-rprx-vision"}, "sni": {names[0]}, "pbk": {base64.RawURLEncoding.EncodeToString(privateKey.PublicKey().Bytes())}, "type": {"tcp"}}
 		if sid := singbox.SettingString(n.Settings, "short_id"); sid != "" {
 			q.Set("sid", sid)
 		}
@@ -254,10 +251,7 @@ func renderProxy(appKey []byte, userUUID string, n Node) (map[string]any, error)
 		if len(names) == 0 {
 			return nil, fmt.Errorf("vless node %d has no server name", n.ID)
 		}
-		p["uuid"], p["network"], p["tls"] = userUUID, "tcp", true
-		if flow := singbox.VLESSFlow(n.Settings); flow != "" {
-			p["flow"] = flow
-		}
+		p["uuid"], p["flow"], p["network"], p["tls"] = userUUID, "xtls-rprx-vision", "tcp", true
 		p["servername"], p["client-fingerprint"] = names[0], "chrome"
 		p["reality-opts"] = map[string]any{"public-key": base64.RawURLEncoding.EncodeToString(key.PublicKey().Bytes()), "short-id": singbox.SettingString(n.Settings, "short_id")}
 	case singbox.ProtocolHysteria2:

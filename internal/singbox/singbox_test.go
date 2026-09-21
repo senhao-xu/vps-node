@@ -162,75 +162,6 @@ func TestRenderVLESSReality(t *testing.T) {
 	}
 }
 
-func TestRenderVLESSFlowAndDest(t *testing.T) {
-	base := func() singbox.Node {
-		return singbox.Node{
-			ID:       22,
-			Protocol: singbox.ProtocolVLESS,
-			Port:     443,
-			Settings: map[string]any{"server_names": []any{"example.com"}},
-			Secret:   map[string]any{"private_key": "privkey-xyz"},
-			Users:    []singbox.User{{ID: 1, UUID: "uuid-1"}},
-		}
-	}
-	renderInboundOf := func(t *testing.T, n singbox.Node) map[string]any {
-		t.Helper()
-		config, err := singbox.Render(testAppKey, []singbox.Node{n}, singbox.ClashAPI{})
-		if err != nil {
-			t.Fatalf("render: %v", err)
-		}
-		return config["inbounds"].([]map[string]any)[0]
-	}
-
-	// Missing flow key keeps legacy vision behavior.
-	inbound := renderInboundOf(t, base())
-	if inbound["users"].([]map[string]any)[0]["flow"] != singbox.FlowVision {
-		t.Fatalf("missing flow key must default to vision: %+v", inbound["users"])
-	}
-	if inbound["tls"].(map[string]any)["reality"].(map[string]any)["handshake"].(map[string]any)["server"] != "example.com" {
-		t.Fatal("missing dest must fall back to server_names[0]")
-	}
-
-	// Explicit empty flow disables flow entirely.
-	noFlow := base()
-	noFlow.Settings["flow"] = ""
-	inbound = renderInboundOf(t, noFlow)
-	if _, has := inbound["users"].([]map[string]any)[0]["flow"]; has {
-		t.Fatal("explicit empty flow must omit the flow key")
-	}
-
-	// Explicit vision value behaves like the default.
-	vision := base()
-	vision.Settings["flow"] = singbox.FlowVision
-	inbound = renderInboundOf(t, vision)
-	if inbound["users"].([]map[string]any)[0]["flow"] != singbox.FlowVision {
-		t.Fatal("explicit vision flow must render vision")
-	}
-
-	// dest with explicit port drives the handshake target.
-	withDest := base()
-	withDest.Settings["dest"] = "fallback.example.com:8443"
-	handshake := renderInboundOf(t, withDest)["tls"].(map[string]any)["reality"].(map[string]any)["handshake"].(map[string]any)
-	if handshake["server"] != "fallback.example.com" || handshake["server_port"] != 8443 {
-		t.Fatalf("unexpected handshake: %+v", handshake)
-	}
-
-	// dest without port defaults to 443.
-	withBareDest := base()
-	withBareDest.Settings["dest"] = "fallback.example.com"
-	handshake = renderInboundOf(t, withBareDest)["tls"].(map[string]any)["reality"].(map[string]any)["handshake"].(map[string]any)
-	if handshake["server"] != "fallback.example.com" || handshake["server_port"] != 443 {
-		t.Fatalf("dest without port must default to 443: %+v", handshake)
-	}
-
-	// Unrenderable dest must fail.
-	badDest := base()
-	badDest.Settings["dest"] = "bad host:99999"
-	if _, err := singbox.Render(testAppKey, []singbox.Node{badDest}, singbox.ClashAPI{}); err == nil {
-		t.Fatal("invalid dest must fail rendering")
-	}
-}
-
 func TestRenderHysteria2Obfs(t *testing.T) {
 	node := singbox.Node{
 		ID:       32,
@@ -262,22 +193,6 @@ func TestRenderHysteria2Obfs(t *testing.T) {
 	}
 	if _, has := config["inbounds"].([]map[string]any)[0]["obfs"]; has {
 		t.Fatal("obfs must be omitted when obfs_password is empty")
-	}
-}
-
-func TestParseDest(t *testing.T) {
-	host, port, err := singbox.ParseDest("www.example.com")
-	if err != nil || host != "www.example.com" || port != 443 {
-		t.Fatalf("bare host: %v %v %v", host, port, err)
-	}
-	host, port, err = singbox.ParseDest("www.example.com:8443")
-	if err != nil || host != "www.example.com" || port != 8443 {
-		t.Fatalf("host:port: %v %v %v", host, port, err)
-	}
-	for _, bad := range []string{"", "bad host", "example.com:0", "example.com:65536", "example.com:abc", "exa mple.com:443"} {
-		if _, _, err := singbox.ParseDest(bad); err == nil {
-			t.Fatalf("dest %q must be rejected", bad)
-		}
 	}
 }
 
