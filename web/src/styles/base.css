@@ -34,7 +34,7 @@ a {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-card);
-  padding: var(--spacing-lg);
+  padding: var(--card-padding);
   transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
@@ -61,7 +61,7 @@ a {
 
 .page-title {
   font-size: var(--font-size-xl);
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: -0.02em;
   margin: 0 0 var(--spacing-lg);
 }
@@ -120,18 +120,12 @@ textarea:focus-visible {
   font-size: var(--font-size-md);
   cursor: pointer;
   white-space: nowrap;
-  font-weight: 600;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  font-weight: 500;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, opacity 0.15s ease;
 }
 
 .btn:hover:not(:disabled) {
-  background: var(--color-primary-hover);
-  border-color: var(--color-primary-hover);
-  box-shadow: var(--shadow-btn-primary);
-}
-
-.btn:active:not(:disabled) {
-  transform: translateY(1px);
+  opacity: 0.9;
 }
 
 .btn:disabled {
@@ -141,24 +135,25 @@ textarea:focus-visible {
 
 .btn.secondary {
   background: var(--color-surface);
-  color: var(--color-primary);
-  border-color: var(--color-border-strong);
+  color: var(--color-text);
+  border-color: var(--color-border);
 }
 
 .btn.secondary:hover:not(:disabled) {
   background: var(--color-primary-soft);
-  border-color: var(--color-primary-border);
-  box-shadow: none;
+  opacity: 1;
 }
 
 .btn.danger {
-  background: var(--color-danger);
-  border-color: var(--color-danger);
+  background: var(--color-danger-strong);
+  border-color: var(--color-danger-strong);
+  color: var(--color-on-danger);
 }
 
 .btn.danger:hover:not(:disabled) {
-  background: var(--color-danger-hover);
-  border-color: var(--color-danger-hover);
+  background: var(--color-danger-strong-hover);
+  border-color: var(--color-danger-strong-hover);
+  opacity: 1;
 }
 
 .btn.danger.secondary {
@@ -168,6 +163,7 @@ textarea:focus-visible {
 
 .btn.danger.secondary:hover:not(:disabled) {
   background: var(--color-danger-soft);
+  opacity: 1;
 }
 
 .btn.small {
@@ -187,6 +183,7 @@ textarea:focus-visible {
 
 .btn.link:hover:not(:disabled) {
   background: none;
+  opacity: 1;
   text-decoration: underline;
 }
 
@@ -214,7 +211,7 @@ textarea {
 input:focus,
 select:focus,
 textarea:focus {
-  border-color: var(--color-primary);
+  border-color: var(--color-border-strong);
   box-shadow: 0 0 0 3px var(--color-focus-ring);
 }
 
@@ -338,7 +335,7 @@ select:disabled {
   }
 
   .card {
-    padding: var(--spacing-md);
+    --card-padding: var(--spacing-md);
   }
 
   .form-row {

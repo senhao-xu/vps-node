@@ -93,8 +93,7 @@ function display(value: unknown): string {
 <style scoped>
 .table-wrap {
   overflow-x: auto;
-  margin: 0 calc(var(--spacing-md) * -1);
-  padding: 0 var(--spacing-md);
+  margin-inline: calc(-1 * var(--card-padding, var(--spacing-lg)));
   scrollbar-color: var(--color-border-strong) transparent;
 }
 
@@ -105,24 +104,34 @@ function display(value: unknown): string {
   min-width: 760px;
 }
 
-.data-table th {
+.data-table th,
+.data-table td {
+  padding: 14px var(--spacing-md);
   text-align: left;
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: middle;
+}
+
+.data-table th:first-child,
+.data-table td:first-child {
+  padding-left: var(--card-padding, var(--spacing-lg));
+}
+
+.data-table th:last-child,
+.data-table td:last-child {
+  padding-right: var(--card-padding, var(--spacing-lg));
+}
+
+.data-table th {
   font-weight: 600;
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
-  padding: 10px var(--spacing-sm);
-  border-bottom: 1px solid var(--color-border);
   white-space: nowrap;
   background: var(--color-surface-muted);
   position: sticky;
   top: 0;
+  z-index: 1;
   letter-spacing: 0.02em;
-}
-
-.data-table td {
-  padding: 12px var(--spacing-sm);
-  border-bottom: 1px solid var(--color-border);
-  vertical-align: middle;
 }
 
 .data-table tbody tr:hover {

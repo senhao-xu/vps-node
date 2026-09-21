@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useThemeStore, type ThemeMode } from '@/stores/theme'
 
@@ -8,6 +8,17 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const theme = useThemeStore()
+
+const appVersion = __APP_VERSION__
+
+const collapsed = ref(localStorage.getItem('sidebar-collapsed') === '1')
+
+function toggleCollapse() {
+  collapsed.value = !collapsed.value
+  localStorage.setItem('sidebar-collapsed', collapsed.value ? '1' : '0')
+}
+
+const collapseTitle = computed(() => (collapsed.value ? '展开侧边栏' : '收起侧边栏'))
 
 const navItems = [
   {
@@ -72,11 +83,14 @@ async function handleLogout() {
 
 <template>
   <div class="layout">
-    <aside class="sidebar">
+    <aside
+      class="sidebar"
+      :class="{ collapsed }"
+    >
       <div class="brand">
         <RouterLink to="/">
           <span class="brand-mark">V</span>
-          <span>VPS Node</span>
+          <span class="brand-text">VPS Node</span>
         </RouterLink>
       </div>
       <nav class="nav">
@@ -86,6 +100,7 @@ async function handleLogout() {
           :to="item.to"
           class="nav-item"
           :class="{ active: isActive(item) }"
+          :title="collapsed ? item.label : undefined"
         >
           <svg
             class="nav-icon"
@@ -99,9 +114,34 @@ async function handleLogout() {
           >
             <path :d="item.icon" />
           </svg>
-          {{ item.label }}
+          <span class="nav-label">{{ item.label }}</span>
         </RouterLink>
       </nav>
+      <div class="sidebar-footer">
+        <i class="version-dot" />
+        <span class="version-text mono">{{ appVersion }}</span>
+      </div>
+      <button
+        type="button"
+        class="collapse-btn"
+        :title="collapseTitle"
+        :aria-label="collapseTitle"
+        :aria-expanded="!collapsed"
+        @click="toggleCollapse"
+      >
+        <svg
+          class="collapse-icon"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="m15 18-6-6 6-6" />
+        </svg>
+      </button>
     </aside>
     <div class="main-area">
       <header class="topbar">
@@ -178,6 +218,7 @@ async function handleLogout() {
 }
 
 .sidebar {
+  position: relative;
   width: var(--shell-width);
   flex-shrink: 0;
   background: var(--color-shell);
@@ -185,6 +226,7 @@ async function handleLogout() {
   display: flex;
   flex-direction: column;
   z-index: 2;
+  transition: width 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
 }
 
 .brand {
@@ -204,6 +246,7 @@ async function handleLogout() {
 
 .brand-mark {
   display: inline-block;
+  flex: none;
   width: 30px;
   height: 30px;
   border-radius: var(--radius-sm);
@@ -222,11 +265,11 @@ async function handleLogout() {
 }
 
 .nav-item {
-  position: relative;
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  padding: 9px var(--spacing-md);
+  min-height: 48px;
+  padding: 0 var(--spacing-md);
   border-radius: var(--radius-sm);
   color: var(--color-shell-muted);
   font-weight: 500;
@@ -245,21 +288,98 @@ async function handleLogout() {
 }
 
 .nav-item.active {
-  color: var(--color-primary);
+  color: var(--color-text);
   background: var(--color-shell-active);
   font-weight: 600;
 }
 
-.nav-item.active::before {
-  content: '';
+.sidebar-footer {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-top: 1px solid var(--color-border);
+}
+
+.version-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--color-success);
+}
+
+.version-text {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.collapse-btn {
   position: absolute;
-  left: 2px;
+  right: -14px;
   top: 50%;
   transform: translateY(-50%);
-  width: 3px;
-  height: 18px;
-  border-radius: 999px;
-  background: var(--color-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  z-index: 3;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.collapse-btn:hover {
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+  background: var(--color-muted-soft);
+}
+
+.collapse-icon {
+  width: 15px;
+  height: 15px;
+  transition: transform 0.2s ease;
+}
+
+@media (min-width: 901px) {
+  .sidebar.collapsed {
+    width: var(--shell-width-collapsed);
+  }
+
+  .sidebar.collapsed .brand {
+    padding: 20px 0;
+    text-align: center;
+  }
+
+  .sidebar.collapsed .brand a {
+    justify-content: center;
+  }
+
+  .sidebar.collapsed .brand-text,
+  .sidebar.collapsed .nav-label,
+  .sidebar.collapsed .version-text {
+    display: none;
+  }
+
+  .sidebar.collapsed .nav-item {
+    justify-content: center;
+    padding: 0;
+  }
+
+  .sidebar.collapsed .sidebar-footer {
+    justify-content: center;
+    padding: var(--spacing-md) 0;
+  }
+
+  .sidebar.collapsed .collapse-icon {
+    transform: rotate(180deg);
+  }
 }
 
 .main-area {
@@ -283,9 +403,10 @@ async function handleLogout() {
 }
 
 .topbar-title {
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
-  font-weight: 600;
+  color: var(--color-text);
+  font-size: var(--font-size-xl);
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 .topbar-right {
@@ -358,16 +479,13 @@ async function handleLogout() {
 
   .nav-item {
     flex: none;
+    min-height: 40px;
     white-space: nowrap;
   }
 
-  .nav-item.active::before {
-    left: 50%;
-    top: auto;
-    bottom: 2px;
-    transform: translateX(-50%);
-    width: 18px;
-    height: 3px;
+  .collapse-btn,
+  .sidebar-footer {
+    display: none;
   }
 
   .topbar {
@@ -391,6 +509,10 @@ async function handleLogout() {
 
   .topbar {
     padding: 0 var(--spacing-md);
+  }
+
+  .topbar-title {
+    font-size: var(--font-size-lg);
   }
 
   .admin {

@@ -1,0 +1,4 @@
+{"file":".trellis/spec/frontend/directory-structure.md","reason":"Keep components/pages in established Vue project locations while restyling."}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Avoid type regressions when touching AppLayout.vue script (collapsed state, theme store usage)."}
+{"file":".trellis/tasks/09-21-xboard-style-revamp/research/xboard-admin-style.md","reason":"Authoritative reference for Xboard admin tokens, layout measurements, and component styles."}
+{"file":".trellis/tasks/09-21-xboard-style-revamp/design.md","reason":"Token mapping table and per-file adaptation plan are binding for implementation."}

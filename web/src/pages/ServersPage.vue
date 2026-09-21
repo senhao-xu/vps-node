@@ -7,11 +7,10 @@ import type { Paged, Server, ServerStatus } from '@/api/types'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import DataTable, { type Column } from '@/components/DataTable.vue'
 import ErrorBanner from '@/components/ErrorBanner.vue'
-import MetricBar from '@/components/MetricBar.vue'
 import TablePaginator from '@/components/TablePaginator.vue'
 import ServerFormDialog from '@/components/ServerFormDialog.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
-import { formatDateTime, formatDuration, formatRelative } from '@/utils/format'
+import { formatDateTime, formatRelative } from '@/utils/format'
 import { serverStatusInfo } from '@/utils/labels'
 
 const items = ref<Server[]>([])
@@ -33,7 +32,6 @@ const columns: Column[] = [
   { key: 'status', label: '状态', width: '80px' },
   { key: 'agent_version', label: 'Agent 版本', width: '100px' },
   { key: 'last_seen_at', label: '最后心跳', width: '130px' },
-  { key: 'metrics', label: 'CPU / 内存 / 磁盘', width: '240px' },
   { key: 'node_count', label: '节点数', align: 'right', width: '70px' },
   { key: 'online_users', label: '在线用户', align: 'right', width: '80px' },
   { key: 'actions', label: '操作', width: '150px' },
@@ -155,23 +153,6 @@ onMounted(() => {
             class="text-secondary"
           >从未</span>
         </template>
-        <template #cell-metrics="{ row }">
-          <div class="metrics-cell">
-            <MetricBar
-              label="CPU"
-              :percent="Number(row.cpu_percent)"
-            />
-            <MetricBar
-              label="内存"
-              :percent="Number(row.memory_percent)"
-            />
-            <MetricBar
-              label="磁盘"
-              :percent="Number(row.disk_percent)"
-            />
-            <span class="text-secondary uptime">{{ formatDuration(Number(row.uptime_seconds)) }}</span>
-          </div>
-        </template>
         <template #cell-actions="{ row }">
           <span class="actions">
             <RouterLink :to="`/servers/${row.id}`">详情</RouterLink>
@@ -234,13 +215,6 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.metrics-cell {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 190px;
-}
-
 .eyebrow {
   margin: 0 0 var(--spacing-xs);
   color: var(--color-primary);
@@ -261,10 +235,6 @@ onMounted(() => {
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
   font-weight: 400;
-}
-
-.uptime {
-  font-size: var(--font-size-sm);
 }
 
 .heartbeat {

@@ -92,19 +92,17 @@ async function submit() {
   align-items: center;
   justify-content: center;
   padding: var(--spacing-lg);
-  background:
-    radial-gradient(1200px 560px at 50% -10%, var(--color-primary-soft), transparent 62%),
-    var(--color-bg);
+  background: var(--color-surface-muted);
 }
 
 .login-form {
-  width: min(380px, 100%);
+  width: min(420px, 100%);
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
   padding: var(--spacing-xl);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-dialog);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
 }
 
 .login-brand {
