@@ -53,7 +53,9 @@ release-agent:
 	@echo "release tarballs in dist/ (set DOWNLOAD_BASE/VERSION when installing)"
 
 docker-panel:
-	docker build -f deploy/Dockerfile.panel -t $(PANEL_IMAGE) .
+	docker build -f deploy/Dockerfile.panel \
+		--build-arg APP_VERSION=$$(git rev-parse --short HEAD 2>/dev/null || echo dev) \
+		-t $(PANEL_IMAGE) .
 
 docker-agent:
 	docker build -f deploy/Dockerfile.agent --build-arg SINGBOX_VERSION=$(SINGBOX_VERSION) \

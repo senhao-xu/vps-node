@@ -3,6 +3,8 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.panel
+      args:
+        APP_VERSION: "${APP_VERSION:-dev}"
     image: vps-node-panel:latest
     container_name: vps-node-panel
     restart: unless-stopped
