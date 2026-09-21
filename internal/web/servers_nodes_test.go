@@ -2,13 +2,18 @@ package web_test
 
 import (
 	"context"
+	"crypto/ecdh"
+	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
 	"vps-node/internal/adminauth"
 	"vps-node/internal/repo"
+	"vps-node/internal/secrets"
 )
 
 func TestNodeCRUDOwnershipAndSecretExposure(t *testing.T) {
@@ -39,12 +44,14 @@ func TestNodeCRUDOwnershipAndSecretExposure(t *testing.T) {
 
 	resp, body = e.do(t, "POST", "/api/nodes", map[string]any{
 		"server_id": serverID, "name": "dup-port", "protocol": "vless", "port": 8388,
+		"settings": map[string]any{"private_key": testRealityPrivateKey(t), "server_names": []string{"example.com"}},
 	}, cookie)
 	if resp.StatusCode != http.StatusConflict || errorCode(t, body) != "conflict" {
 		t.Fatalf("port conflict must be 409, got %d %s", resp.StatusCode, body)
 	}
 	resp, body = e.do(t, "POST", "/api/nodes", map[string]any{
 		"server_id": serverID, "name": "hk-ss", "protocol": "vless", "port": 9000,
+		"settings": map[string]any{"private_key": testRealityPrivateKey(t), "server_names": []string{"example.com"}},
 	}, cookie)
 	if resp.StatusCode != http.StatusConflict {
 		t.Fatalf("name conflict must be 409, got %d %s", resp.StatusCode, body)
@@ -122,6 +129,73 @@ func TestNodeCRUDOwnershipAndSecretExposure(t *testing.T) {
 	}
 }
 
+func TestNodeListFilters(t *testing.T) {
+	e := newTestEnv(t)
+	cookie := e.login(t)
+	server1 := e.seedServer(t, "s1")
+	server2 := e.seedServer(t, "s2")
+	ctx := context.Background()
+	mustNode := func(serverID int64, name, protocol string, port int, status string) {
+		t.Helper()
+		if _, err := e.repo.CreateNode(ctx, repo.NewNode{ServerID: serverID, Name: name, Protocol: protocol, Port: port, Status: status}); err != nil {
+			t.Fatalf("seed node: %v", err)
+		}
+	}
+	mustNode(server1, "hk-ss", repo.ProtocolShadowsocks, 8388, repo.NodeStatusActive)
+	mustNode(server1, "hk-vless", repo.ProtocolVLESS, 443, repo.NodeStatusDisabled)
+	mustNode(server2, "jp-hy2", repo.ProtocolHysteria2, 8443, repo.NodeStatusActive)
+
+	resp, body := e.do(t, "GET", "/api/nodes", nil, cookie)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("list nodes: %d %s", resp.StatusCode, body)
+	}
+	list := jsonMap(t, body)
+	if list["total"].(float64) != 3 {
+		t.Fatalf("expected 3 nodes, got %s", body)
+	}
+	for _, item := range list["items"].([]any) {
+		node := item.(map[string]any)
+		serverRef, ok := node["server"].(map[string]any)
+		if !ok || serverRef["name"] == "" || serverRef["id"].(float64) != node["server_id"].(float64) {
+			t.Fatalf("every node DTO must carry its server ref, got %s", body)
+		}
+	}
+
+	cases := []struct {
+		query string
+		total float64
+	}{
+		{"?protocol=vless", 1},
+		{"?status=active", 2},
+		{"?q=hk", 2},
+		{"?q=HK", 2},
+		{"?q=%25", 0},
+		{fmt.Sprintf("?server_id=%d&protocol=shadowsocks&status=active&q=hk", server1), 1},
+		{"?page=2&page_size=2", 3},
+	}
+	for _, tc := range cases {
+		resp, body = e.do(t, "GET", "/api/nodes"+tc.query, nil, cookie)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("GET /api/nodes%s: %d %s", tc.query, resp.StatusCode, body)
+		}
+		if got := jsonMap(t, body)["total"].(float64); got != tc.total {
+			t.Fatalf("GET /api/nodes%s: total=%v want %v", tc.query, got, tc.total)
+		}
+	}
+
+	badCases := []string{
+		"?protocol=snell",
+		"?status=paused",
+		"?server_id=abc",
+	}
+	for _, query := range badCases {
+		resp, body = e.do(t, "GET", "/api/nodes"+query, nil, cookie)
+		if resp.StatusCode != http.StatusBadRequest || errorCode(t, body) != "invalid_request" {
+			t.Fatalf("GET /api/nodes%s must be 400 invalid_request, got %d %s", query, resp.StatusCode, body)
+		}
+	}
+}
+
 func TestNodeProtocolSettingsAllowlists(t *testing.T) {
 	e := newTestEnv(t)
 	cookie := e.login(t)
@@ -133,12 +207,12 @@ func TestNodeProtocolSettingsAllowlists(t *testing.T) {
 		settings map[string]any
 		wantCode int
 	}{
-		{"vless ok", "vless", map[string]any{"private_key": "key-material", "short_id": "0123abcd", "server_names": []string{"a.com", "b.com"}}, http.StatusCreated},
+		{"vless ok", "vless", map[string]any{"private_key": testRealityPrivateKey(t), "short_id": "0123abcd", "server_names": []string{"a.com", "b.com"}}, http.StatusCreated},
 		{"vless bad names", "vless", map[string]any{"server_names": "not-an-array"}, http.StatusUnprocessableEntity},
-		{"hysteria2 ok", "hysteria2", map[string]any{"password": "pw", "up_mbps": 100, "down_mbps": 200.0}, http.StatusCreated},
+		{"hysteria2 incomplete tls", "hysteria2", map[string]any{"password": "pw", "up_mbps": 100, "down_mbps": 200.0}, http.StatusUnprocessableEntity},
 		{"hysteria2 bad bw", "hysteria2", map[string]any{"up_mbps": 12.5}, http.StatusUnprocessableEntity},
 		{"hysteria2 negative", "hysteria2", map[string]any{"down_mbps": -1}, http.StatusUnprocessableEntity},
-		{"ss empty settings", "shadowsocks", nil, http.StatusCreated},
+		{"ss empty settings", "shadowsocks", nil, http.StatusUnprocessableEntity},
 	}
 	for i, tc := range cases {
 		resp, body := e.do(t, "POST", "/api/nodes", map[string]any{
@@ -148,6 +222,120 @@ func TestNodeProtocolSettingsAllowlists(t *testing.T) {
 		if resp.StatusCode != tc.wantCode {
 			t.Fatalf("%s: expected %d, got %d %s", tc.name, tc.wantCode, resp.StatusCode, body)
 		}
+	}
+}
+
+func TestHysteria2TLSValidationAndUpdate(t *testing.T) {
+	e := newTestEnv(t)
+	cookie := e.login(t)
+	serverID := e.seedServer(t, "hy2")
+	now := time.Now()
+	cert, key := testTLSMaterial(t, "hy2.example.com", now.Add(-time.Hour), now.Add(time.Hour))
+	_, otherKey := testTLSMaterial(t, "hy2.example.com", now.Add(-time.Hour), now.Add(time.Hour))
+	expiredCert, expiredKey := testTLSMaterial(t, "hy2.example.com", now.Add(-2*time.Hour), now.Add(-time.Hour))
+	cases := []map[string]any{
+		{"server_name": "hy2.example.com", "certificate": "bad", "private_key": "bad"},
+		{"server_name": "hy2.example.com", "certificate": cert, "private_key": otherKey},
+		{"server_name": "wrong.example.com", "certificate": cert, "private_key": key},
+		{"server_name": "hy2.example.com", "certificate": expiredCert, "private_key": expiredKey},
+	}
+	for i, settings := range cases {
+		resp, body := e.do(t, "POST", "/api/nodes", map[string]any{"server_id": serverID, "name": fmt.Sprintf("bad-%d", i), "protocol": "hysteria2", "port": 9000 + i, "settings": settings}, cookie)
+		if resp.StatusCode != http.StatusUnprocessableEntity {
+			t.Fatalf("case %d: %d %s", i, resp.StatusCode, body)
+		}
+	}
+	resp, body := e.do(t, "POST", "/api/nodes", map[string]any{"server_id": serverID, "name": "good", "protocol": "hysteria2", "port": 9100, "settings": map[string]any{"server_name": "hy2.example.com", "certificate": cert, "private_key": key}}, cookie)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("create: %d %s", resp.StatusCode, body)
+	}
+	id := int64(jsonMap(t, body)["id"].(float64))
+	assertNoSecrets(t, body, cert, key)
+	resp, body = e.do(t, "PUT", fmt.Sprintf("/api/nodes/%d", id), map[string]any{"settings": map[string]any{}}, cookie)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("retain: %d %s", resp.StatusCode, body)
+	}
+	resp, body = e.do(t, "PUT", fmt.Sprintf("/api/nodes/%d", id), map[string]any{"settings": map[string]any{"certificate": cert}}, cookie)
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("unpaired certificate replacement: %d %s", resp.StatusCode, body)
+	}
+	newCert, newKey := testTLSMaterial(t, "hy2.example.com", now.Add(-time.Hour), now.Add(2*time.Hour))
+	resp, body = e.do(t, "PUT", fmt.Sprintf("/api/nodes/%d", id), map[string]any{"settings": map[string]any{"certificate": newCert, "private_key": newKey}}, cookie)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("replace: %d %s", resp.StatusCode, body)
+	}
+}
+
+func TestRealityKeypairGeneration(t *testing.T) {
+	e := newTestEnv(t)
+	serverID := e.seedServer(t, "s1")
+	revision := e.revision(t, serverID)
+
+	resp, body := e.do(t, "POST", "/api/nodes/reality-keypair", nil, nil)
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("generation without admin must be 401, got %d %s", resp.StatusCode, body)
+	}
+
+	resp, body = e.do(t, "POST", "/api/nodes/reality-keypair", nil, e.login(t))
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("generate reality keypair: %d %s", resp.StatusCode, body)
+	}
+	generated := jsonMap(t, body)
+	privateBytes, err := base64.RawURLEncoding.DecodeString(generated["private_key"].(string))
+	if err != nil {
+		t.Fatalf("decode private key: %v", err)
+	}
+	privateKey, err := ecdh.X25519().NewPrivateKey(privateBytes)
+	if err != nil {
+		t.Fatalf("parse private key: %v", err)
+	}
+	publicKey := base64.RawURLEncoding.EncodeToString(privateKey.PublicKey().Bytes())
+	if generated["public_key"] != publicKey {
+		t.Fatalf("public key does not match private key: %s", body)
+	}
+	shortID, err := hex.DecodeString(generated["short_id"].(string))
+	if err != nil || len(shortID) != 8 {
+		t.Fatalf("short_id must be eight bytes of hex: %s", body)
+	}
+	if got := e.revision(t, serverID); got != revision {
+		t.Fatalf("key generation must not bump revision: got %d want %d", got, revision)
+	}
+}
+
+func TestNodeSettingsUpdatePreservesRealitySecret(t *testing.T) {
+	e := newTestEnv(t)
+	cookie := e.login(t)
+	serverID := e.seedServer(t, "s1")
+	privateKey := testRealityPrivateKey(t)
+	resp, body := e.do(t, "POST", "/api/nodes", map[string]any{
+		"server_id": serverID, "name": "vless", "protocol": "vless", "port": 443,
+		"settings": map[string]any{"private_key": privateKey, "short_id": "0123abcd", "server_names": []string{"a.com"}},
+	}, cookie)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("create vless: %d %s", resp.StatusCode, body)
+	}
+	nodeID := int64(jsonMap(t, body)["id"].(float64))
+
+	resp, body = e.do(t, "PUT", fmt.Sprintf("/api/nodes/%d", nodeID), map[string]any{
+		"settings": map[string]any{"short_id": "abcdef12"},
+	}, cookie)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("partial update: %d %s", resp.StatusCode, body)
+	}
+
+	node, err := e.repo.GetNode(context.Background(), nodeID)
+	if err != nil {
+		t.Fatalf("get node: %v", err)
+	}
+	plain, err := secrets.Decrypt(e.appKey, node.SecretEnc)
+	if err != nil {
+		t.Fatalf("decrypt node secret: %v", err)
+	}
+	if !strings.Contains(string(plain), privateKey) {
+		t.Fatal("partial update must preserve the existing private key")
+	}
+	if !strings.Contains(node.Settings, `"server_names":["a.com"]`) || !strings.Contains(node.Settings, `"short_id":"abcdef12"`) {
+		t.Fatalf("partial update must merge public settings, got %s", node.Settings)
 	}
 }
 
@@ -436,6 +624,7 @@ func TestRevisionBumpsOnMutations(t *testing.T) {
 
 	resp, body = e.do(t, "POST", "/api/nodes", map[string]any{
 		"server_id": server1, "name": "n3", "protocol": "vless", "port": 9443,
+		"settings": map[string]any{"private_key": testRealityPrivateKey(t), "server_names": []string{"example.com"}},
 	}, cookie)
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("node create: %d %s", resp.StatusCode, body)

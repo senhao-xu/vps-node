@@ -292,13 +292,14 @@ func TestAgentConfigCurrentAndPayload(t *testing.T) {
 	e := newTestEnv(t)
 	cookie := e.login(t)
 	ctx := context.Background()
+	realityPrivateKey := testRealityPrivateKey(t)
 
 	serverA := e.seedServer(t, "a")
 	serverB := e.seedServer(t, "b")
 
 	_, body := e.do(t, "POST", "/api/nodes", map[string]any{
 		"server_id": serverA, "name": "a-vless", "protocol": "vless", "port": 443,
-		"settings": map[string]any{"private_key": "privkey-abc", "short_id": "abcd1234", "server_names": []string{"example.com"}},
+		"settings": map[string]any{"private_key": realityPrivateKey, "short_id": "abcd1234", "server_names": []string{"example.com"}},
 	}, cookie)
 	nodeA1 := int64(jsonMap(t, body)["id"].(float64))
 
@@ -309,8 +310,8 @@ func TestAgentConfigCurrentAndPayload(t *testing.T) {
 	nodeA2 := int64(jsonMap(t, body)["id"].(float64))
 
 	_, body = e.do(t, "POST", "/api/nodes", map[string]any{
-		"server_id": serverB, "name": "b-hy2", "protocol": "hysteria2", "port": 8443,
-		"settings": map[string]any{"password": "hy2-pw"},
+		"server_id": serverB, "name": "b-ss", "protocol": "shadowsocks", "port": 8443,
+		"settings": map[string]any{"method": "2022-blake3-aes-128-gcm", "password": "ss-pw"},
 	}, cookie)
 	nodeB := int64(jsonMap(t, body)["id"].(float64))
 
@@ -378,7 +379,7 @@ func TestAgentConfigCurrentAndPayload(t *testing.T) {
 		t.Fatalf("missing vless inbound: %s", body)
 	}
 	reality := vlessInbound["tls"].(map[string]any)["reality"].(map[string]any)
-	if reality["private_key"] != "privkey-abc" {
+	if reality["private_key"] != realityPrivateKey {
 		t.Fatalf("secret not decrypted into payload: %v", reality["private_key"])
 	}
 	if got := len(vlessInbound["users"].([]any)); got != 1 {

@@ -75,13 +75,14 @@ type nodeRefDTO struct {
 }
 
 type nodeDTO struct {
-	ID        int64  `json:"id"`
-	ServerID  int64  `json:"server_id"`
-	Name      string `json:"name"`
-	Protocol  string `json:"protocol"`
-	Port      int    `json:"port"`
-	Status    string `json:"status"`
-	CreatedAt string `json:"created_at"`
+	ID        int64      `json:"id"`
+	ServerID  int64      `json:"server_id"`
+	Name      string     `json:"name"`
+	Protocol  string     `json:"protocol"`
+	Port      int        `json:"port"`
+	Status    string     `json:"status"`
+	Server    nodeRefDTO `json:"server"`
+	CreatedAt string     `json:"created_at"`
 }
 
 type nodeDetailDTO struct {
@@ -99,6 +100,7 @@ func toNodeDTO(n repo.Node) nodeDTO {
 		Protocol:  n.Protocol,
 		Port:      n.Port,
 		Status:    n.Status,
+		Server:    nodeRefDTO{ID: n.ServerID, Name: n.ServerName},
 		CreatedAt: rfc3339(n.CreatedAt),
 	}
 }
@@ -225,9 +227,12 @@ type dashboardDTO struct {
 }
 
 type settingsDTO struct {
-	RetentionRawLogDays       int  `json:"retention_raw_log_days"`
-	RetentionAggregateDays    int  `json:"retention_aggregate_days"`
-	CollectionConnectionLogs  bool `json:"collection_connection_logs"`
-	SessionFreshnessSeconds   int  `json:"session_freshness_seconds"`
-	ServerOfflineAfterSeconds int  `json:"server_offline_after_seconds"`
+	RetentionRawLogDays       int    `json:"retention_raw_log_days"`
+	RetentionAggregateDays    int    `json:"retention_aggregate_days"`
+	CollectionConnectionLogs  bool   `json:"collection_connection_logs"`
+	SessionFreshnessSeconds   int    `json:"session_freshness_seconds"`
+	ServerOfflineAfterSeconds int    `json:"server_offline_after_seconds"`
+	SubscribeURLs             string `json:"subscribe_urls"`
+	SubscribePath             string `json:"subscribe_path"`
+	ClashMetaTemplate         string `json:"clash_meta_template"`
 }

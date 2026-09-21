@@ -3,7 +3,9 @@ package e2e
 import (
 	"bytes"
 	"context"
+	"crypto/ecdh"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -122,6 +124,10 @@ func (e *panelEnv) login() *http.Cookie {
 
 func (e *panelEnv) seedScenario(cookie *http.Cookie) (serverID, nodeID, userID int64) {
 	e.t.Helper()
+	privateKey, err := ecdh.X25519().GenerateKey(rand.Reader)
+	if err != nil {
+		e.t.Fatalf("generate test reality key: %v", err)
+	}
 	_, out := e.do("POST", "/api/servers", map[string]string{
 		"name": "HK-01", "address": "hk01.example.com",
 	}, cookie)
@@ -133,7 +139,7 @@ func (e *panelEnv) seedScenario(cookie *http.Cookie) (serverID, nodeID, userID i
 		"protocol":  "vless",
 		"port":      443,
 		"settings": map[string]any{
-			"private_key":  "e2e-test-private-key",
+			"private_key":  base64.RawURLEncoding.EncodeToString(privateKey.Bytes()),
 			"server_names": []string{"example.com"},
 			"short_id":     "0123abcd",
 		},

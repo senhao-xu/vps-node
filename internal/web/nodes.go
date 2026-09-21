@@ -2,9 +2,15 @@ package web
 
 import (
 	"bytes"
-	"context"
+	"crypto/ecdh"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"time"
@@ -32,14 +38,31 @@ func (h *Handler) handleNodeList(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	var serverID int64
+	var filter repo.NodeFilter
 	if raw := r.URL.Query().Get("server_id"); raw != "" {
-		if _, err := fmt.Sscanf(raw, "%d", &serverID); err != nil || serverID < 1 {
+		if _, err := fmt.Sscanf(raw, "%d", &filter.ServerID); err != nil || filter.ServerID < 1 {
 			writeErr(w, errInvalid("invalid server_id"))
 			return
 		}
 	}
-	nodes, total, err := h.repo.ListNodesPage(r.Context(), serverID, page.Page, page.PageSize)
+	if raw := r.URL.Query().Get("protocol"); raw != "" {
+		if !validProtocols[raw] {
+			writeErr(w, errInvalid("invalid protocol, want shadowsocks, vless or hysteria2"))
+			return
+		}
+		filter.Protocol = raw
+	}
+	if raw := r.URL.Query().Get("status"); raw != "" {
+		if raw != repo.NodeStatusActive && raw != repo.NodeStatusDisabled {
+			writeErr(w, errInvalid("invalid status, want active or disabled"))
+			return
+		}
+		filter.Status = raw
+	}
+	filter.Query = r.URL.Query().Get("q")
+	filter.Page = page.Page
+	filter.PageSize = page.PageSize
+	nodes, total, err := h.repo.ListNodesPage(r.Context(), filter)
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -65,7 +88,8 @@ func (h *Handler) handleNodeCreate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, errValidation("server_id is required"))
 		return
 	}
-	if _, err := h.repo.GetServer(r.Context(), req.ServerID); err != nil {
+	server, err := h.repo.GetServer(r.Context(), req.ServerID)
+	if err != nil {
 		if err == repo.ErrNotFound {
 			writeErr(w, errValidation("unknown server_id"))
 			return
@@ -77,7 +101,7 @@ func (h *Handler) handleNodeCreate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	settingsJSON, secretEnc, err := h.buildNodeSettings(r.Context(), req.Protocol, req.Settings, "", nil)
+	settingsJSON, secretEnc, err := h.buildNodeSettings(req.Protocol, req.Settings, "", nil)
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -104,7 +128,26 @@ func (h *Handler) handleNodeCreate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
+	n.ServerName = server.Name
 	httpx.WriteJSON(w, http.StatusCreated, toNodeDTO(n))
+}
+
+func (h *Handler) handleRealityKeypairGenerate(w http.ResponseWriter, _ *http.Request) {
+	privateKey, err := ecdh.X25519().GenerateKey(rand.Reader)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	shortID := make([]byte, 8)
+	if _, err := io.ReadFull(rand.Reader, shortID); err != nil {
+		writeErr(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]string{
+		"private_key": base64.RawURLEncoding.EncodeToString(privateKey.Bytes()),
+		"public_key":  base64.RawURLEncoding.EncodeToString(privateKey.PublicKey().Bytes()),
+		"short_id":    hex.EncodeToString(shortID),
+	})
 }
 
 func validateNodeSpec(name, protocol string, port int) error {
@@ -197,7 +240,7 @@ func (h *Handler) handleNodeUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	settingsJSON, secretEnc, err := h.buildNodeSettings(r.Context(), current.Protocol, req.Settings, current.Settings, current.SecretEnc)
+	settingsJSON, secretEnc, err := h.buildNodeSettings(current.Protocol, req.Settings, current.Settings, current.SecretEnc)
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -216,6 +259,12 @@ func (h *Handler) handleNodeUpdate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
+	server, err := h.repo.GetServer(r.Context(), current.ServerID)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	n.ServerName = server.Name
 	httpx.WriteJSON(w, http.StatusOK, toNodeDTO(n))
 }
 
@@ -237,18 +286,38 @@ func (h *Handler) handleNodeDelete(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{})
 }
 
-func (h *Handler) buildNodeSettings(ctx context.Context, protocol string, raw json.RawMessage, currentSettings string, currentSecret []byte) (string, []byte, error) {
-	if len(raw) == 0 || string(raw) == "null" {
-		return currentSettings, currentSecret, nil
+func (h *Handler) buildNodeSettings(protocol string, raw json.RawMessage, currentSettings string, currentSecret []byte) (string, []byte, error) {
+	plain := map[string]any{}
+	if currentSettings != "" {
+		if err := json.Unmarshal([]byte(currentSettings), &plain); err != nil {
+			return "", nil, fmt.Errorf("decode current node settings: %w", err)
+		}
 	}
-	var parsed map[string]any
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	if err := dec.Decode(&parsed); err != nil {
-		return "", nil, errValidation("settings must be a JSON object")
+	secretFields := map[string]any{}
+	if len(currentSecret) > 0 {
+		secretJSON, err := secrets.Decrypt(h.appKey, currentSecret)
+		if err != nil {
+			return "", nil, fmt.Errorf("decrypt current node settings: %w", err)
+		}
+		if err := json.Unmarshal(secretJSON, &secretFields); err != nil {
+			return "", nil, fmt.Errorf("decode current node secrets: %w", err)
+		}
 	}
 
-	plain := map[string]any{}
-	secretFields := map[string]any{}
+	parsed := map[string]any{}
+	if len(raw) > 0 && string(raw) != "null" {
+		dec := json.NewDecoder(bytes.NewReader(raw))
+		if err := dec.Decode(&parsed); err != nil {
+			return "", nil, errValidation("settings must be a JSON object")
+		}
+	}
+	if protocol == repo.ProtocolHysteria2 {
+		_, certSet := parsed["certificate"]
+		_, keySet := parsed["private_key"]
+		if certSet != keySet {
+			return "", nil, errValidation("hysteria2 certificate and private_key must be supplied together")
+		}
+	}
 	for key, value := range parsed {
 		switch protocol {
 		case repo.ProtocolShadowsocks:
@@ -305,12 +374,27 @@ func (h *Handler) buildNodeSettings(ctx context.Context, protocol string, raw js
 					return "", nil, err
 				}
 				plain[key] = n
+			case "server_name":
+				s, err := secretString(value, "settings.server_name")
+				if err != nil {
+					return "", nil, err
+				}
+				plain[key] = s
+			case "certificate", "private_key":
+				s, ok := value.(string)
+				if !ok || s == "" || len(s) > 256*1024 {
+					return "", nil, errValidation("settings." + key + " must be a non-empty PEM string")
+				}
+				secretFields[key] = s
 			default:
 				return "", nil, errValidation(fmt.Sprintf("unknown settings field %q for hysteria2", key))
 			}
 		default:
 			return "", nil, errInvalid("invalid protocol")
 		}
+	}
+	if err := validateProtocolSettings(protocol, plain, secretFields); err != nil {
+		return "", nil, err
 	}
 
 	settingsBytes, err := json.Marshal(plain)
@@ -329,6 +413,71 @@ func (h *Handler) buildNodeSettings(ctx context.Context, protocol string, raw js
 		return "", nil, err
 	}
 	return string(settingsBytes), secretEnc, nil
+}
+
+func validateProtocolSettings(protocol string, plain, secretFields map[string]any) error {
+	switch protocol {
+	case repo.ProtocolShadowsocks:
+		method, _ := plain["method"].(string)
+		if !shadowsocksMethods[method] {
+			return errValidation("settings.method is required and must be a supported shadowsocks cipher")
+		}
+	case repo.ProtocolVLESS:
+		privateKey, _ := secretFields["private_key"].(string)
+		decoded, err := base64.RawURLEncoding.DecodeString(privateKey)
+		if err != nil || len(decoded) != 32 {
+			return errValidation("settings.private_key must be a valid X25519 private key")
+		}
+		if _, err := ecdh.X25519().NewPrivateKey(decoded); err != nil {
+			return errValidation("settings.private_key must be a valid X25519 private key")
+		}
+		names, ok := plain["server_names"].([]string)
+		if !ok {
+			rawNames, rawOK := plain["server_names"].([]any)
+			if rawOK {
+				names = make([]string, 0, len(rawNames))
+				for _, item := range rawNames {
+					name, nameOK := item.(string)
+					if !nameOK {
+						return errValidation("settings.server_names must contain non-empty strings")
+					}
+					names = append(names, name)
+				}
+			}
+		}
+		if len(names) == 0 {
+			return errValidation("settings.server_names must contain at least one server name")
+		}
+		for _, name := range names {
+			if name == "" || len(name) > 253 {
+				return errValidation("settings.server_names must contain non-empty strings of at most 253 characters")
+			}
+		}
+		if shortID, _ := plain["short_id"].(string); shortID != "" {
+			decoded, err := hex.DecodeString(shortID)
+			if err != nil || len(decoded) > 8 {
+				return errValidation("settings.short_id must be an even-length hexadecimal string of at most 16 characters")
+			}
+		}
+	case repo.ProtocolHysteria2:
+		name, _ := plain["server_name"].(string)
+		certificate, certOK := secretFields["certificate"].(string)
+		privateKey, keyOK := secretFields["private_key"].(string)
+		if name == "" || !certOK || !keyOK {
+			return errValidation("hysteria2 requires server_name, certificate and private_key")
+		}
+		pair, err := tls.X509KeyPair([]byte(certificate), []byte(privateKey))
+		if err != nil || len(pair.Certificate) == 0 {
+			return errValidation("hysteria2 certificate and private_key must match")
+		}
+		cert, err := x509.ParseCertificate(pair.Certificate[0])
+		if err != nil || cert.NotBefore.After(time.Now()) || cert.NotAfter.Before(time.Now()) || cert.VerifyHostname(name) != nil {
+			return errValidation("hysteria2 certificate does not cover server_name")
+		}
+	default:
+		return errInvalid("invalid protocol")
+	}
+	return nil
 }
 
 func secretString(value any, field string) (string, error) {

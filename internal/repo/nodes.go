@@ -8,16 +8,26 @@ import (
 )
 
 type Node struct {
-	ID        int64
-	ServerID  int64
-	Name      string
-	Protocol  string
-	Port      int
-	Settings  string
-	SecretEnc []byte
-	Status    string
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID         int64
+	ServerID   int64
+	Name       string
+	Protocol   string
+	Port       int
+	Settings   string
+	SecretEnc  []byte
+	Status     string
+	ServerName string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}
+
+type NodeFilter struct {
+	ServerID int64
+	Protocol string
+	Status   string
+	Query    string
+	Page     int
+	PageSize int
 }
 
 type NewNode struct {
@@ -40,6 +50,9 @@ const (
 )
 
 const nodeSelect = `SELECT id, server_id, name, protocol, port, settings, secret_enc, status, created_at, updated_at FROM nodes`
+
+const nodeSelectWithServer = `SELECT n.id, n.server_id, n.name, n.protocol, n.port, n.settings, n.secret_enc, n.status, n.created_at, n.updated_at, s.name
+	FROM nodes n JOIN servers s ON s.id = n.server_id`
 
 func insertNodeExec(ctx context.Context, q execer, n NewNode) (int64, error) {
 	if n.Status == "" {
@@ -76,37 +89,58 @@ func (r *Repo) ListNodes(ctx context.Context) ([]Node, error) {
 	return collectNodes(rows)
 }
 
-func (r *Repo) ListNodesPage(ctx context.Context, serverID int64, page, size int) ([]Node, int64, error) {
-	where := "1 = 1"
+func (r *Repo) ListNodesPage(ctx context.Context, f NodeFilter) ([]Node, int64, error) {
+	where := []string{"1 = 1"}
 	args := []any{}
-	if serverID > 0 {
-		where = "server_id = ?"
-		args = append(args, serverID)
+	if f.ServerID > 0 {
+		where = append(where, "n.server_id = ?")
+		args = append(args, f.ServerID)
 	}
+	if f.Protocol != "" {
+		where = append(where, "n.protocol = ?")
+		args = append(args, f.Protocol)
+	}
+	if f.Status != "" {
+		where = append(where, "n.status = ?")
+		args = append(args, f.Status)
+	}
+	if f.Query != "" {
+		where = append(where, `n.name LIKE '%' || ? || '%' ESCAPE '\'`)
+		args = append(args, escapeLike(f.Query))
+	}
+	whereSQL := strings.Join(where, " AND ")
+
 	var total int64
-	if err := r.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM nodes WHERE `+where, args...).Scan(&total); err != nil {
+	if err := r.DB.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM nodes n JOIN servers s ON s.id = n.server_id WHERE `+whereSQL, args...).Scan(&total); err != nil {
 		return nil, 0, mapErr(err)
 	}
-	page, size = normalizePage(page, size)
+	page, size := normalizePage(f.Page, f.PageSize)
 	rows, err := r.DB.QueryContext(ctx,
-		nodeSelect+` WHERE `+where+` ORDER BY server_id, port LIMIT ? OFFSET ?`,
+		nodeSelectWithServer+` WHERE `+whereSQL+` ORDER BY n.server_id, n.port LIMIT ? OFFSET ?`,
 		append(args, size, (page-1)*size)...)
 	if err != nil {
 		return nil, 0, mapErr(err)
 	}
-	nodes, err := collectNodes(rows)
+	nodes, err := collectNodesWithServerName(rows)
 	if err != nil {
 		return nil, 0, err
 	}
 	return nodes, total, nil
 }
 
+var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
+func escapeLike(s string) string {
+	return likeEscaper.Replace(s)
+}
+
 func (r *Repo) ListNodesByServer(ctx context.Context, serverID int64) ([]Node, error) {
-	rows, err := r.DB.QueryContext(ctx, nodeSelect+` WHERE server_id = ? ORDER BY port`, serverID)
+	rows, err := r.DB.QueryContext(ctx, nodeSelectWithServer+` WHERE n.server_id = ? ORDER BY n.port`, serverID)
 	if err != nil {
 		return nil, mapErr(err)
 	}
-	return collectNodes(rows)
+	return collectNodesWithServerName(rows)
 }
 
 func (r *Repo) ListNodesByIDs(ctx context.Context, ids []int64) ([]Node, error) {
@@ -118,11 +152,11 @@ func (r *Repo) ListNodesByIDs(ctx context.Context, ids []int64) ([]Node, error) 
 	for i, id := range ids {
 		args[i] = id
 	}
-	rows, err := r.DB.QueryContext(ctx, nodeSelect+` WHERE id IN (`+placeholders+`) ORDER BY id`, args...)
+	rows, err := r.DB.QueryContext(ctx, nodeSelectWithServer+` WHERE n.id IN (`+placeholders+`) ORDER BY n.id`, args...)
 	if err != nil {
 		return nil, mapErr(err)
 	}
-	return collectNodes(rows)
+	return collectNodesWithServerName(rows)
 }
 
 func (r *Repo) UpdateNodeSpec(ctx context.Context, id int64, name string, port int, settings string, secretEnc []byte) error {
@@ -155,11 +189,38 @@ func collectNodes(rows *sql.Rows) ([]Node, error) {
 	return nodes, rows.Err()
 }
 
+func collectNodesWithServerName(rows *sql.Rows) ([]Node, error) {
+	defer rows.Close()
+	nodes := []Node{}
+	for rows.Next() {
+		n, err := scanNodeWithServerName(rows.Scan)
+		if err != nil {
+			return nil, err
+		}
+		nodes = append(nodes, n)
+	}
+	return nodes, rows.Err()
+}
+
 func scanNode(scan func(dest ...any) error) (Node, error) {
 	var n Node
 	var secretEnc []byte
 	var createdAt, updatedAt int64
 	err := scan(&n.ID, &n.ServerID, &n.Name, &n.Protocol, &n.Port, &n.Settings, &secretEnc, &n.Status, &createdAt, &updatedAt)
+	if err != nil {
+		return Node{}, mapErr(err)
+	}
+	n.SecretEnc = secretEnc
+	n.CreatedAt = toTime(createdAt)
+	n.UpdatedAt = toTime(updatedAt)
+	return n, nil
+}
+
+func scanNodeWithServerName(scan func(dest ...any) error) (Node, error) {
+	var n Node
+	var secretEnc []byte
+	var createdAt, updatedAt int64
+	err := scan(&n.ID, &n.ServerID, &n.Name, &n.Protocol, &n.Port, &n.Settings, &secretEnc, &n.Status, &createdAt, &updatedAt, &n.ServerName)
 	if err != nil {
 		return Node{}, mapErr(err)
 	}

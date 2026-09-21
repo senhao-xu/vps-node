@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/error-handling.md","reason":"Check authentication, validation responses, and that generated or stored secrets never leak."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Run the complete backend and embedded UI quality gate and inspect allowlist compliance."}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Check API/type synchronization and strict TypeScript rules."}
+{"file":".trellis/spec/frontend/directory-structure.md","reason":"Check the frontend implementation follows existing component, API, and responsive styling conventions."}
+{"file":"docs/api-contract.md","reason":"Verify implementation and tests match the documented endpoint and node behavior."}

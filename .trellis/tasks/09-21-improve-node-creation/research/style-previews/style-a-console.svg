@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="820" viewBox="0 0 1200 820">
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="18" stdDeviation="24" flood-color="#1e293b" flood-opacity=".16"/></filter>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#eef4ff"/><stop offset="1" stop-color="#f8fafc"/></linearGradient>
+    <style>text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif}.label{font-size:13px;fill:#64748b}.input{fill:#fff;stroke:#dbe2ea}.value{font-size:14px;fill:#1e293b}.muted{font-size:12px;fill:#8793a5}.title{font-size:22px;font-weight:700;fill:#172033}.section{font-size:14px;font-weight:700;fill:#263248}</style>
+  </defs>
+  <rect width="1200" height="820" fill="url(#bg)"/>
+  <circle cx="1070" cy="90" r="170" fill="#dbeafe" opacity=".58"/><circle cx="95" cy="730" r="140" fill="#e0f2fe" opacity=".6"/>
+  <text x="54" y="58" font-size="15" font-weight="700" fill="#2563eb">方案 A</text><text x="54" y="84" font-size="28" font-weight="750" fill="#172033">轻量控制台</text><text x="54" y="108" font-size="14" fill="#64748b">延续现有蓝白系统，提升留白、边界与操作层级</text>
+  <g filter="url(#shadow)">
+    <rect x="190" y="52" width="760" height="716" rx="18" fill="#fff"/>
+    <rect x="190" y="52" width="760" height="76" rx="18" fill="#fff"/><path d="M190 110h760v18H190z" fill="#fff"/><line x1="190" y1="128" x2="950" y2="128" stroke="#e7ebf0"/>
+    <text x="224" y="88" class="title">添加节点</text><text x="224" y="110" class="muted">配置入站协议和连接参数</text>
+    <circle cx="913" cy="89" r="16" fill="#f1f5f9"/><path d="m907 83 12 12m0-12-12 12" stroke="#64748b" stroke-width="1.5"/>
+    <rect x="218" y="150" width="704" height="172" rx="12" fill="#f8fafc" stroke="#e6ebf2"/>
+    <circle cx="244" cy="179" r="12" fill="#2563eb"/><text x="240" y="184" font-size="12" font-weight="700" fill="#fff">1</text><text x="265" y="184" class="section">基础信息</text><text x="344" y="184" class="muted">名称、端口与协议</text>
+    <text x="242" y="220" class="label">节点名称</text><rect x="242" y="230" width="410" height="42" rx="7" class="input"/><text x="256" y="256" class="value">HK-Reality-01</text>
+    <text x="672" y="220" class="label">端口</text><rect x="672" y="230" width="220" height="42" rx="7" class="input"/><text x="686" y="256" class="value">443</text>
+    <text x="242" y="295" class="label">协议</text><rect x="296" y="279" width="170" height="31" rx="16" fill="#e8f0ff"/><circle cx="314" cy="294" r="6" fill="#2563eb"/><text x="328" y="299" font-size="13" font-weight="650" fill="#1d4ed8">VLESS Reality</text>
+    <circle cx="244" cy="359" r="12" fill="#2563eb"/><text x="240" y="364" font-size="12" font-weight="700" fill="#fff">2</text><text x="265" y="364" class="section">协议配置</text><rect x="801" y="345" width="91" height="28" rx="14" fill="#eff6ff"/><text x="819" y="364" font-size="12" font-weight="650" fill="#2563eb">VLESS</text>
+    <rect x="218" y="385" width="704" height="286" rx="12" fill="#fff" stroke="#dfe6ef"/>
+    <rect x="238" y="405" width="664" height="58" rx="9" fill="#f1f6ff"/><circle cx="265" cy="434" r="16" fill="#dbeafe"/><path d="M259 434h12m-6-6v12" stroke="#2563eb" stroke-width="2"/><text x="291" y="429" font-size="14" font-weight="700" fill="#1e293b">Reality 密钥组</text><text x="291" y="447" class="muted">X25519 密钥对与 Short ID</text><rect x="774" y="418" width="108" height="34" rx="7" fill="#2563eb"/><text x="797" y="440" font-size="13" font-weight="650" fill="#fff">一键生成</text>
+    <text x="242" y="490" class="label">Reality 私钥</text><rect x="242" y="500" width="640" height="42" rx="7" class="input"/><text x="256" y="526" class="value">••••••••••••••••••••••••••••••••••••</text>
+    <text x="242" y="565" class="label">Short ID</text><rect x="242" y="575" width="250" height="42" rx="7" class="input"/><text x="256" y="601" class="value">0123456789abcdef</text>
+    <text x="512" y="565" class="label">Server Names</text><rect x="512" y="575" width="370" height="42" rx="7" class="input"/><text x="526" y="601" class="value">www.example.com</text>
+    <text x="242" y="642" class="muted">私钥加密保存且不会回显，Server Name 可用逗号分隔</text>
+    <line x1="190" y1="694" x2="950" y2="694" stroke="#e7ebf0"/><rect x="746" y="714" width="80" height="36" rx="7" fill="#fff" stroke="#cfd7e2"/><text x="772" y="737" class="value">取消</text><rect x="838" y="714" width="84" height="36" rx="7" fill="#2563eb"/><text x="866" y="737" font-size="14" font-weight="650" fill="#fff">保存</text>
+  </g>
+  <g transform="translate(980 210)"><rect width="170" height="430" rx="24" fill="#172033" opacity=".12"/><rect x="6" y="6" width="158" height="418" rx="20" fill="#fff"/><text x="20" y="36" font-size="13" font-weight="700" fill="#172033">添加节点</text><line x1="6" y1="52" x2="164" y2="52" stroke="#e7ebf0"/><text x="18" y="78" font-size="11" font-weight="700" fill="#334155">基础信息</text><rect x="18" y="90" width="134" height="33" rx="6" fill="#f8fafc" stroke="#dfe6ef"/><rect x="18" y="132" width="134" height="33" rx="6" fill="#f8fafc" stroke="#dfe6ef"/><text x="18" y="194" font-size="11" font-weight="700" fill="#334155">协议配置</text><rect x="18" y="207" width="134" height="52" rx="7" fill="#f1f6ff"/><rect x="18" y="269" width="134" height="33" rx="6" fill="#fff" stroke="#dfe6ef"/><rect x="18" y="311" width="134" height="33" rx="6" fill="#fff" stroke="#dfe6ef"/><rect x="18" y="375" width="134" height="34" rx="7" fill="#2563eb"/><text x="72" y="397" font-size="11" font-weight="700" fill="#fff">保存</text></g>
+</svg>

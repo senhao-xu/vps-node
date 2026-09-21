@@ -332,6 +332,70 @@ func TestNodeOwnershipConstraints(t *testing.T) {
 	}
 }
 
+func TestListNodesPageFilters(t *testing.T) {
+	r := newTestRepo(t)
+	ctx := context.Background()
+
+	server1 := mustCreateServer(t, r, "s1")
+	server2 := mustCreateServer(t, r, "s2")
+
+	mustNode := func(serverID int64, name, protocol string, port int, status string) int64 {
+		t.Helper()
+		id, err := r.CreateNode(ctx, repo.NewNode{ServerID: serverID, Name: name, Protocol: protocol, Port: port, Status: status})
+		if err != nil {
+			t.Fatalf("create node: %v", err)
+		}
+		return id
+	}
+	mustNode(server1, "hk-ss", repo.ProtocolShadowsocks, 8388, repo.NodeStatusActive)
+	mustNode(server1, "hk-vless", repo.ProtocolVLESS, 443, repo.NodeStatusDisabled)
+	mustNode(server2, "jp-hy2", repo.ProtocolHysteria2, 8443, repo.NodeStatusActive)
+
+	nodes, total, err := r.ListNodesPage(ctx, repo.NodeFilter{})
+	if err != nil || total != 3 || len(nodes) != 3 {
+		t.Fatalf("list all: %v total=%d len=%d", err, total, len(nodes))
+	}
+	namesByServer := map[int64]string{server1: "s1", server2: "s2"}
+	for _, n := range nodes {
+		if n.ServerName != namesByServer[n.ServerID] {
+			t.Fatalf("expected server name %q for node %q, got %q", namesByServer[n.ServerID], n.Name, n.ServerName)
+		}
+	}
+
+	nodes, total, err = r.ListNodesPage(ctx, repo.NodeFilter{Protocol: repo.ProtocolVLESS})
+	if err != nil || total != 1 || len(nodes) != 1 || nodes[0].Name != "hk-vless" {
+		t.Fatalf("protocol filter: %v total=%d %+v", err, total, nodes)
+	}
+
+	nodes, total, err = r.ListNodesPage(ctx, repo.NodeFilter{Status: repo.NodeStatusActive})
+	if err != nil || total != 2 || len(nodes) != 2 {
+		t.Fatalf("status filter: %v total=%d len=%d", err, total, len(nodes))
+	}
+
+	nodes, total, err = r.ListNodesPage(ctx, repo.NodeFilter{Query: "hk-"})
+	if err != nil || total != 2 || len(nodes) != 2 {
+		t.Fatalf("query filter: %v total=%d len=%d", err, total, len(nodes))
+	}
+
+	nodes, total, err = r.ListNodesPage(ctx, repo.NodeFilter{Query: "%"})
+	if err != nil || total != 0 || len(nodes) != 0 {
+		t.Fatalf("query wildcard must be escaped: %v total=%d len=%d", err, total, len(nodes))
+	}
+
+	nodes, total, err = r.ListNodesPage(ctx, repo.NodeFilter{
+		ServerID: server1, Protocol: repo.ProtocolShadowsocks, Status: repo.NodeStatusActive, Query: "hk",
+		Page: 1, PageSize: 10,
+	})
+	if err != nil || total != 1 || len(nodes) != 1 || nodes[0].Name != "hk-ss" || nodes[0].ServerName != "s1" {
+		t.Fatalf("combined filter: %v total=%d %+v", err, total, nodes)
+	}
+
+	nodes, total, err = r.ListNodesPage(ctx, repo.NodeFilter{Page: 2, PageSize: 2})
+	if err != nil || total != 3 || len(nodes) != 1 {
+		t.Fatalf("pagination: %v total=%d len=%d", err, total, len(nodes))
+	}
+}
+
 func TestServerRevisionMonotonic(t *testing.T) {
 	r := newTestRepo(t)
 	ctx := context.Background()

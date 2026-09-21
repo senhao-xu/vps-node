@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { deleteServer, getServer, rotateAgentToken, createRegisterToken, updateServer } from '@/api/servers'
 import { deleteNode } from '@/api/nodes'
 import { errorMessage } from '@/api/http'
@@ -197,6 +197,7 @@ onMounted(() => {
   <section class="page">
     <div class="page-header">
       <h1 class="page-title">
+        <span class="eyebrow">INFRASTRUCTURE NODE</span>
         服务器详情
         <span
           v-if="server"
@@ -320,17 +321,6 @@ onMounted(() => {
             <span class="info-label">连接时间</span>
             <span>{{ formatDateTime(server.agent.connected_at) }}</span>
           </div>
-          <div class="info-item">
-            <span class="info-label">操作</span>
-            <button
-              type="button"
-              class="btn secondary small"
-              :disabled="rotatingAgentToken"
-              @click="rotateToken"
-            >
-              {{ rotatingAgentToken ? '生成中…' : '轮换 Agent Token' }}
-            </button>
-          </div>
         </div>
         <p
           v-else
@@ -339,6 +329,15 @@ onMounted(() => {
           该服务器还没有注册 Agent。点击下方按钮生成一次性注册 Token，在服务器上运行 Agent 时使用。
         </p>
         <div class="token-actions">
+          <button
+            v-if="server.agent"
+            type="button"
+            class="btn secondary small"
+            :disabled="rotatingAgentToken"
+            @click="rotateToken"
+          >
+            {{ rotatingAgentToken ? '生成中…' : '轮换 Agent Token' }}
+          </button>
           <button
             type="button"
             class="btn secondary small"
@@ -442,13 +441,21 @@ onMounted(() => {
           <h2 class="card-title">
             节点（{{ server.nodes.length }}）
           </h2>
-          <button
-            type="button"
-            class="btn small"
-            @click="showNodeDialog = true"
-          >
-            添加节点
-          </button>
+          <div class="node-head-actions">
+            <RouterLink
+              class="btn secondary small"
+              :to="`/nodes?server_id=${server.id}`"
+            >
+              在节点页查看
+            </RouterLink>
+            <button
+              type="button"
+              class="btn small"
+              @click="showNodeDialog = true"
+            >
+              添加节点
+            </button>
+          </div>
         </div>
         <DataTable
           :columns="nodeColumns"
@@ -529,7 +536,17 @@ onMounted(() => {
 <style scoped>
 .header-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--spacing-sm);
+}
+
+.eyebrow {
+  display: block;
+  margin-bottom: var(--spacing-xs);
+  color: var(--color-primary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
 }
 
 .head-status {
@@ -547,6 +564,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-xs);
+  min-width: 0;
 }
 
 .info-label {
@@ -592,7 +610,7 @@ onMounted(() => {
   padding: 2px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  background: var(--color-bg);
+  background: var(--color-surface-muted);
 }
 
 .install-tab {
@@ -632,7 +650,7 @@ onMounted(() => {
 .install-code {
   margin: var(--spacing-xs) 0 0;
   padding: var(--spacing-sm) var(--spacing-md);
-  background: var(--color-bg);
+  background: #f8fafc;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
@@ -671,9 +689,40 @@ onMounted(() => {
   margin-bottom: 0;
 }
 
+.node-head-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
 .actions {
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-sm);
+}
+
+@media (max-width: 700px) {
+  .header-actions {
+    width: 100%;
+  }
+
+  .info-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .install-head,
+  .install-code-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .install-tabs {
+    align-self: flex-start;
+  }
+
+  .card-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 </style>

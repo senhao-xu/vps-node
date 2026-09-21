@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/error-handling.md","reason":"Preserve API error envelopes, admin auth boundary, and protocol secret handling."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Follow node setting allowlists, secret review gates, and required Go validation commands."}
+{"file":".trellis/spec/frontend/directory-structure.md","reason":"Keep API functions and UI components in established Vue project locations."}
+{"file":".trellis/spec/frontend/type-safety.md","reason":"Keep cross-layer types centralized and avoid unsafe boundary casts."}
+{"file":"docs/api-contract.md","reason":"Binding contract for the existing node endpoints and new Reality generation endpoint."}

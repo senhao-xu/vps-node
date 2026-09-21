@@ -3,16 +3,29 @@ import type {
   CreateNodeInput,
   NodeBrief,
   NodeDetail,
+  NodeStatus,
   Paged,
+  Protocol,
+  RealityKeypair,
   UpdateNodeInput,
 } from './types'
 
 export function listNodes(
-  params: { serverId?: number; page?: number; pageSize?: number } = {},
+  params: {
+    serverId?: number
+    protocol?: Protocol
+    status?: NodeStatus
+    q?: string
+    page?: number
+    pageSize?: number
+  } = {},
 ): Promise<Paged<NodeBrief>> {
   return request<Paged<NodeBrief>>('/api/nodes', {
     query: {
       server_id: params.serverId,
+      protocol: params.protocol,
+      status: params.status,
+      q: params.q,
       page: params.page,
       page_size: params.pageSize,
     },
@@ -25,6 +38,10 @@ export function getNode(nodeId: number): Promise<NodeDetail> {
 
 export function createNode(input: CreateNodeInput): Promise<NodeBrief> {
   return request<NodeBrief>('/api/nodes', { method: 'POST', body: input })
+}
+
+export function generateRealityKeypair(): Promise<RealityKeypair> {
+  return request<RealityKeypair>('/api/nodes/reality-keypair', { method: 'POST' })
 }
 
 export function updateNode(nodeId: number, input: UpdateNodeInput): Promise<NodeBrief> {

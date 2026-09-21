@@ -273,11 +273,13 @@ Rotates the agent token of the server's agent. Response `200`: `{ "agent_token":
 
 ### GET /api/nodes
 
-Query: `server_id` (optional). Paginated node DTOs:
+Query (all optional, combinable): `server_id` (exact match), `protocol` (`shadowsocks|vless|hysteria2`), `status` (`active|disabled`), `q` (case-insensitive substring match on node name), plus `page` / `page_size`. Invalid enum values return `400 invalid_request`. Paginated node DTOs:
 
 ```json
-{ "id": 1, "server_id": 1, "name": "HK-SS", "protocol": "shadowsocks", "port": 8388, "status": "active", "created_at": "..." }
+{ "id": 1, "server_id": 1, "name": "HK-SS", "protocol": "shadowsocks", "port": 8388, "status": "active", "server": { "id": 1, "name": "HK-1" }, "created_at": "..." }
 ```
+
+Every node DTO carries `server: { id, name }` referencing its owning server.
 
 Protocol secrets are never exposed.
 
@@ -287,7 +289,21 @@ Protocol secrets are never exposed.
 { "server_id": 1, "name": "HK-SS", "protocol": "shadowsocks", "port": 8388, "settings": { "method": "2022-blake3-aes-128-gcm" } }
 ```
 
-`settings` is a protocol-specific structured object (validated against an allowlist per protocol in a later stage). Secrets submitted here are encrypted at rest by Panel. Response `201`: node DTO.
+`settings` is a protocol-specific structured object validated against an allowlist. Shadowsocks requires a supported `method`; its server password may be omitted and derived by Panel. VLESS requires a valid X25519 `private_key` and at least one `server_names` entry; optional `short_id` is an even-length hexadecimal string of at most 16 characters. Hysteria2 accepts optional non-negative integer `up_mbps` and `down_mbps`. Secrets submitted here are encrypted at rest by Panel. Response `201`: node DTO.
+
+### POST /api/nodes/reality-keypair
+
+Admin-only generation of a Reality X25519 keypair and eight-byte Short ID. The operation is non-persistent and does not bump any server revision. Response `200`:
+
+```json
+{
+  "private_key": "base64url-without-padding",
+  "public_key": "base64url-without-padding",
+  "short_id": "0123456789abcdef"
+}
+```
+
+The private key is submitted through `POST /api/nodes` when creating a VLESS node. The public key is not stored or exposed by generic node DTOs.
 
 ### GET /api/nodes/:id
 
@@ -295,7 +311,7 @@ Response `200`: node DTO plus `user_count`, `online_users`, `server: { id, name 
 
 ### PUT /api/nodes/:id
 
-Partial update of `name`, `port`, `settings`, `status`. Response `200`: node DTO. Changes bump the owning server revision.
+Partial update of `name`, `port`, `settings`, `status`. Protocol settings are merged with stored settings; omitted public fields and secrets remain unchanged. Response `200`: node DTO. Changes bump the owning server revision.
 
 ### DELETE /api/nodes/:id
 
@@ -339,6 +355,28 @@ Response `200`:
 ### PUT /api/settings
 
 Partial update of the same fields. Response `200`: settings DTO.
+
+Settings additionally include `subscribe_urls`, `subscribe_path`, and `clash_meta_template`.
+`subscribe_urls` is a comma-separated list of HTTP(S) origins; `subscribe_path` is a safe
+single path segment. The Clash Meta template is restricted and cannot contain generated
+proxies, proxy providers, listeners, controllers, authentication, or credentials.
+
+## Subscriptions
+
+`GET /api/users/:id/subscription` returns `{ "configured": false, "url": null }` until an
+administrator explicitly creates a subscription. `POST` creates it and
+`POST /api/users/:id/subscription/rotate` replaces it; both return the configured URL.
+Subscription URLs use a separate encrypted, hash-authenticated bearer credential and never
+change the user's business token. The URL token is a 22-character URL-safe Base64 string
+(16 bytes of entropy); rotation generates a fresh one, while previously issued longer tokens
+remain resolvable until rotated.
+
+The public endpoint is `GET /{subscribe_path}/:token`; the dispatcher reads the validated
+current `subscribe_path` setting on every request, so a saved path takes effect immediately.
+The default endpoint is `/s/:token`. It supports
+`flag=general` for standard Base64-encoded protocol links and `flag=clash-meta` for YAML.
+Matching Clash/Mihomo user agents select Clash Meta automatically. Invalid credentials return
+`404`; unavailable users return `403`. Responses contain only eligible authorized nodes.
 
 ---
 

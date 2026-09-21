@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 const ContractVersion = "singbox-render-v1"
@@ -198,9 +199,18 @@ func renderVLESS(n Node) (map[string]any, error) {
 }
 
 func renderHysteria2(n Node) (map[string]any, error) {
+	serverName := SettingString(n.Settings, "server_name")
+	certificate := SettingString(n.Secret, "certificate")
+	privateKey := SettingString(n.Secret, "private_key")
 	users := make([]map[string]any, 0, len(n.Users))
 	for _, u := range n.Users {
 		users = append(users, map[string]any{"password": u.UUID})
+	}
+	tls := map[string]any{"enabled": true}
+	if serverName != "" && certificate != "" && privateKey != "" {
+		tls["server_name"] = serverName
+		tls["certificate"] = strings.Split(certificate, "\n")
+		tls["key"] = strings.Split(privateKey, "\n")
 	}
 	inbound := map[string]any{
 		"type":        ProtocolHysteria2,
@@ -208,7 +218,7 @@ func renderHysteria2(n Node) (map[string]any, error) {
 		"listen":      "::",
 		"listen_port": n.Port,
 		"users":       users,
-		"tls":         map[string]any{"enabled": true},
+		"tls":         tls,
 	}
 	if v, ok := settingInt(n.Settings, "up_mbps"); ok {
 		inbound["up_mbps"] = v

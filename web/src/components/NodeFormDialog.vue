@@ -1,19 +1,21 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { createNode, updateNode } from '@/api/nodes'
+import { createNode, generateRealityKeypair, updateNode } from '@/api/nodes'
+import { listServers } from '@/api/servers'
 import { errorMessage } from '@/api/http'
-import type { NodeBrief, NodeSettingsInput, Protocol } from '@/api/types'
+import type { NodeBrief, NodeSettingsInput, Protocol, Server } from '@/api/types'
 import ErrorBanner from '@/components/ErrorBanner.vue'
 import ModalDialog from '@/components/ModalDialog.vue'
+import CopyText from '@/components/CopyText.vue'
 import { SHADOWSOCKS_METHODS, protocolLabel } from '@/utils/labels'
 
 const props = withDefaults(
   defineProps<{
     open: boolean
-    serverId: number
+    serverId?: number
     node?: NodeBrief | null
   }>(),
-  { node: null },
+  { node: null, serverId: undefined },
 )
 
 const emit = defineEmits<{
@@ -28,19 +30,26 @@ const status = ref<'active' | 'disabled'>('active')
 
 const ssMethod = ref<string>(SHADOWSOCKS_METHODS[0])
 const ssMethodTouched = ref(false)
-const ssPassword = ref('')
 
 const vlessPrivateKey = ref('')
+const vlessPublicKey = ref('')
 const vlessShortId = ref('')
 const vlessServerNames = ref('')
 
-const hy2Password = ref('')
 const hy2Up = ref<number | null>(null)
 const hy2Down = ref<number | null>(null)
+const hy2ServerName = ref('')
+const hy2Certificate = ref('')
+const hy2PrivateKey = ref('')
 
 const submitting = ref(false)
+const generatingReality = ref(false)
 const error = ref('')
 const isEdit = ref(false)
+
+const servers = ref<Server[]>([])
+const serverChoice = ref<number | null>(null)
+const loadingServers = ref(false)
 
 watch(
   () => props.open,
@@ -54,15 +63,33 @@ watch(
     status.value = props.node?.status === 'disabled' ? 'disabled' : 'active'
     ssMethod.value = SHADOWSOCKS_METHODS[0]
     ssMethodTouched.value = false
-    ssPassword.value = ''
     vlessPrivateKey.value = ''
+    vlessPublicKey.value = ''
     vlessShortId.value = ''
     vlessServerNames.value = ''
-    hy2Password.value = ''
     hy2Up.value = null
     hy2Down.value = null
+    hy2ServerName.value = ''
+    hy2Certificate.value = ''
+    hy2PrivateKey.value = ''
+    serverChoice.value = null
+    if (!isEdit.value && props.serverId === undefined) {
+      void loadServers()
+    }
   },
 )
+
+async function loadServers() {
+  loadingServers.value = true
+  try {
+    const result = await listServers({ page: 1, pageSize: 100 })
+    servers.value = result.items
+  } catch (err) {
+    error.value = errorMessage(err)
+  } finally {
+    loadingServers.value = false
+  }
+}
 
 const title = computed(() => (isEdit.value ? '编辑节点' : '添加节点'))
 
@@ -70,7 +97,6 @@ const settingsPayload = computed<NodeSettingsInput | undefined>(() => {
   const payload: NodeSettingsInput = {}
   if (protocol.value === 'shadowsocks') {
     if (!isEdit.value || ssMethodTouched.value) payload['method'] = ssMethod.value
-    if (ssPassword.value) payload['password'] = ssPassword.value
   } else if (protocol.value === 'vless') {
     if (vlessPrivateKey.value) payload['private_key'] = vlessPrivateKey.value
     if (vlessShortId.value) payload['short_id'] = vlessShortId.value
@@ -80,29 +106,81 @@ const settingsPayload = computed<NodeSettingsInput | undefined>(() => {
       .filter((item) => item.length > 0)
     if (names.length > 0) payload['server_names'] = names
   } else {
-    if (hy2Password.value) payload['password'] = hy2Password.value
     if (hy2Up.value !== null && !Number.isNaN(hy2Up.value) && hy2Up.value >= 0) {
       payload['up_mbps'] = hy2Up.value
     }
     if (hy2Down.value !== null && !Number.isNaN(hy2Down.value) && hy2Down.value >= 0) {
       payload['down_mbps'] = hy2Down.value
     }
+    if (hy2ServerName.value) payload['server_name'] = hy2ServerName.value.trim()
+    if (hy2Certificate.value) payload['certificate'] = hy2Certificate.value
+    if (hy2PrivateKey.value) payload['private_key'] = hy2PrivateKey.value
   }
   if (Object.keys(payload).length === 0) return undefined
   return payload
 })
 
 const validationMessage = computed(() => {
+  if (!isEdit.value && props.serverId === undefined && serverChoice.value === null) {
+    return '请选择服务器'
+  }
   if (!name.value.trim()) return '请填写节点名称'
   const portValue = port.value
   if (portValue === null || !Number.isInteger(portValue) || portValue < 1 || portValue > 65535) {
     return '端口必须是 1-65535 的整数'
   }
-  if (!isEdit.value && settingsPayload.value === undefined) {
-    return '请填写协议所需的配置'
+  if (protocol.value === 'vless') {
+    if (!isEdit.value && !vlessPrivateKey.value) return '请生成或填写 Reality 私钥'
+    if (!isEdit.value && !vlessServerNames.value.trim()) return '请填写至少一个 Server Name'
+    if (vlessPrivateKey.value && !/^[A-Za-z0-9_-]{43}$/.test(vlessPrivateKey.value)) {
+      return 'Reality 私钥格式不正确'
+    }
+    if (vlessShortId.value && !/^(?:[0-9a-fA-F]{2}){1,8}$/.test(vlessShortId.value)) {
+      return 'Short ID 必须是 2-16 位偶数长度十六进制字符'
+    }
+  } else if (protocol.value === 'hysteria2') {
+    for (const value of [hy2Up.value, hy2Down.value]) {
+      if (value !== null && (!Number.isInteger(value) || value < 0)) {
+        return '带宽必须是非负整数'
+      }
+    }
+    if (!isEdit.value && !hy2ServerName.value.trim()) return '请填写 Hysteria2 Server Name'
+    if (!isEdit.value && (!hy2Certificate.value || !hy2PrivateKey.value)) return '请填写 Hysteria2 PEM 证书链和私钥'
+    if ((hy2Certificate.value && !hy2PrivateKey.value) || (!hy2Certificate.value && hy2PrivateKey.value)) return '证书链和私钥必须成对提交'
+    if (hy2ServerName.value && !/^[A-Za-z0-9.-]+$/.test(hy2ServerName.value.trim())) return 'Server Name 格式不正确'
   }
   return ''
 })
+
+function changeProtocol() {
+  ssMethod.value = SHADOWSOCKS_METHODS[0]
+  ssMethodTouched.value = false
+  vlessPrivateKey.value = ''
+  vlessPublicKey.value = ''
+  vlessShortId.value = ''
+  vlessServerNames.value = ''
+  hy2Up.value = null
+  hy2Down.value = null
+  hy2ServerName.value = ''
+  hy2Certificate.value = ''
+  hy2PrivateKey.value = ''
+  error.value = ''
+}
+
+async function generateReality() {
+  generatingReality.value = true
+  error.value = ''
+  try {
+    const generated = await generateRealityKeypair()
+    vlessPrivateKey.value = generated.private_key
+    vlessPublicKey.value = generated.public_key
+    vlessShortId.value = generated.short_id
+  } catch (err) {
+    error.value = errorMessage(err)
+  } finally {
+    generatingReality.value = false
+  }
+}
 
 async function submit() {
   const problem = validationMessage.value
@@ -122,7 +200,7 @@ async function submit() {
       })
     } else {
       await createNode({
-        server_id: props.serverId,
+        server_id: props.serverId ?? serverChoice.value ?? 0,
         name: name.value.trim(),
         protocol: protocol.value,
         port: port.value ?? 0,
@@ -143,7 +221,7 @@ async function submit() {
   <ModalDialog
     :open="props.open"
     :title="title"
-    :width="520"
+    :width="620"
     @close="emit('close')"
   >
     <ErrorBanner
@@ -151,180 +229,271 @@ async function submit() {
       @dismiss="error = ''"
     />
     <div class="form">
-      <div class="form-row">
-        <div class="field">
-          <label for="node-name">名称</label>
-          <input
-            id="node-name"
-            v-model="name"
-            type="text"
-            placeholder="例如 HK-SS"
-          >
+      <section class="form-section">
+        <div class="section-heading">
+          <span class="section-index">1</span>
+          <div>
+            <strong>基础信息</strong>
+            <span>定义节点名称、监听端口和协议类型</span>
+          </div>
+          <small>基本设置</small>
         </div>
         <div
-          class="field"
-          style="max-width: 140px"
+          v-if="!isEdit && props.serverId === undefined"
+          class="form-row"
         >
-          <label for="node-port">端口</label>
-          <input
-            id="node-port"
-            v-model.number="port"
-            type="number"
-            min="1"
-            max="65535"
-          >
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="field">
-          <label for="node-protocol">协议</label>
-          <select
-            id="node-protocol"
-            v-model="protocol"
-            :disabled="isEdit"
-          >
-            <option value="shadowsocks">
-              {{ protocolLabel('shadowsocks') }}
-            </option>
-            <option value="vless">
-              {{ protocolLabel('vless') }}
-            </option>
-            <option value="hysteria2">
-              {{ protocolLabel('hysteria2') }}
-            </option>
-          </select>
-        </div>
-        <div
-          v-if="isEdit"
-          class="field"
-        >
-          <label for="node-status">状态</label>
-          <select
-            id="node-status"
-            v-model="status"
-          >
-            <option value="active">
-              启用
-            </option>
-            <option value="disabled">
-              停用
-            </option>
-          </select>
-        </div>
-      </div>
-
-      <div
-        v-if="protocol === 'shadowsocks'"
-        class="settings-box"
-      >
-        <div class="field">
-          <label for="ss-method">加密方式{{ isEdit ? '（更改后才会提交）' : '' }}</label>
-          <select
-            id="ss-method"
-            v-model="ssMethod"
-            @change="ssMethodTouched = true"
-          >
-            <option
-              v-for="method in SHADOWSOCKS_METHODS"
-              :key="method"
-              :value="method"
+          <div class="field">
+            <label for="node-server">所属服务器</label>
+            <select
+              id="node-server"
+              v-model="serverChoice"
+              :disabled="loadingServers"
             >
-              {{ method }}
-            </option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="ss-password">
-            密码{{ isEdit ? '（留空保持不变）' : '' }}
-          </label>
-          <input
-            id="ss-password"
-            v-model="ssPassword"
-            type="password"
-            autocomplete="new-password"
-            :placeholder="isEdit ? '留空保持不变' : '密码'"
-          >
-        </div>
-      </div>
-
-      <div
-        v-else-if="protocol === 'vless'"
-        class="settings-box"
-      >
-        <div class="field">
-          <label for="vless-key">Reality 私钥{{ isEdit ? '（留空保持不变）' : '' }}</label>
-          <input
-            id="vless-key"
-            v-model="vlessPrivateKey"
-            type="password"
-            autocomplete="new-password"
-            :placeholder="isEdit ? '留空保持不变' : 'private_key'"
-          >
+              <option
+                :value="null"
+                disabled
+              >
+                {{ loadingServers ? '加载服务器列表…' : '请选择服务器' }}
+              </option>
+              <option
+                v-for="server in servers"
+                :key="server.id"
+                :value="server.id"
+              >
+                {{ server.name }}（{{ server.address }}）
+              </option>
+            </select>
+          </div>
         </div>
         <div class="form-row">
           <div class="field">
-            <label for="vless-short-id">Short ID</label>
+            <label for="node-name">名称</label>
             <input
-              id="vless-short-id"
-              v-model="vlessShortId"
+              id="node-name"
+              v-model="name"
               type="text"
-              placeholder="例如 0123456789abcdef"
+              placeholder="例如 HK-SS"
             >
           </div>
-          <div class="field">
-            <label for="vless-names">Server Names（逗号分隔）</label>
-            <input
-              id="vless-names"
-              v-model="vlessServerNames"
-              type="text"
-              placeholder="例如 example.com,www.example.com"
-            >
-          </div>
-        </div>
-      </div>
-
-      <div
-        v-else
-        class="settings-box"
-      >
-        <div class="field">
-          <label for="hy2-password">
-            密码{{ isEdit ? '（留空保持不变）' : '' }}
-          </label>
-          <input
-            id="hy2-password"
-            v-model="hy2Password"
-            type="password"
-            autocomplete="new-password"
-            :placeholder="isEdit ? '留空保持不变' : '密码'"
+          <div
+            class="field port-field"
           >
+            <label for="node-port">端口</label>
+            <input
+              id="node-port"
+              v-model.number="port"
+              type="number"
+              min="1"
+              max="65535"
+            >
+          </div>
         </div>
         <div class="form-row">
-          <div class="field">
-            <label for="hy2-up">上行带宽（Mbps）</label>
-            <input
-              id="hy2-up"
-              v-model.number="hy2Up"
-              type="number"
-              min="0"
-              placeholder="选填"
+          <div class="field protocol-field">
+            <label for="node-protocol">协议</label>
+            <select
+              id="node-protocol"
+              v-model="protocol"
+              :disabled="isEdit"
+              @change="changeProtocol"
             >
+              <option value="shadowsocks">
+                {{ protocolLabel('shadowsocks') }}
+              </option>
+              <option value="vless">
+                {{ protocolLabel('vless') }}
+              </option>
+              <option value="hysteria2">
+                {{ protocolLabel('hysteria2') }}
+              </option>
+            </select>
           </div>
-          <div class="field">
-            <label for="hy2-down">下行带宽（Mbps）</label>
-            <input
-              id="hy2-down"
-              v-model.number="hy2Down"
-              type="number"
-              min="0"
-              placeholder="选填"
+          <div
+            v-if="isEdit"
+            class="field status-field"
+          >
+            <label for="node-status">状态</label>
+            <select
+              id="node-status"
+              v-model="status"
             >
+              <option value="active">
+                启用
+              </option>
+              <option value="disabled">
+                停用
+              </option>
+            </select>
           </div>
         </div>
-      </div>
+      </section>
+
+      <section
+        class="form-section"
+      >
+        <div class="section-heading">
+          <span class="section-index">2</span>
+          <div>
+            <strong>协议配置</strong>
+            <span>{{ protocolLabel(protocol) }} 入站使用的参数</span>
+          </div>
+          <span class="protocol-badge">{{ protocolLabel(protocol) }}</span>
+        </div>
+        <div
+          v-if="protocol === 'shadowsocks'"
+          class="settings-box"
+        >
+          <div class="field method-field">
+            <label for="ss-method">加密方式{{ isEdit ? '（更改后才会提交）' : '' }}</label>
+            <select
+              id="ss-method"
+              v-model="ssMethod"
+              @change="ssMethodTouched = true"
+            >
+              <option
+                v-for="method in SHADOWSOCKS_METHODS"
+                :key="method"
+                :value="method"
+              >
+                {{ method }}
+              </option>
+            </select>
+          </div>
+          <p class="protocol-note">
+            服务端与用户密钥由 Panel 安全派生，无需手工填写密码。
+          </p>
+        </div>
+
+        <div
+          v-else-if="protocol === 'vless'"
+          class="settings-box"
+        >
+          <div class="reality-actions">
+            <div>
+              <strong>Reality 密钥</strong>
+              <p>生成匹配的 X25519 密钥对和 Short ID。</p>
+            </div>
+            <button
+              type="button"
+              class="btn secondary small"
+              :disabled="generatingReality || submitting"
+              @click="generateReality"
+            >
+              {{ generatingReality ? '生成中…' : vlessPublicKey ? '重新生成' : '一键生成' }}
+            </button>
+          </div>
+          <div
+            v-if="vlessPublicKey"
+            class="public-key"
+          >
+            <span>公钥（仅本次显示）</span>
+            <CopyText
+              :text="vlessPublicKey"
+              :display="vlessPublicKey"
+            />
+          </div>
+          <div class="field secret-field">
+            <label for="vless-key">Reality 私钥{{ isEdit ? '（留空保持不变）' : '' }}</label>
+            <input
+              id="vless-key"
+              v-model="vlessPrivateKey"
+              type="password"
+              autocomplete="new-password"
+              :placeholder="isEdit ? '留空保持不变' : '点击一键生成或手工填写'"
+            >
+          </div>
+          <div class="form-row vless-fields">
+            <div class="field">
+              <label for="vless-short-id">Short ID</label>
+              <input
+                id="vless-short-id"
+                v-model="vlessShortId"
+                type="text"
+                placeholder="例如 0123456789abcdef"
+              >
+            </div>
+            <div class="field">
+              <label for="vless-names">Server Names{{ isEdit ? '（留空保持不变）' : '' }}</label>
+              <input
+                id="vless-names"
+                v-model="vlessServerNames"
+                type="text"
+                placeholder="例如 example.com,www.example.com"
+              >
+            </div>
+          </div>
+          <p class="field-hint vless-hint">
+            Server Name 用逗号分隔；Short ID 为可选的 2–16 位偶数长度十六进制字符。
+          </p>
+        </div>
+
+        <div
+          v-else
+          class="settings-box"
+        >
+          <p class="protocol-note">
+            用户 UUID 直接作为认证凭据；带宽留空表示不限制。
+          </p>
+          <div class="form-row">
+            <div class="field">
+              <label for="hy2-up">上行带宽（Mbps）</label>
+              <input
+                id="hy2-up"
+                v-model.number="hy2Up"
+                type="number"
+                min="0"
+                placeholder="选填"
+              >
+            </div>
+            <div class="field">
+              <label for="hy2-down">下行带宽（Mbps）</label>
+              <input
+                id="hy2-down"
+                v-model.number="hy2Down"
+                type="number"
+                min="0"
+                placeholder="选填"
+              >
+            </div>
+            <div class="field">
+              <label for="hy2-server-name">TLS Server Name{{ isEdit ? '（留空保持不变）' : '' }}</label>
+              <input
+                id="hy2-server-name"
+                v-model="hy2ServerName"
+                type="text"
+                placeholder="例如 hy2.example.com"
+              >
+            </div>
+            <div class="field">
+              <label for="hy2-certificate">PEM 证书链{{ isEdit ? '（留空保持不变）' : '' }}</label>
+              <textarea
+                id="hy2-certificate"
+                v-model="hy2Certificate"
+                rows="5"
+                :placeholder="isEdit ? '留空保持不变' : '-----BEGIN CERTIFICATE-----'"
+              />
+            </div>
+            <div class="field">
+              <label for="hy2-private-key">PEM 私钥{{ isEdit ? '（留空保持不变）' : '' }}</label>
+              <textarea
+                id="hy2-private-key"
+                v-model="hy2PrivateKey"
+                rows="5"
+                :placeholder="isEdit ? '留空保持不变' : '-----BEGIN PRIVATE KEY-----'"
+              />
+            </div>
+            <p class="field-hint">
+              证书和私钥会加密保存，并由 Panel 以内联 TLS 配置下发 Agent；编辑时两个字段必须一起替换。
+            </p>
+          </div>
+          <p class="field-hint">
+            留空表示不限制带宽，单位为 Mbps。
+          </p>
+        </div>
+      </section>
 
       <p class="text-secondary tip">
-        协议密钥仅提交一次，由 Panel 加密保存，不会回显；编辑时留空即保持不变。协议配置在提交时整体替换，编辑节点请仅填写需要修改的配置项。
+        协议密钥由 Panel 加密保存且不会回显；编辑时留空即保持不变。
       </p>
     </div>
     <template #footer>
@@ -352,7 +521,105 @@ async function submit() {
 .form {
   display: flex;
   flex-direction: column;
+  gap: 28px;
+}
+
+.form-section {
+  display: flex;
+  flex-direction: column;
   gap: var(--spacing-md);
+  min-width: 0;
+}
+
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  padding-bottom: var(--spacing-sm);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.section-heading > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.section-index {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: #fff !important;
+  font-size: var(--font-size-sm) !important;
+  font-weight: 700;
+}
+
+.section-heading small {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.section-heading span,
+.protocol-note,
+.reality-actions p,
+.public-key > span {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.protocol-badge {
+  flex: none;
+  padding: 3px 8px;
+  border: 1px solid var(--color-primary-border);
+  border-radius: 999px;
+  background: var(--color-primary-soft);
+  color: var(--color-primary) !important;
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+}
+
+.protocol-note,
+.reality-actions p {
+  margin: 0;
+}
+
+.reality-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  padding: 14px;
+  border: 1px solid var(--color-primary-border);
+  border-radius: var(--radius-md);
+  background: var(--color-primary-soft);
+}
+
+.reality-actions > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.public-key {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm);
+  border: 1px solid #bbf7d0;
+  border-radius: var(--radius-md);
+  background: var(--color-success-soft);
+  min-width: 0;
+}
+
+.public-key :deep(.copy-text) {
+  justify-content: space-between;
 }
 
 .settings-box {
@@ -360,12 +627,70 @@ async function submit() {
   flex-direction: column;
   gap: var(--spacing-md);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  background: linear-gradient(180deg, var(--color-surface-muted), var(--color-surface));
+}
+
+.port-field,
+.status-field {
+  flex: 0 1 140px !important;
+}
+
+.method-field {
+  max-width: 360px;
+}
+
+.field-hint {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
+.vless-hint {
+  margin-top: calc(var(--spacing-xs) * -1);
+}
+
+.public-key :deep(.value) {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: var(--font-size-sm);
 }
 
 .tip {
   margin: 0;
   font-size: var(--font-size-sm);
+}
+
+@media (max-width: 560px) {
+  .form-row,
+  .reality-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .port-field,
+  .status-field,
+  .method-field {
+    flex-basis: auto !important;
+    max-width: none;
+  }
+
+  .protocol-badge {
+    align-self: flex-start;
+  }
+
+  .settings-box {
+    padding: var(--spacing-md);
+  }
+
+  .section-heading {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .section-heading > div {
+    min-width: calc(100% - 40px);
+  }
 }
 </style>

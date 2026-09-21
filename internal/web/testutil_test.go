@@ -3,10 +3,17 @@ package web_test
 import (
 	"bytes"
 	"context"
+	"crypto/ecdh"
 	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"io"
 	"log/slog"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -15,9 +22,35 @@ import (
 
 	"vps-node/internal/adminauth"
 	"vps-node/internal/db"
+	"vps-node/internal/httpx"
 	"vps-node/internal/repo"
 	"vps-node/internal/web"
 )
+
+func testRealityPrivateKey(t *testing.T) string {
+	t.Helper()
+	key, err := ecdh.X25519().GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate reality key: %v", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(key.Bytes())
+}
+
+func testTLSMaterial(t *testing.T, host string, notBefore, notAfter time.Time) (string, string) {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpl := &x509.Certificate{SerialNumber: new(big.Int).SetInt64(time.Now().UnixNano()), Subject: pkix.Name{CommonName: host}, DNSNames: []string{host}, NotBefore: notBefore, NotAfter: notAfter, KeyUsage: x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cert := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+	private := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
+	return string(cert), string(private)
+}
 
 const (
 	testAdminUser = "root"
@@ -29,6 +62,30 @@ type testEnv struct {
 	repo   *repo.Repo
 	db     *db.DB
 	appKey []byte
+}
+
+func newTestEnvWithLogger(t *testing.T) (*testEnv, *bytes.Buffer) {
+	t.Helper()
+	d, err := db.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = d.Close() })
+	if err := d.Migrate(context.Background()); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		t.Fatalf("app key: %v", err)
+	}
+	var logs bytes.Buffer
+	handler, err := web.New(web.Options{DB: d.DB, Repo: repo.New(d.DB), Sessions: adminauth.NewSessions(d.DB, time.Hour, false), Limiter: adminauth.NewLimiter(3, time.Minute, time.Minute), AppKey: key, Logger: slog.New(slog.NewTextHandler(&logs, nil)), AdminUsername: testAdminUser, AdminPassword: testAdminPass})
+	if err != nil {
+		t.Fatalf("build handler: %v", err)
+	}
+	ts := httptest.NewServer(httpx.WrapHandler(handler, slog.New(slog.NewTextHandler(&logs, nil))))
+	t.Cleanup(ts.Close)
+	return &testEnv{ts: ts, repo: repo.New(d.DB), db: d, appKey: key}, &logs
 }
 
 func newTestEnv(t *testing.T) *testEnv {
