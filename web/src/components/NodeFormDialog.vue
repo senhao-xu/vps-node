@@ -556,7 +556,7 @@ async function submit() {
   justify-content: center;
   border-radius: 50%;
   background: var(--color-primary);
-  color: #fff !important;
+  color: var(--color-on-primary) !important;
   font-size: var(--font-size-sm) !important;
   font-weight: 700;
 }
@@ -612,7 +612,7 @@ async function submit() {
   flex-direction: column;
   gap: var(--spacing-xs);
   padding: var(--spacing-sm);
-  border: 1px solid #bbf7d0;
+  border: 1px solid var(--color-success-border);
   border-radius: var(--radius-md);
   background: var(--color-success-soft);
   min-width: 0;

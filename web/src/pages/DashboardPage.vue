@@ -160,7 +160,7 @@ function toCards(data: Dashboard): StatCard[] {
 }
 
 .health-pill.attention {
-  border-color: #fde68a;
+  border-color: var(--color-warning-border);
   background: var(--color-warning-soft);
   color: var(--color-warning);
 }

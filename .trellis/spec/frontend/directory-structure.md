@@ -43,7 +43,9 @@ web/src/
 
 ## Visual System
 
-- `styles/tokens.css` owns reusable color, radius, shadow, spacing, and control-size values. Shared components use semantic tokens such as `--color-primary-soft` and `--color-danger-soft` instead of repeating literal translucent colors.
+- `styles/tokens.css` owns a two-layer token system: primitive palette values (e.g. `--gray-*`, brand/semantic scales) and semantic tokens (`--color-bg`, `--color-surface`, `--color-text`, `--color-border`, `--color-primary`, soft/border variants, `--shadow-*`). Components MUST reference semantic tokens only — never primitives, never literal hex/rgba in `.vue` files.
+- Dark mode: `:root` defines the light theme; `[data-theme='dark']` overrides every semantic color/shadow token (the two sets must stay in sync — adding a token means adding its dark override). `color-scheme` is set per theme so native controls and scrollbars follow.
+- Theme switching lives in `stores/theme.ts` (`light | dark | system`, persisted to localStorage key `vps-node-theme`, `matchMedia` watcher for system mode). `main.ts` applies the resolved theme before mount, and `index.html` has an inline script that sets `data-theme` pre-bundle to prevent FOUC. The toggle button lives in `AppLayout.vue` topbar.
 - `styles/base.css` owns page containers, cards, buttons, form controls, common action groups, focus states, and shared mobile behavior. Page-scoped CSS should contain only business-specific layout or presentation.
 - `AppLayout.vue`, `ModalDialog.vue`, `DataTable.vue`, and status/feedback components own their responsive behavior. A parent component must not target a child component's internal DOM with an ordinary scoped selector; move the rule to the child owner or use `:deep()` explicitly.
 - Management tables remain semantic tables inside a horizontal scroll container on narrow screens. Do not globally convert them into cards or add `overflow: hidden` to a parent card.

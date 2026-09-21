@@ -71,7 +71,7 @@ const emit = defineEmits<{
 .dialog {
   max-width: 100%;
   background: var(--color-surface);
-  border: 1px solid rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-dialog);
   overflow: hidden;

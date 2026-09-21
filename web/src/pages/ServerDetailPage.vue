@@ -650,7 +650,7 @@ onMounted(() => {
 .install-code {
   margin: var(--spacing-xs) 0 0;
   padding: var(--spacing-sm) var(--spacing-md);
-  background: #f8fafc;
+  background: var(--color-surface-muted);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;

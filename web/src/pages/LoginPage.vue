@@ -92,7 +92,9 @@ async function submit() {
   align-items: center;
   justify-content: center;
   padding: var(--spacing-lg);
-  background: var(--color-bg);
+  background:
+    radial-gradient(1200px 560px at 50% -10%, var(--color-primary-soft), transparent 62%),
+    var(--color-bg);
 }
 
 .login-form {
@@ -120,9 +122,9 @@ async function submit() {
   display: inline-block;
   width: 30px;
   height: 30px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--color-primary);
-  color: #fff;
+  color: var(--color-on-primary);
   font-size: 17px;
   letter-spacing: 0;
   line-height: 30px;
@@ -144,7 +146,7 @@ async function submit() {
 
 .login-error {
   background: var(--color-danger-soft);
-  border: 1px solid #fecaca;
+  border: 1px solid var(--color-danger-border);
   color: var(--color-danger);
   border-radius: var(--radius-sm);
   padding: var(--spacing-xs) var(--spacing-sm);

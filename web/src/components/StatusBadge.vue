@@ -30,19 +30,19 @@ const toneClass = props.tone ?? 'muted'
 
 .badge.success {
   color: var(--color-success);
-  border-color: var(--color-primary-border);
+  border-color: var(--color-success-border);
   background: var(--color-success-soft);
 }
 
 .badge.warning {
   color: var(--color-warning);
-  border-color: #fde68a;
+  border-color: var(--color-warning-border);
   background: var(--color-warning-soft);
 }
 
 .badge.danger {
   color: var(--color-danger);
-  border-color: #fecaca;
+  border-color: var(--color-danger-border);
   background: var(--color-danger-soft);
 }
 

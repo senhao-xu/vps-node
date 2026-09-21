@@ -32,7 +32,7 @@ const emit = defineEmits<{
   justify-content: space-between;
   gap: var(--spacing-md);
   background: var(--color-danger-soft);
-  border: 1px solid #fecaca;
+  border: 1px solid var(--color-danger-border);
   color: var(--color-danger);
   border-radius: var(--radius-md);
   padding: var(--spacing-sm) var(--spacing-md);
