@@ -35,12 +35,16 @@ const vlessPrivateKey = ref('')
 const vlessPublicKey = ref('')
 const vlessShortId = ref('')
 const vlessServerNames = ref('')
+const vlessFlow = ref<'keep' | 'vision' | 'none'>('vision')
+const vlessDest = ref('')
 
 const hy2Up = ref<number | null>(null)
 const hy2Down = ref<number | null>(null)
 const hy2ServerName = ref('')
 const hy2Certificate = ref('')
 const hy2PrivateKey = ref('')
+const hy2ObfsPassword = ref('')
+const hy2HopPorts = ref('')
 
 const submitting = ref(false)
 const generatingReality = ref(false)
@@ -67,11 +71,15 @@ watch(
     vlessPublicKey.value = ''
     vlessShortId.value = ''
     vlessServerNames.value = ''
+    vlessFlow.value = props.node !== null ? 'keep' : 'vision'
+    vlessDest.value = ''
     hy2Up.value = null
     hy2Down.value = null
     hy2ServerName.value = ''
     hy2Certificate.value = ''
     hy2PrivateKey.value = ''
+    hy2ObfsPassword.value = ''
+    hy2HopPorts.value = ''
     serverChoice.value = null
     if (!isEdit.value && props.serverId === undefined) {
       void loadServers()
@@ -105,6 +113,10 @@ const settingsPayload = computed<NodeSettingsInput | undefined>(() => {
       .map((item) => item.trim())
       .filter((item) => item.length > 0)
     if (names.length > 0) payload['server_names'] = names
+    if (!isEdit.value || vlessFlow.value !== 'keep') {
+      payload['flow'] = vlessFlow.value === 'none' ? '' : 'xtls-rprx-vision'
+    }
+    if (vlessDest.value.trim()) payload['dest'] = vlessDest.value.trim()
   } else {
     if (hy2Up.value !== null && !Number.isNaN(hy2Up.value) && hy2Up.value >= 0) {
       payload['up_mbps'] = hy2Up.value
@@ -115,6 +127,8 @@ const settingsPayload = computed<NodeSettingsInput | undefined>(() => {
     if (hy2ServerName.value) payload['server_name'] = hy2ServerName.value.trim()
     if (hy2Certificate.value) payload['certificate'] = hy2Certificate.value
     if (hy2PrivateKey.value) payload['private_key'] = hy2PrivateKey.value
+    if (hy2ObfsPassword.value) payload['obfs_password'] = hy2ObfsPassword.value
+    if (hy2HopPorts.value.trim()) payload['hop_ports'] = hy2HopPorts.value.trim()
   }
   if (Object.keys(payload).length === 0) return undefined
   return payload
@@ -138,6 +152,14 @@ const validationMessage = computed(() => {
     if (vlessShortId.value && !/^(?:[0-9a-fA-F]{2}){1,8}$/.test(vlessShortId.value)) {
       return 'Short ID 必须是 2-16 位偶数长度十六进制字符'
     }
+    const dest = vlessDest.value.trim()
+    if (dest) {
+      const match = /^([A-Za-z0-9][A-Za-z0-9.-]*)(?::([0-9]{1,5}))?$/.exec(dest)
+      const destPort = match?.[2] ? Number(match[2]) : 443
+      if (!match || destPort < 1 || destPort > 65535) {
+        return 'Dest 目标站格式应为 host 或 host:port（端口 1-65535），例如 www.example.com:443'
+      }
+    }
   } else if (protocol.value === 'hysteria2') {
     for (const value of [hy2Up.value, hy2Down.value]) {
       if (value !== null && (!Number.isInteger(value) || value < 0)) {
@@ -148,6 +170,17 @@ const validationMessage = computed(() => {
     if (!isEdit.value && (!hy2Certificate.value || !hy2PrivateKey.value)) return '请填写 Hysteria2 PEM 证书链和私钥'
     if ((hy2Certificate.value && !hy2PrivateKey.value) || (!hy2Certificate.value && hy2PrivateKey.value)) return '证书链和私钥必须成对提交'
     if (hy2ServerName.value && !/^[A-Za-z0-9.-]+$/.test(hy2ServerName.value.trim())) return 'Server Name 格式不正确'
+    if (hy2ObfsPassword.value.length > 64) return 'obfs 混淆密码最长 64 个字符'
+    const hop = hy2HopPorts.value.trim()
+    if (hop) {
+      const match = /^(\d+)-(\d+)$/.exec(hop)
+      if (!match) return '端口跳跃格式应为 start-end，例如 30000-40000'
+      const start = Number(match[1])
+      const end = Number(match[2])
+      if (start < 1 || end > 65535 || start > end) {
+        return '端口跳跃范围必须在 1-65535 之间且起始端口不大于结束端口'
+      }
+    }
   }
   return ''
 })
@@ -159,11 +192,15 @@ function changeProtocol() {
   vlessPublicKey.value = ''
   vlessShortId.value = ''
   vlessServerNames.value = ''
+  vlessFlow.value = isEdit.value ? 'keep' : 'vision'
+  vlessDest.value = ''
   hy2Up.value = null
   hy2Down.value = null
   hy2ServerName.value = ''
   hy2Certificate.value = ''
   hy2PrivateKey.value = ''
+  hy2ObfsPassword.value = ''
+  hy2HopPorts.value = ''
   error.value = ''
 }
 
@@ -425,6 +462,40 @@ async function submit() {
           <p class="field-hint vless-hint">
             Server Name 用逗号分隔；Short ID 为可选的 2–16 位偶数长度十六进制字符。
           </p>
+          <div class="form-row vless-fields">
+            <div class="field">
+              <label for="vless-flow">Flow</label>
+              <select
+                id="vless-flow"
+                v-model="vlessFlow"
+              >
+                <option
+                  v-if="isEdit"
+                  value="keep"
+                >
+                  保持不变
+                </option>
+                <option value="vision">
+                  xtls-rprx-vision（默认）
+                </option>
+                <option value="none">
+                  不启用
+                </option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="vless-dest">Dest 目标站{{ isEdit ? '（留空保持不变）' : '' }}</label>
+              <input
+                id="vless-dest"
+                v-model="vlessDest"
+                type="text"
+                placeholder="默认使用 Server Name:443"
+              >
+            </div>
+          </div>
+          <p class="field-hint vless-hint">
+            Dest 是 Reality 回落的握手目标，可填 host 或 host:port（缺省 443）。
+          </p>
         </div>
 
         <div
@@ -464,28 +535,54 @@ async function submit() {
                 placeholder="例如 hy2.example.com"
               >
             </div>
-            <div class="field">
-              <label for="hy2-certificate">PEM 证书链{{ isEdit ? '（留空保持不变）' : '' }}</label>
-              <textarea
-                id="hy2-certificate"
-                v-model="hy2Certificate"
-                rows="5"
-                :placeholder="isEdit ? '留空保持不变' : '-----BEGIN CERTIFICATE-----'"
-              />
-            </div>
-            <div class="field">
-              <label for="hy2-private-key">PEM 私钥{{ isEdit ? '（留空保持不变）' : '' }}</label>
-              <textarea
-                id="hy2-private-key"
-                v-model="hy2PrivateKey"
-                rows="5"
-                :placeholder="isEdit ? '留空保持不变' : '-----BEGIN PRIVATE KEY-----'"
-              />
-            </div>
-            <p class="field-hint">
-              证书和私钥会加密保存，并由 Panel 以内联 TLS 配置下发 Agent；编辑时两个字段必须一起替换。
-            </p>
           </div>
+          <div class="field">
+            <label for="hy2-certificate">PEM 证书链{{ isEdit ? '（留空保持不变）' : '' }}</label>
+            <textarea
+              id="hy2-certificate"
+              v-model="hy2Certificate"
+              rows="5"
+              :placeholder="isEdit ? '留空保持不变' : '-----BEGIN CERTIFICATE-----'"
+            />
+          </div>
+          <div class="field">
+            <label for="hy2-private-key">PEM 私钥{{ isEdit ? '（留空保持不变）' : '' }}</label>
+            <textarea
+              id="hy2-private-key"
+              v-model="hy2PrivateKey"
+              rows="5"
+              :placeholder="isEdit ? '留空保持不变' : '-----BEGIN PRIVATE KEY-----'"
+            />
+          </div>
+          <p class="field-hint">
+            证书和私钥会加密保存，并由 Panel 以内联 TLS 配置下发 Agent；编辑时两个字段必须一起替换。
+          </p>
+          <div class="form-row">
+            <div class="field">
+              <label for="hy2-obfs-password">obfs 混淆密码{{ isEdit ? '（留空保持不变）' : '' }}</label>
+              <input
+                id="hy2-obfs-password"
+                v-model="hy2ObfsPassword"
+                type="text"
+                placeholder="选填，最长 64 字符"
+              >
+            </div>
+            <div class="field">
+              <label for="hy2-hop-ports">端口跳跃{{ isEdit ? '（留空保持不变）' : '' }}</label>
+              <input
+                id="hy2-hop-ports"
+                v-model="hy2HopPorts"
+                type="text"
+                placeholder="选填，如 30000-40000"
+              >
+            </div>
+          </div>
+          <p class="field-hint">
+            启用 obfs 后使用 Salamander 混淆，客户端需同步填写相同密码。
+          </p>
+          <p class="field-hint hop-warning">
+            端口跳跃仅影响订阅客户端，需在服务器上自行配置 NAT 端口转发，否则客户端无法连通。
+          </p>
           <p class="field-hint">
             留空表示不限制带宽，单位为 Mbps。
           </p>
@@ -650,6 +747,14 @@ async function submit() {
 
 .vless-hint {
   margin-top: calc(var(--spacing-xs) * -1);
+}
+
+.hop-warning {
+  padding: var(--spacing-sm);
+  border: 1px solid var(--color-warning-border);
+  border-radius: var(--radius-md);
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
 }
 
 .public-key :deep(.value) {

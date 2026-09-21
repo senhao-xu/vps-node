@@ -225,6 +225,141 @@ func TestNodeProtocolSettingsAllowlists(t *testing.T) {
 	}
 }
 
+func TestNodeProtocolParamsValidation(t *testing.T) {
+	e := newTestEnv(t)
+	cookie := e.login(t)
+	serverID := e.seedServer(t, "s1")
+	now := time.Now()
+	cert, key := testTLSMaterial(t, "hy2.example.com", now.Add(-time.Hour), now.Add(time.Hour))
+
+	vlessBase := func() map[string]any {
+		return map[string]any{"private_key": testRealityPrivateKey(t), "server_names": []string{"a.com"}}
+	}
+	hy2Base := func() map[string]any {
+		return map[string]any{"server_name": "hy2.example.com", "certificate": cert, "private_key": key}
+	}
+
+	cases := []struct {
+		name     string
+		protocol string
+		mutate   func(settings map[string]any)
+		wantCode int
+	}{
+		{"vless flow vision", "vless", func(s map[string]any) { s["flow"] = "xtls-rprx-vision" }, http.StatusCreated},
+		{"vless flow disabled", "vless", func(s map[string]any) { s["flow"] = "" }, http.StatusCreated},
+		{"vless flow invalid", "vless", func(s map[string]any) { s["flow"] = "xtls-rprx-direct" }, http.StatusUnprocessableEntity},
+		{"vless dest bare host", "vless", func(s map[string]any) { s["dest"] = "fallback.example.com" }, http.StatusCreated},
+		{"vless dest host port", "vless", func(s map[string]any) { s["dest"] = "fallback.example.com:8443" }, http.StatusCreated},
+		{"vless dest empty ok", "vless", func(s map[string]any) { s["dest"] = "" }, http.StatusCreated},
+		{"vless dest bad port", "vless", func(s map[string]any) { s["dest"] = "fallback.example.com:70000" }, http.StatusUnprocessableEntity},
+		{"vless dest non-numeric port", "vless", func(s map[string]any) { s["dest"] = "fallback.example.com:abc" }, http.StatusUnprocessableEntity},
+		{"vless dest bad host", "vless", func(s map[string]any) { s["dest"] = "bad host" }, http.StatusUnprocessableEntity},
+		{"vless dest userinfo injection", "vless", func(s map[string]any) { s["dest"] = "evil.com:443@real.com" }, http.StatusUnprocessableEntity},
+		{"hy2 obfs ok", "hysteria2", func(s map[string]any) { s["obfs_password"] = "obfs-secret" }, http.StatusCreated},
+		{"hy2 obfs too long", "hysteria2", func(s map[string]any) { s["obfs_password"] = strings.Repeat("a", 65) }, http.StatusUnprocessableEntity},
+		{"hy2 hop ok", "hysteria2", func(s map[string]any) { s["hop_ports"] = "30000-40000" }, http.StatusCreated},
+		{"hy2 hop empty ok", "hysteria2", func(s map[string]any) { s["hop_ports"] = "" }, http.StatusCreated},
+		{"hy2 hop bad format", "hysteria2", func(s map[string]any) { s["hop_ports"] = "abc" }, http.StatusUnprocessableEntity},
+		{"hy2 hop missing end", "hysteria2", func(s map[string]any) { s["hop_ports"] = "1-" }, http.StatusUnprocessableEntity},
+		{"hy2 hop reversed", "hysteria2", func(s map[string]any) { s["hop_ports"] = "40000-30000" }, http.StatusUnprocessableEntity},
+		{"hy2 hop out of range", "hysteria2", func(s map[string]any) { s["hop_ports"] = "0-40000" }, http.StatusUnprocessableEntity},
+		{"hy2 hop end too large", "hysteria2", func(s map[string]any) { s["hop_ports"] = "1-70000" }, http.StatusUnprocessableEntity},
+	}
+	for i, tc := range cases {
+		settings := vlessBase()
+		if tc.protocol == "hysteria2" {
+			settings = hy2Base()
+		}
+		tc.mutate(settings)
+		resp, body := e.do(t, "POST", "/api/nodes", map[string]any{
+			"server_id": serverID, "name": fmt.Sprintf("param-%d", i), "protocol": tc.protocol,
+			"port": 20000 + i, "settings": settings,
+		}, cookie)
+		if resp.StatusCode != tc.wantCode {
+			t.Fatalf("%s: expected %d, got %d %s", tc.name, tc.wantCode, resp.StatusCode, body)
+		}
+		if tc.wantCode != http.StatusCreated && errorCode(t, body) != "validation" {
+			t.Fatalf("%s: expected validation error code, got %s", tc.name, body)
+		}
+	}
+}
+
+func TestNodeProtocolParamsRoundTrip(t *testing.T) {
+	e := newTestEnv(t)
+	cookie := e.login(t)
+	ctx := context.Background()
+	serverID := e.seedServer(t, "s1")
+
+	// New plain settings fields are stored verbatim and survive partial updates.
+	resp, body := e.do(t, "POST", "/api/nodes", map[string]any{
+		"server_id": serverID, "name": "vless-params", "protocol": "vless", "port": 21443,
+		"settings": map[string]any{
+			"private_key": testRealityPrivateKey(t), "server_names": []string{"a.com"},
+			"flow": "", "dest": "fallback.example.com:8443",
+		},
+	}, cookie)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("create: %d %s", resp.StatusCode, body)
+	}
+	nodeID := int64(jsonMap(t, body)["id"].(float64))
+	node, err := e.repo.GetNode(ctx, nodeID)
+	if err != nil {
+		t.Fatalf("get node: %v", err)
+	}
+	for _, want := range []string{`"flow":""`, `"dest":"fallback.example.com:8443"`} {
+		if !strings.Contains(node.Settings, want) {
+			t.Fatalf("settings must contain %s, got %s", want, node.Settings)
+		}
+	}
+
+	resp, body = e.do(t, "PUT", fmt.Sprintf("/api/nodes/%d", nodeID), map[string]any{
+		"settings": map[string]any{"short_id": "0123abcd"},
+	}, cookie)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("partial update: %d %s", resp.StatusCode, body)
+	}
+	node, err = e.repo.GetNode(ctx, nodeID)
+	if err != nil {
+		t.Fatalf("get node: %v", err)
+	}
+	if !strings.Contains(node.Settings, `"flow":""`) || !strings.Contains(node.Settings, `"dest":"fallback.example.com:8443"`) {
+		t.Fatalf("partial update must preserve new fields, got %s", node.Settings)
+	}
+
+	// The agent credential must follow the node flow setting.
+	userID := e.seedUser(t, "flow-user")
+	if err := e.repo.AuthorizeUserNode(ctx, userID, nodeID); err != nil {
+		t.Fatalf("authorize: %v", err)
+	}
+	token := e.registerAgent(t, cookie, serverID, "1.0.0")
+	resp, body = e.doAgent(t, "GET", "/api/agent/config?version=0", nil, token)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("agent config: %d %s", resp.StatusCode, body)
+	}
+	m := jsonMap(t, body)
+	user := agentUserByUUID(t, m, "flow-user")
+	if user == nil {
+		t.Fatalf("expected user in payload: %s", body)
+	}
+	nodes := user["nodes"].([]any)
+	if len(nodes) != 1 {
+		t.Fatalf("expected 1 node, got %s", body)
+	}
+	cred := nodes[0].(map[string]any)["credential"].(map[string]any)
+	if _, has := cred["flow"]; has {
+		t.Fatalf("disabled flow must omit the credential flow key: %s", body)
+	}
+	inbound := m["config"].(map[string]any)["singbox"].(map[string]any)["inbounds"].([]any)[0].(map[string]any)
+	if _, has := inbound["users"].([]any)[0].(map[string]any)["flow"]; has {
+		t.Fatalf("disabled flow must omit the sing-box user flow key: %s", body)
+	}
+	reality := inbound["tls"].(map[string]any)["reality"].(map[string]any)
+	handshake := reality["handshake"].(map[string]any)
+	if handshake["server"] != "fallback.example.com" || handshake["server_port"].(float64) != 8443 {
+		t.Fatalf("handshake must use dest: %s", body)
+	}
+}
+
 func TestHysteria2TLSValidationAndUpdate(t *testing.T) {
 	e := newTestEnv(t)
 	cookie := e.login(t)

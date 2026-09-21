@@ -217,7 +217,11 @@ func agentCredential(appKey []byte, n singbox.Node, userUUID string) (map[string
 		}
 		return map[string]any{"contract": "ss-cred-v1", "method": method, "password": password}, nil
 	case singbox.ProtocolVLESS:
-		return map[string]any{"contract": "uuid-v1", "uuid": userUUID, "flow": "xtls-rprx-vision"}, nil
+		credential := map[string]any{"contract": "uuid-v1", "uuid": userUUID}
+		if flow := singbox.VLESSFlow(n.Settings); flow != "" {
+			credential["flow"] = flow
+		}
+		return credential, nil
 	case singbox.ProtocolHysteria2:
 		return map[string]any{"contract": "uuid-v1", "password": userUUID}, nil
 	default:

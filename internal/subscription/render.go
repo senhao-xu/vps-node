@@ -122,7 +122,10 @@ func renderURI(appKey []byte, userUUID string, n Node) (string, error) {
 		if len(names) == 0 {
 			return "", fmt.Errorf("vless node %d has no server name", n.ID)
 		}
-		q := url.Values{"security": {"reality"}, "encryption": {"none"}, "flow": {"xtls-rprx-vision"}, "sni": {names[0]}, "pbk": {base64.RawURLEncoding.EncodeToString(privateKey.PublicKey().Bytes())}, "type": {"tcp"}}
+		q := url.Values{"security": {"reality"}, "encryption": {"none"}, "sni": {names[0]}, "pbk": {base64.RawURLEncoding.EncodeToString(privateKey.PublicKey().Bytes())}, "type": {"tcp"}}
+		if flow := singbox.VLESSFlow(n.Settings); flow != "" {
+			q.Set("flow", flow)
+		}
 		if sid := singbox.SettingString(n.Settings, "short_id"); sid != "" {
 			q.Set("sid", sid)
 		}
@@ -132,7 +135,15 @@ func renderURI(appKey []byte, userUUID string, n Node) (string, error) {
 		if serverName == "" {
 			return "", fmt.Errorf("hysteria2 node %d has no server name", n.ID)
 		}
-		return "hysteria2://" + url.PathEscape(userUUID) + "@" + host + "?" + url.Values{"sni": {serverName}}.Encode() + "#" + name, nil
+		q := url.Values{"sni": {serverName}}
+		if obfsPassword := singbox.SettingString(n.Settings, "obfs_password"); obfsPassword != "" {
+			q.Set("obfs", "salamander")
+			q.Set("obfs-password", obfsPassword)
+		}
+		if hopPorts := singbox.SettingString(n.Settings, "hop_ports"); hopPorts != "" {
+			q.Set("mport", hopPorts)
+		}
+		return "hysteria2://" + url.PathEscape(userUUID) + "@" + host + "?" + q.Encode() + "#" + name, nil
 	default:
 		return "", fmt.Errorf("unsupported protocol %q", n.Protocol)
 	}
@@ -243,12 +254,22 @@ func renderProxy(appKey []byte, userUUID string, n Node) (map[string]any, error)
 		if len(names) == 0 {
 			return nil, fmt.Errorf("vless node %d has no server name", n.ID)
 		}
-		p["uuid"], p["flow"], p["network"], p["tls"] = userUUID, "xtls-rprx-vision", "tcp", true
+		p["uuid"], p["network"], p["tls"] = userUUID, "tcp", true
+		if flow := singbox.VLESSFlow(n.Settings); flow != "" {
+			p["flow"] = flow
+		}
 		p["servername"], p["client-fingerprint"] = names[0], "chrome"
 		p["reality-opts"] = map[string]any{"public-key": base64.RawURLEncoding.EncodeToString(key.PublicKey().Bytes()), "short-id": singbox.SettingString(n.Settings, "short_id")}
 	case singbox.ProtocolHysteria2:
 		p["password"], p["sni"] = userUUID, singbox.SettingString(n.Settings, "server_name")
 		p["skip-cert-verify"] = false
+		if obfsPassword := singbox.SettingString(n.Settings, "obfs_password"); obfsPassword != "" {
+			p["obfs"] = "salamander"
+			p["obfs-password"] = obfsPassword
+		}
+		if hopPorts := singbox.SettingString(n.Settings, "hop_ports"); hopPorts != "" {
+			p["ports"] = hopPorts
+		}
 	default:
 		return nil, fmt.Errorf("unsupported protocol %q", n.Protocol)
 	}
