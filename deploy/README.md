@@ -4,6 +4,13 @@
 - `install-agent.sh` — idempotent agent installer (arch detection, release tarball download, config bootstrap, systemd enable). See the root README for usage.
 - `release-agent` Makefile target builds linux amd64/arm64/386 tarballs containing `panel-agent`, `panel-agent.service` and `install-agent.sh`.
 
+Compose files:
+
+- `docker-compose.yml` — panel only, builds the image locally (default).
+- `docker-compose.ghcr.yml` — panel only, pulls the prebuilt image from GHCR (`ghcr.io/senhao-xu/vps-node-panel:latest`, override with `PANEL_IMAGE`); no local build.
+- `docker-compose.all-in-one.yml` — panel + agent on one host, builds locally.
+- `agent.docker-compose.yml` — agent only, for node servers.
+
 Example configuration files:
 
 - `panel.example.yaml` — copy to `panel.yaml` next to the panel binary (or configure via `PANEL_*` environment variables).

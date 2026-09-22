@@ -1,0 +1,27 @@
+services:
+  panel:
+    image: ${PANEL_IMAGE:-ghcr.io/senhao-xu/vps-node-panel:latest}
+    container_name: vps-node-panel
+    restart: unless-stopped
+    ports:
+      - "${PANEL_PORT:-8080}:8080"
+    environment:
+      PANEL_LISTEN: ":8080"
+      PANEL_DB_PATH: /data/panel.db
+      PANEL_APP_KEY: "${PANEL_APP_KEY:-}"
+      PANEL_ADMIN_USER: ${PANEL_ADMIN_USER:-admin}
+      PANEL_ADMIN_PASSWORD: "${PANEL_ADMIN_PASSWORD:?set PANEL_ADMIN_PASSWORD}"
+      PANEL_LOG_LEVEL: ${PANEL_LOG_LEVEL:-info}
+    volumes:
+      - panel-data:/data
+
+volumes:
+  panel-data:
+
+# Uses the prebuilt image from GitHub Container Registry — no local build needed.
+#
+#   docker compose -f docker-compose.ghcr.yml pull
+#   docker compose -f docker-compose.ghcr.yml up -d
+#
+# If the package is private, log in first with a PAT that has read:packages:
+#   echo $GITHUB_TOKEN | docker login ghcr.io -u <username> --password-stdin

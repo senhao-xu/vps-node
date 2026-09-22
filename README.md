@@ -123,6 +123,17 @@ docker compose up -d      # panel on :8080, SQLite in volume panel-data
 
 Compose auto-loads `deploy/.env`; prefer it over shell exports so variables survive new shells and reboots (`PANEL_ADMIN_PASSWORD` is hard-required on every `up`). Set `PANEL_PORT` to publish a host port other than 8080 (e.g. when 8080 is taken). To pull a prebuilt image instead of building locally, set `PANEL_IMAGE` (e.g. `ghcr.io/<owner>/vps-node-panel:latest`) and run `docker compose pull` first.
 
+No local build at all: `deploy/docker-compose.ghcr.yml` pulls the prebuilt image from GitHub Container Registry directly:
+
+```sh
+cd deploy
+cp .env.example .env      # then fill in PANEL_ADMIN_PASSWORD
+docker compose -f docker-compose.ghcr.yml pull
+docker compose -f docker-compose.ghcr.yml up -d
+```
+
+It defaults to `ghcr.io/senhao-xu/vps-node-panel:latest` (override with `PANEL_IMAGE`). If the package is private, log in first with a PAT that has `read:packages`: `echo $GITHUB_TOKEN | docker login ghcr.io -u <username> --password-stdin`.
+
 `PANEL_APP_KEY` is optional: without it the panel generates a random key on first boot and stores it in the database (`settings` table). Note the security trade-off: the key then lives next to the data it protects, so a stolen database can be decrypted; set an explicit key if that matters, and either way back up the `panel-data` volume — the key encrypts node secrets at rest. TLS terminates in a reverse proxy; a commented Caddy example is included in `deploy/docker-compose.yml` (the panel itself serves plain HTTP on :8080 only).
 
 ### Run: Agent on a node server
