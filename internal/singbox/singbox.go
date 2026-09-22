@@ -178,6 +178,7 @@ func renderVLESS(n Node) (map[string]any, error) {
 	users := make([]map[string]any, 0, len(n.Users))
 	for _, u := range n.Users {
 		users = append(users, map[string]any{
+			"name": "u-" + strconv.FormatInt(u.ID, 10),
 			"uuid": u.UUID,
 			"flow": "xtls-rprx-vision",
 		})
@@ -207,7 +208,10 @@ func renderHysteria2(n Node) (map[string]any, error) {
 	privateKey := SettingString(n.Secret, "private_key")
 	users := make([]map[string]any, 0, len(n.Users))
 	for _, u := range n.Users {
-		users = append(users, map[string]any{"password": u.UUID})
+		users = append(users, map[string]any{
+			"name":     "u-" + strconv.FormatInt(u.ID, 10),
+			"password": u.UUID,
+		})
 	}
 	tls := map[string]any{"enabled": true}
 	if serverName != "" && certificate != "" && privateKey != "" {

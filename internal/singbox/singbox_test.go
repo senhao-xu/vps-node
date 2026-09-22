@@ -141,8 +141,8 @@ func TestRenderVLESSReality(t *testing.T) {
 	if len(users) != 2 {
 		t.Fatalf("expected 2 users, got %d", len(users))
 	}
-	if users[0]["uuid"] != "uuid-1" || users[0]["flow"] != "xtls-rprx-vision" {
-		t.Fatalf("unexpected vless user: %+v", users[0])
+	if users[0]["name"] != "u-1" || users[0]["uuid"] != "uuid-1" || users[0]["flow"] != "xtls-rprx-vision" {
+		t.Fatalf("vless users must carry u-<id> name for traffic attribution, got %+v", users[0])
 	}
 	tlsMap := inbound["tls"].(map[string]any)
 	if tlsMap["enabled"] != true || tlsMap["server_name"] != "example.com" {
@@ -229,8 +229,8 @@ func TestRenderHysteria2(t *testing.T) {
 		t.Fatalf("unexpected bandwidth: %+v", inbound)
 	}
 	users := inbound["users"].([]map[string]any)
-	if len(users) != 1 || users[0]["password"] != "uuid-1" {
-		t.Fatalf("hysteria2 users must use uuid as password, got %+v", users)
+	if len(users) != 1 || users[0]["name"] != "u-1" || users[0]["password"] != "uuid-1" {
+		t.Fatalf("hysteria2 users must use uuid as password with u-<id> name, got %+v", users)
 	}
 	tlsMap := inbound["tls"].(map[string]any)
 	if tlsMap["enabled"] != true {
