@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { updateUser } from '@/api/users'
 import { errorMessage } from '@/api/http'
 import type { UserDetail } from '@/api/types'
+import ErrorBanner from '@/components/ErrorBanner.vue'
 import { formatDate, formatRemaining, isoToLocalInput, localInputToIso } from '@/utils/format'
 
 const props = defineProps<{
@@ -27,6 +28,16 @@ watch(editing, (editingNow) => {
 })
 
 const remaining = computed(() => formatRemaining(props.user.expires_at))
+
+const remainingTone = computed<'normal' | 'warning' | 'danger'>(() => {
+  if (!props.user.expires_at) return 'normal'
+  const time = new Date(props.user.expires_at).getTime()
+  if (Number.isNaN(time)) return 'normal'
+  const diff = time - Date.now()
+  if (diff <= 0) return 'danger'
+  if (diff <= 3 * 24 * 3600 * 1000) return 'warning'
+  return 'normal'
+})
 
 async function save() {
   const iso = noExpiry.value ? null : localInputToIso(expiresInput.value)
@@ -62,27 +73,30 @@ async function save() {
         {{ editing ? '取消编辑' : '修改到期时间' }}
       </button>
     </div>
-    <p
-      v-if="error"
-      class="text-danger form-error"
-    >
-      {{ error }}
-    </p>
+    <ErrorBanner
+      :message="error"
+      @dismiss="error = ''"
+    />
 
     <div
       v-if="!editing"
       class="expiry-view"
     >
-      <div class="expiry-row">
-        <span class="text-secondary">开始时间</span>
-        <span>{{ props.user.started_at ? formatDate(props.user.started_at) : '—' }}</span>
+      <div
+        class="expiry-headline"
+        :class="remainingTone"
+      >
+        {{ remaining }}
       </div>
-      <div class="expiry-row">
-        <span class="text-secondary">到期时间</span>
-        <span>
-          {{ props.user.expires_at ? formatDate(props.user.expires_at) : '永不过期' }}
-          <span class="text-secondary remaining">（{{ remaining }}）</span>
-        </span>
+      <div class="expiry-rows">
+        <div class="expiry-row">
+          <span class="expiry-label text-secondary">开始时间</span>
+          <span>{{ props.user.started_at ? formatDate(props.user.started_at) : '—' }}</span>
+        </div>
+        <div class="expiry-row">
+          <span class="expiry-label text-secondary">到期时间</span>
+          <span>{{ props.user.expires_at ? formatDate(props.user.expires_at) : '—' }}</span>
+        </div>
       </div>
     </div>
 
@@ -115,36 +129,51 @@ async function save() {
 </template>
 
 <style scoped>
-.card-head {
+.card {
+  --card-padding: var(--spacing-md);
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-md);
-}
-
-.card-head .card-title {
-  margin-bottom: 0;
-}
-
-.form-error {
-  margin: var(--spacing-sm) 0;
-  font-size: var(--font-size-sm);
+  flex-direction: column;
 }
 
 .expiry-view {
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: var(--spacing-sm);
   margin-top: var(--spacing-md);
 }
 
-.expiry-row {
-  display: flex;
-  gap: var(--spacing-md);
+.expiry-headline {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  line-height: 1.2;
 }
 
-.remaining {
+.expiry-headline.warning {
+  color: var(--color-warning);
+}
+
+.expiry-headline.danger {
+  color: var(--color-danger);
+}
+
+.expiry-rows {
+  margin-top: auto;
+  padding-top: var(--spacing-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.expiry-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
   font-size: var(--font-size-sm);
+}
+
+.expiry-label {
+  flex: 0 0 72px;
 }
 
 .expiry-editor {
@@ -156,8 +185,7 @@ async function save() {
 }
 
 @media (max-width: 560px) {
-  .card-head,
-  .expiry-row {
+  .card-head {
     align-items: flex-start;
     flex-direction: column;
   }

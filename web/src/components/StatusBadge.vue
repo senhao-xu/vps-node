@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { Tone } from '@/utils/labels'
 
 const props = defineProps<{
@@ -6,7 +7,7 @@ const props = defineProps<{
   tone?: Tone
 }>()
 
-const toneClass = props.tone ?? 'muted'
+const toneClass = computed(() => props.tone ?? 'muted')
 </script>
 
 <template>

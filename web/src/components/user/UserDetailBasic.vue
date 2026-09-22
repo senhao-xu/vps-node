@@ -5,8 +5,11 @@ import { errorMessage } from '@/api/http'
 import type { UserDetail, UserStatus, Subscription } from '@/api/types'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import CopyText from '@/components/CopyText.vue'
+import ErrorBanner from '@/components/ErrorBanner.vue'
 import OneTimeSecret from '@/components/OneTimeSecret.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
+import LoadingSpinner from '@/components/ui/LoadingSpinner.vue'
+import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
 import { formatDateTime } from '@/utils/format'
 import { displayUserStatus } from '@/utils/labels'
 
@@ -33,6 +36,7 @@ const showResetTokenConfirm = ref(false)
 const resettingToken = ref(false)
 const showExpireConfirm = ref(false)
 const expiring = ref(false)
+const showRotateConfirm = ref(false)
 
 const usernamePattern = /^[A-Za-z0-9_.-]{1,64}$/
 
@@ -55,13 +59,11 @@ async function provisionSubscription() {
 }
 
 async function rotateSubscription() {
-  if (!window.confirm('轮换后旧订阅链接将立即失效，确定继续吗？')) return
   rotatingSubscription.value = true
-  try { subscription.value = await rotateUserSubscription(props.user.id) } catch (err) { error.value = errorMessage(err) } finally { rotatingSubscription.value = false }
-}
-
-async function copySubscription() {
-  if (subscription.value.url) await navigator.clipboard.writeText(subscription.value.url)
+  try {
+    subscription.value = await rotateUserSubscription(props.user.id)
+    showRotateConfirm.value = false
+  } catch (err) { error.value = errorMessage(err) } finally { rotatingSubscription.value = false }
 }
 
 watch(
@@ -96,14 +98,17 @@ async function saveUsername() {
   }
 }
 
-async function saveStatus() {
-  if (statusDraft.value === props.user.status) return
+async function saveStatus(enabled: boolean) {
+  const next: UserStatus = enabled ? 'active' : 'disabled'
+  if (next === props.user.status) return
+  statusDraft.value = next
   savingStatus.value = true
   error.value = ''
   try {
-    const updated = await updateUser(props.user.id, { status: statusDraft.value })
+    const updated = await updateUser(props.user.id, { status: next })
     emit('updated', updated)
   } catch (err) {
+    statusDraft.value = props.user.status === 'disabled' ? 'disabled' : 'active'
     error.value = errorMessage(err)
   } finally {
     savingStatus.value = false
@@ -144,38 +149,30 @@ async function expireNow() {
     <h2 class="card-title">
       基本信息
     </h2>
-    <p
-      v-if="error"
-      class="text-danger form-error"
-    >
-      {{ error }}
-    </p>
-    <div class="info-item token-item">
+    <ErrorBanner
+      :message="error"
+      @dismiss="error = ''"
+    />
+    <div class="info-item subscription-item">
       <span class="info-label">订阅链接</span>
-      <span v-if="loadingSubscription">加载中…</span>
+      <span v-if="loadingSubscription">
+        <LoadingSpinner size="sm" />
+      </span>
       <span
         v-else-if="subscription.url"
-        class="status-row"
+        class="subscription-row"
       >
-        <input
-          class="mono"
-          readonly
-          :value="subscription.url"
-        >
+        <CopyText
+          class="mono subscription-url"
+          :text="subscription.url"
+        />
         <button
           type="button"
-          class="btn small"
-          @click="copySubscription"
-        >
-          复制
-        </button>
-        <button
-          type="button"
-          class="btn secondary small"
+          class="btn link small"
           :disabled="rotatingSubscription"
-          @click="rotateSubscription"
+          @click="showRotateConfirm = true"
         >
-          轮换
+          {{ rotatingSubscription ? '轮换中…' : '轮换' }}
         </button>
       </span>
       <button
@@ -248,14 +245,12 @@ async function expireNow() {
         <span class="info-label">状态</span>
         <span class="status-row">
           <StatusBadge v-bind="status" />
-          <select
-            v-model="statusDraft"
+          <ToggleSwitch
+            :model-value="statusDraft === 'active'"
             :disabled="savingStatus"
-            @change="saveStatus"
-          >
-            <option value="active">正常</option>
-            <option value="disabled">禁用</option>
-          </select>
+            label="启用用户"
+            @update:model-value="saveStatus"
+          />
         </span>
       </div>
       <div class="info-item">
@@ -321,36 +316,41 @@ async function expireNow() {
       @cancel="showExpireConfirm = false"
       @confirm="expireNow"
     />
+
+    <ConfirmDialog
+      :open="showRotateConfirm"
+      title="轮换订阅链接"
+      message="轮换后旧订阅链接将立即失效，确定继续吗？"
+      confirm-text="轮换"
+      :loading="rotatingSubscription"
+      @cancel="showRotateConfirm = false"
+      @confirm="rotateSubscription"
+    />
   </div>
 </template>
 
 <style scoped>
-.form-error {
-  margin: 0 0 var(--spacing-sm);
-  font-size: var(--font-size-sm);
+.subscription-item {
+  margin-bottom: var(--spacing-lg);
 }
 
-.info-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: var(--spacing-md) var(--spacing-lg);
-}
-
-.info-item {
+.subscription-row {
   display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xs);
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
-.info-label {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
+.subscription-url {
+  max-width: min(480px, 100%);
 }
 
 .status-row {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
+  flex-wrap: wrap;
 }
 
 .actions-row {

@@ -4,6 +4,7 @@ import { getUserSessions } from '@/api/users'
 import { errorMessage } from '@/api/http'
 import type { NodeBrief, Server, Session } from '@/api/types'
 import DataTable, { type Column } from '@/components/DataTable.vue'
+import ErrorBanner from '@/components/ErrorBanner.vue'
 import { formatBytes, formatDateTime, formatRelative } from '@/utils/format'
 import { buildNameMap, lookupName } from '@/utils/names'
 
@@ -63,15 +64,14 @@ onMounted(() => {
         刷新
       </button>
     </div>
-    <p
-      v-if="error"
-      class="text-danger form-error"
-    >
-      {{ error }}
-    </p>
+    <ErrorBanner
+      :message="error"
+      @dismiss="error = ''"
+    />
     <DataTable
       :columns="columns"
       :rows="items"
+      :row-key="(row) => `${row.node_id}-${row.ip}-${row.connected_at}`"
       :loading="loading"
     >
       <template #cell-node="{ row }">
@@ -104,22 +104,6 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.card-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-md);
-}
-
-.card-head .card-title {
-  margin-bottom: 0;
-}
-
-.form-error {
-  margin: 0 0 var(--spacing-sm);
-  font-size: var(--font-size-sm);
-}
-
 @media (max-width: 560px) {
   .card-head {
     align-items: flex-start;

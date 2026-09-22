@@ -3,6 +3,7 @@ import { ref, watch } from 'vue'
 import { putUserNodes } from '@/api/users'
 import { errorMessage } from '@/api/http'
 import type { NodeBrief, Server } from '@/api/types'
+import ErrorBanner from '@/components/ErrorBanner.vue'
 import NodeChecklist from '@/components/NodeChecklist.vue'
 
 const props = defineProps<{
@@ -63,29 +64,29 @@ async function save() {
       <h2 class="card-title">
         节点授权
       </h2>
-      <span
-        v-if="savedTip"
-        class="saved-tip"
-      >已保存</span>
-      <button
-        type="button"
-        class="btn small"
-        :disabled="!dirty || saving"
-        :title="dirty ? '' : '勾选变化后可保存'"
-        @click="save"
-      >
-        {{ saving ? '保存中…' : '保存授权' }}
-      </button>
+      <div class="head-actions">
+        <span
+          v-if="savedTip"
+          class="saved-tip"
+        >已保存</span>
+        <button
+          type="button"
+          class="btn small"
+          :disabled="!dirty || saving"
+          :title="dirty ? '' : '勾选变化后可保存'"
+          @click="save"
+        >
+          {{ saving ? '保存中…' : '保存授权' }}
+        </button>
+      </div>
     </div>
     <p class="text-secondary tip">
       用户只能使用被授权的节点；保存后立即生效，Agent 将在下次同步时应用。
     </p>
-    <p
-      v-if="error"
-      class="text-danger form-error"
-    >
-      {{ error }}
-    </p>
+    <ErrorBanner
+      :message="error"
+      @dismiss="error = ''"
+    />
     <NodeChecklist
       :nodes="props.nodes"
       :servers="props.servers"
@@ -96,15 +97,11 @@ async function save() {
 </template>
 
 <style scoped>
-.card-head {
+.head-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-md);
-}
-
-.card-head .card-title {
-  margin-bottom: 0;
+  gap: var(--spacing-sm);
+  margin-left: auto;
 }
 
 .saved-tip {
@@ -117,15 +114,14 @@ async function save() {
   font-size: var(--font-size-sm);
 }
 
-.form-error {
-  margin: 0 0 var(--spacing-sm);
-  font-size: var(--font-size-sm);
-}
-
 @media (max-width: 560px) {
   .card-head {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .head-actions {
+    margin-left: 0;
   }
 }
 </style>

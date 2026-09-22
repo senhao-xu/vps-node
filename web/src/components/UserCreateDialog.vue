@@ -12,6 +12,8 @@ import ModalDialog from '@/components/ModalDialog.vue'
 import NodeChecklist from '@/components/NodeChecklist.vue'
 import OneTimeSecret from '@/components/OneTimeSecret.vue'
 import CopyText from '@/components/CopyText.vue'
+import LoadingSpinner from '@/components/ui/LoadingSpinner.vue'
+import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
 
 const props = defineProps<{
   open: boolean
@@ -115,6 +117,7 @@ async function submit() {
   <ModalDialog
     :open="props.open"
     :title="created ? '用户创建成功' : '创建用户'"
+    :subtitle="created ? undefined : '创建用户并分配节点授权，Token 仅显示一次'"
     :width="560"
     @close="emit('close')"
   >
@@ -159,34 +162,38 @@ async function submit() {
         </div>
         <div class="field">
           <label>流量额度</label>
-          <div class="quota-row">
-            <label class="checkbox-label">
-              <input
-                v-model="unlimited"
-                type="checkbox"
-              >
-              不限流量
-            </label>
-            <template v-if="!unlimited">
-              <input
-                v-model.number="quotaValue"
-                type="number"
-                min="0"
-                step="any"
-                placeholder="额度"
-              >
-              <select v-model="quotaUnit">
-                <option value="MB">
-                  MB
-                </option>
-                <option value="GB">
-                  GB
-                </option>
-                <option value="TB">
-                  TB
-                </option>
-              </select>
-            </template>
+          <div class="toggle-row">
+            <div class="toggle-row-text">
+              <span class="toggle-row-label">不限流量</span>
+              <span class="toggle-row-desc">关闭后可设置流量配额</span>
+            </div>
+            <ToggleSwitch
+              v-model="unlimited"
+              label="不限流量"
+            />
+          </div>
+          <div
+            v-if="!unlimited"
+            class="quota-row"
+          >
+            <input
+              v-model.number="quotaValue"
+              type="number"
+              min="0"
+              step="any"
+              placeholder="额度"
+            >
+            <select v-model="quotaUnit">
+              <option value="MB">
+                MB
+              </option>
+              <option value="GB">
+                GB
+              </option>
+              <option value="TB">
+                TB
+              </option>
+            </select>
           </div>
         </div>
         <div class="form-row">
@@ -237,9 +244,14 @@ async function submit() {
         <button
           type="button"
           class="btn"
+          :class="{ 'is-loading': submitting }"
           :disabled="submitting"
           @click="submit"
         >
+          <LoadingSpinner
+            v-if="submitting"
+            size="sm"
+          />
           {{ submitting ? '创建中…' : '创建' }}
         </button>
       </template>

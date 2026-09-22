@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { copyText } from '@/utils/clipboard'
+import { useCopyFeedback } from '@/utils/clipboard'
 
 const props = defineProps<{
   label: string
@@ -8,11 +7,10 @@ const props = defineProps<{
   hint?: string
 }>()
 
-const copied = ref(false)
+const { copied, copy } = useCopyFeedback()
 
-async function copy() {
-  const ok = await copyText(props.value)
-  copied.value = ok
+async function onCopy() {
+  await copy(props.value)
 }
 </script>
 
@@ -26,7 +24,7 @@ async function copy() {
       <button
         type="button"
         class="btn small"
-        @click="copy"
+        @click="onCopy"
       >
         {{ copied ? '已复制' : '复制' }}
       </button>

@@ -1,47 +1,79 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { RouterLink } from 'vue-router'
+import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { Activity, Cpu, Plus, Server, ServerOff, Waypoints } from 'lucide-vue-next'
 import { deleteServer, listServers, updateServer } from '@/api/servers'
+import { getDashboard } from '@/api/dashboard'
 import { errorMessage } from '@/api/http'
-import type { Paged, Server, ServerStatus } from '@/api/types'
+import type { Dashboard, Paged, Server as ServerItem, ServerStatus } from '@/api/types'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import DataTable, { type Column } from '@/components/DataTable.vue'
 import ErrorBanner from '@/components/ErrorBanner.vue'
 import TablePaginator from '@/components/TablePaginator.vue'
 import ServerFormDialog from '@/components/ServerFormDialog.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
+import OverflowMenu, { type OverflowMenuItem } from '@/components/ui/OverflowMenu.vue'
+import PageHeader from '@/components/ui/PageHeader.vue'
+import StatCard from '@/components/ui/StatCard.vue'
 import { formatDateTime, formatRelative } from '@/utils/format'
 import { serverStatusInfo } from '@/utils/labels'
 
-const items = ref<Server[]>([])
+const router = useRouter()
+
+const items = ref<ServerItem[]>([])
 const total = ref(0)
 const page = ref(1)
 const pageSize = ref(20)
 const loading = ref(false)
 const error = ref('')
+const overview = ref<Dashboard | null>(null)
 
 const showCreate = ref(false)
-const editTarget = ref<Server | null>(null)
-const deleteTarget = ref<Server | null>(null)
+const editTarget = ref<ServerItem | null>(null)
+const deleteTarget = ref<ServerItem | null>(null)
 const deleting = ref(false)
 const statusUpdatingId = ref<number | null>(null)
 
 const columns: Column[] = [
-  { key: 'name', label: '名称', width: '150px' },
-  { key: 'address', label: '地址' },
-  { key: 'status', label: '状态', width: '80px' },
-  { key: 'agent_version', label: 'Agent 版本', width: '100px' },
-  { key: 'last_seen_at', label: '最后心跳', width: '130px' },
-  { key: 'node_count', label: '节点数', align: 'right', width: '70px' },
-  { key: 'online_users', label: '在线用户', align: 'right', width: '80px' },
-  { key: 'actions', label: '操作', width: '150px' },
+  { key: 'name', label: '名称', width: '140px' },
+  { key: 'address', label: '地址', width: '200px' },
+  { key: 'status', label: '状态', width: '72px' },
+  { key: 'agent_version', label: 'Agent 版本', width: '84px' },
+  { key: 'last_seen_at', label: '最后心跳', width: '110px' },
+  { key: 'node_count', label: '节点数', align: 'right', width: '56px' },
+  { key: 'online_users', label: '在线用户', align: 'right', width: '64px' },
+  { key: 'actions', label: '', width: '48px' },
 ]
+
+const offlineCount = computed(() =>
+  overview.value ? Math.max(0, overview.value.servers_total - overview.value.servers_online) : 0,
+)
+
+const hotCount = computed(
+  () => items.value.filter((server) => server.cpu_percent >= 80).length,
+)
+
+const nodeTotal = computed(() =>
+  items.value.reduce((sum, server) => sum + server.node_count, 0),
+)
+
+function rowActions(row: ServerItem): OverflowMenuItem[] {
+  return [
+    { label: '详情', onSelect: () => void router.push(`/servers/${row.id}`) },
+    { label: '编辑', onSelect: () => (editTarget.value = row) },
+    {
+      label: row.status === 'disabled' ? '启用' : '禁用',
+      onSelect: () => void toggleStatus(row),
+    },
+    { label: '删除', danger: true, onSelect: () => (deleteTarget.value = row) },
+  ]
+}
 
 async function load() {
   loading.value = true
   error.value = ''
   try {
-    const result: Paged<Server> = await listServers({ page: page.value, pageSize: pageSize.value })
+    const result: Paged<ServerItem> = await listServers({ page: page.value, pageSize: pageSize.value })
     items.value = result.items
     total.value = result.total
     if (result.items.length === 0 && result.total > 0 && page.value > 1) {
@@ -55,13 +87,21 @@ async function load() {
   }
 }
 
+async function loadOverview() {
+  try {
+    overview.value = await getDashboard()
+  } catch {
+    overview.value = null
+  }
+}
+
 function onPageChange(nextPage: number, nextSize: number) {
   page.value = nextPage
   pageSize.value = nextSize
   void load()
 }
 
-async function toggleStatus(server: Server) {
+async function toggleStatus(server: ServerItem) {
   const next: ServerStatus = server.status === 'disabled' ? 'active' : 'disabled'
   statusUpdatingId.value = server.id
   error.value = ''
@@ -93,41 +133,86 @@ async function confirmDelete() {
 
 onMounted(() => {
   void load()
+  void loadOverview()
 })
 </script>
 
 <template>
   <section class="page">
-    <div class="page-header">
-      <div>
-        <p class="eyebrow">
-          INFRASTRUCTURE
-        </p>
-        <h1 class="page-title">
-          服务器
-        </h1>
-      </div>
-      <button
-        type="button"
-        class="btn"
-        @click="showCreate = true"
-      >
-        创建服务器
-      </button>
-    </div>
+    <PageHeader
+      title="服务器"
+      :subtitle="`共 ${total} 台服务器`"
+    >
+      <template #actions>
+        <button
+          type="button"
+          class="btn"
+          @click="showCreate = true"
+        >
+          <Plus :size="15" />
+          创建服务器
+        </button>
+      </template>
+    </PageHeader>
     <ErrorBanner
       :message="error"
       @dismiss="error = ''"
     />
 
-    <div class="card">
-      <div class="toolbar-label">
-        服务器目录 <span>{{ total }} 台服务器</span>
+    <div
+      v-if="overview"
+      class="stat-grid"
+    >
+      <StatCard
+        label="服务器总数"
+        :value="overview.servers_total"
+        :icon="Server"
+      />
+      <StatCard
+        label="在线"
+        :value="overview.servers_online"
+        :icon="Activity"
+        tone="success"
+      />
+      <StatCard
+        label="离线"
+        :value="offlineCount"
+        :icon="ServerOff"
+        :tone="offlineCount > 0 ? 'danger' : 'default'"
+      />
+      <StatCard
+        label="高负载（CPU ≥ 80%）"
+        :value="hotCount"
+        :icon="Cpu"
+        :tone="hotCount > 0 ? 'warning' : 'default'"
+      />
+      <StatCard
+        label="节点数"
+        :value="nodeTotal"
+        :icon="Waypoints"
+      />
+    </div>
+    <div
+      v-else
+      class="stat-grid"
+    >
+      <div
+        v-for="n in 5"
+        :key="n"
+        class="card stat-skeleton"
+      >
+        <span class="skeleton skeleton-line" />
+        <span class="skeleton skeleton-value" />
       </div>
+    </div>
+
+    <div class="card table-card">
       <DataTable
         :columns="columns"
         :rows="items"
+        :row-key="(row) => row.id"
         :loading="loading"
+        :total-count="total"
       >
         <template #cell-name="{ row }">
           <RouterLink :to="`/servers/${row.id}`">
@@ -154,30 +239,13 @@ onMounted(() => {
           >从未</span>
         </template>
         <template #cell-actions="{ row }">
-          <span class="actions">
-            <RouterLink :to="`/servers/${row.id}`">详情</RouterLink>
-            <button
-              type="button"
-              class="btn link"
-              @click="editTarget = row"
-            >编辑</button>
-            <button
-              type="button"
-              class="btn link"
-              :disabled="statusUpdatingId === row.id"
-              @click="toggleStatus(row)"
-            >
-              {{ row.status === 'disabled' ? '启用' : '禁用' }}
-            </button>
-            <button
-              type="button"
-              class="btn link"
-              @click="deleteTarget = row"
-            >删除</button>
-          </span>
+          <OverflowMenu
+            :items="rowActions(row)"
+            :label="`服务器 ${row.name} 的操作`"
+          />
         </template>
         <template #empty>
-          {{ loading ? '加载中…' : '还没有服务器，点击右上角创建' }}
+          还没有服务器，点击右上角创建
         </template>
       </DataTable>
 
@@ -215,36 +283,37 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.eyebrow {
-  margin: 0 0 var(--spacing-xs);
-  color: var(--color-primary);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--spacing-md);
 }
 
-.toolbar-label {
+.stat-skeleton {
   display: flex;
-  justify-content: space-between;
-  margin-bottom: var(--spacing-md);
-  color: var(--color-text);
-  font-weight: 600;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  min-height: 96px;
 }
 
-.toolbar-label span {
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
-  font-weight: 400;
+.skeleton-line {
+  display: block;
+  height: 12px;
+  width: 40%;
+}
+
+.skeleton-value {
+  display: block;
+  height: 24px;
+  width: 60%;
+}
+
+.table-card {
+  margin-top: var(--spacing-md);
 }
 
 .heartbeat {
   display: block;
   font-size: var(--font-size-sm);
-}
-
-.actions {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-sm);
 }
 </style>

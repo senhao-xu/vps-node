@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
+import { Activity, ArrowDownUp, ChevronRight, Server, UserCheck, Users } from 'lucide-vue-next'
 import { getDashboard, getDashboardUserTraffic } from '@/api/dashboard'
 import { errorMessage } from '@/api/http'
 import type {
@@ -8,9 +9,12 @@ import type {
   DashboardUserTrafficItem,
   DashboardUserTrafficRange,
 } from '@/api/types'
+import DataTable, { type Column } from '@/components/DataTable.vue'
 import ErrorBanner from '@/components/ErrorBanner.vue'
 import ProgressBar from '@/components/ProgressBar.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
+import PageHeader from '@/components/ui/PageHeader.vue'
+import StatCard from '@/components/ui/StatCard.vue'
 import { formatBytes } from '@/utils/format'
 import { userStatusInfo } from '@/utils/labels'
 
@@ -24,6 +28,16 @@ const trafficLoading = ref(false)
 const expandedUsers = ref<Set<number>>(new Set())
 
 let timer: ReturnType<typeof setInterval> | null = null
+
+const trafficColumns: Column[] = [
+  { key: 'username', label: '用户' },
+  { key: 'status', label: '状态', width: '80px' },
+  { key: 'upload_bytes', label: '上传', align: 'right', width: '110px' },
+  { key: 'download_bytes', label: '下载', align: 'right', width: '110px' },
+  { key: 'total_bytes', label: '合计', align: 'right', width: '110px' },
+  { key: 'quota', label: '配额使用', width: '200px' },
+  { key: 'expand', label: '', width: '40px' },
+]
 
 async function loadTraffic() {
   trafficLoading.value = true
@@ -67,6 +81,10 @@ function toggleExpand(userId: number) {
   expandedUsers.value = next
 }
 
+function onRowClick(item: DashboardUserTrafficItem) {
+  toggleExpand(item.user_id)
+}
+
 function quotaPercent(item: DashboardUserTrafficItem): number {
   if (item.quota_bytes <= 0) return 0
   return Math.min(100, (item.total_bytes / item.quota_bytes) * 100)
@@ -87,47 +105,25 @@ onMounted(() => {
 onUnmounted(() => {
   if (timer) clearInterval(timer)
 })
-
-interface StatCard {
-  label: string
-  value: string
-}
-
-function toCards(data: Dashboard): StatCard[] {
-  return [
-    { label: '用户总数', value: String(data.users_total) },
-    { label: '在线用户', value: String(data.users_online) },
-    { label: 'Server 总数', value: String(data.servers_total) },
-    { label: '在线 Server', value: String(data.servers_online) },
-    { label: '今日流量', value: formatBytes(data.traffic_today_bytes) },
-    { label: '当前连接数', value: String(data.sessions_current) },
-  ]
-}
 </script>
 
 <template>
   <section class="page">
-    <div class="page-header dashboard-header">
-      <div>
-        <p class="eyebrow">
-          OPERATIONS OVERVIEW
-        </p>
-        <h1 class="page-title">
-          仪表盘
-        </h1>
-        <p class="page-intro">
-          实时掌握用户、节点与系统连接健康状态。
-        </p>
-      </div>
-      <span
-        v-if="stats"
-        class="health-pill"
-        :class="{ attention: stats.servers_online < stats.servers_total }"
-      >
-        <i />
-        {{ stats.servers_online === stats.servers_total ? '系统运行正常' : '有服务器需要关注' }}
-      </span>
-    </div>
+    <PageHeader
+      title="仪表盘"
+      subtitle="实时掌握用户、节点与系统连接健康状态"
+    >
+      <template #actions>
+        <span
+          v-if="stats"
+          class="health-pill"
+          :class="{ attention: stats.servers_online < stats.servers_total }"
+        >
+          <i />
+          {{ stats.servers_online === stats.servers_total ? '系统运行正常' : '有服务器需要关注' }}
+        </span>
+      </template>
+    </PageHeader>
     <ErrorBanner
       :message="error"
       @dismiss="error = ''"
@@ -136,38 +132,58 @@ function toCards(data: Dashboard): StatCard[] {
       v-if="stats"
       class="stat-grid"
     >
-      <div
-        v-for="card in toCards(stats)"
-        :key="card.label"
-        class="card stat-card"
-        :class="{ priority: card.label === '在线 Server' || card.label === '当前连接数' }"
-      >
-        <div class="stat-label">
-          {{ card.label }}
-        </div>
-        <div class="stat-value">
-          {{ card.value }}
-        </div>
-      </div>
+      <StatCard
+        label="用户总数"
+        :value="stats.users_total"
+        :icon="Users"
+      />
+      <StatCard
+        label="在线用户"
+        :value="stats.users_online"
+        :icon="UserCheck"
+        tone="success"
+      />
+      <StatCard
+        label="Server 总数"
+        :value="stats.servers_total"
+        :icon="Server"
+      />
+      <StatCard
+        label="在线 Server"
+        :value="stats.servers_online"
+        :icon="Activity"
+        :tone="stats.servers_online < stats.servers_total ? 'warning' : 'success'"
+      />
+      <StatCard
+        label="今日流量"
+        :value="formatBytes(stats.traffic_today_bytes)"
+        :icon="ArrowDownUp"
+      />
+      <StatCard
+        label="当前连接数"
+        :value="stats.sessions_current"
+        :icon="Activity"
+      />
     </div>
     <div
       v-else-if="loading"
-      class="empty-tip"
+      class="stat-grid"
     >
-      加载中…
+      <div
+        v-for="n in 6"
+        :key="n"
+        class="card stat-skeleton"
+      >
+        <span class="skeleton skeleton-line" />
+        <span class="skeleton skeleton-value" />
+      </div>
     </div>
-    <p
-      v-else-if="!error"
-      class="empty-tip"
-    >
-      暂无数据
-    </p>
 
     <div class="card traffic-card">
       <div class="traffic-header">
-        <div class="toolbar-label">
+        <h2 class="card-title traffic-title">
           用户流量 <span>{{ trafficRange === 'today' ? '今日（UTC 0 点起）' : '累计' }}</span>
-        </div>
+        </h2>
         <div
           class="range-switch"
           role="group"
@@ -192,145 +208,110 @@ function toCards(data: Dashboard): StatCard[] {
         </div>
       </div>
 
-      <div class="traffic-table-wrap">
-        <table class="traffic-table">
-          <thead>
-            <tr>
-              <th>用户</th>
-              <th>状态</th>
-              <th class="num">
-                上传
-              </th>
-              <th class="num">
-                下载
-              </th>
-              <th class="num">
-                合计
-              </th>
-              <th>配额使用</th>
-              <th class="expand-col" />
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="trafficLoading && !traffic">
-              <td
-                colspan="7"
+      <DataTable
+        :columns="trafficColumns"
+        :rows="traffic?.items ?? []"
+        :row-key="(row) => row.user_id"
+        :loading="trafficLoading"
+        @row-click="onRowClick"
+      >
+        <template #cell-username="{ row }">
+          <span class="username">{{ row.username }}</span>
+          <span class="text-secondary user-id">#{{ row.user_id }}</span>
+        </template>
+        <template #cell-status="{ row }">
+          <StatusBadge v-bind="userStatusInfo(row.status)" />
+        </template>
+        <template #cell-upload_bytes="{ row }">
+          {{ formatBytes(row.upload_bytes) }}
+        </template>
+        <template #cell-download_bytes="{ row }">
+          {{ formatBytes(row.download_bytes) }}
+        </template>
+        <template #cell-total_bytes="{ row }">
+          {{ formatBytes(row.total_bytes) }}
+        </template>
+        <template #cell-quota="{ row }">
+          <div class="quota-cell">
+            <span class="quota-text">{{ quotaText(row) }}</span>
+            <ProgressBar
+              :percent="quotaPercent(row)"
+              compact
+            />
+          </div>
+        </template>
+        <template #cell-expand="{ row }">
+          <button
+            type="button"
+            class="expand-btn"
+            :aria-expanded="expandedUsers.has(row.user_id)"
+            :aria-label="`展开 ${row.username} 的节点明细`"
+            @click.stop="toggleExpand(row.user_id)"
+          >
+            <ChevronRight
+              :size="15"
+              class="chevron"
+              :class="{ open: expandedUsers.has(row.user_id) }"
+            />
+          </button>
+        </template>
+        <template #row-extra="{ row, colspan }">
+          <tr
+            v-if="expandedUsers.has(row.user_id)"
+            class="detail-row"
+          >
+            <td :colspan="colspan">
+              <p
+                v-if="row.nodes.length === 0"
                 class="empty-tip"
               >
-                加载中…
-              </td>
-            </tr>
-            <tr v-else-if="!traffic || traffic.items.length === 0">
-              <td
-                colspan="7"
-                class="empty-tip"
+                该范围内无流量记录
+              </p>
+              <table
+                v-else
+                class="node-table"
               >
-                暂无用户
-              </td>
-            </tr>
-            <template
-              v-for="item in traffic?.items ?? []"
-              :key="item.user_id"
-            >
-              <tr
-                class="user-row"
-                @click="toggleExpand(item.user_id)"
-              >
-                <td>
-                  <span class="username">{{ item.username }}</span>
-                  <span class="text-secondary user-id">#{{ item.user_id }}</span>
-                </td>
-                <td>
-                  <StatusBadge v-bind="userStatusInfo(item.status)" />
-                </td>
-                <td class="num">
-                  {{ formatBytes(item.upload_bytes) }}
-                </td>
-                <td class="num">
-                  {{ formatBytes(item.download_bytes) }}
-                </td>
-                <td class="num">
-                  {{ formatBytes(item.total_bytes) }}
-                </td>
-                <td>
-                  <div class="quota-cell">
-                    <span class="quota-text">{{ quotaText(item) }}</span>
-                    <ProgressBar
-                      :percent="quotaPercent(item)"
-                      compact
-                    />
-                  </div>
-                </td>
-                <td class="expand-col">
-                  <button
-                    type="button"
-                    class="expand-btn"
-                    :aria-expanded="expandedUsers.has(item.user_id)"
-                    :aria-label="`展开 ${item.username} 的节点明细`"
-                    @click.stop="toggleExpand(item.user_id)"
+                <thead>
+                  <tr>
+                    <th>节点</th>
+                    <th>所属服务器</th>
+                    <th class="num">
+                      上传
+                    </th>
+                    <th class="num">
+                      下载
+                    </th>
+                    <th class="num">
+                      合计
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="node in row.nodes"
+                    :key="node.node_id"
                   >
-                    <span
-                      class="chevron"
-                      :class="{ open: expandedUsers.has(item.user_id) }"
-                    >▸</span>
-                  </button>
-                </td>
-              </tr>
-              <tr
-                v-if="expandedUsers.has(item.user_id)"
-                class="detail-row"
-              >
-                <td colspan="7">
-                  <p
-                    v-if="item.nodes.length === 0"
-                    class="empty-tip"
-                  >
-                    该范围内无流量记录
-                  </p>
-                  <table
-                    v-else
-                    class="node-table"
-                  >
-                    <thead>
-                      <tr>
-                        <th>节点</th>
-                        <th>所属服务器</th>
-                        <th class="num">
-                          上传
-                        </th>
-                        <th class="num">
-                          下载
-                        </th>
-                        <th class="num">
-                          合计
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr
-                        v-for="node in item.nodes"
-                        :key="node.node_id"
-                      >
-                        <td>{{ node.node_name }}</td>
-                        <td>{{ node.server_name }}</td>
-                        <td class="num">
-                          {{ formatBytes(node.upload_bytes) }}
-                        </td>
-                        <td class="num">
-                          {{ formatBytes(node.download_bytes) }}
-                        </td>
-                        <td class="num">
-                          {{ formatBytes(node.total_bytes) }}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </td>
-              </tr>
-            </template>
-          </tbody>
-        </table>
-      </div>
+                    <td>{{ node.node_name }}</td>
+                    <td>{{ node.server_name }}</td>
+                    <td class="num">
+                      {{ formatBytes(node.upload_bytes) }}
+                    </td>
+                    <td class="num">
+                      {{ formatBytes(node.download_bytes) }}
+                    </td>
+                    <td class="num">
+                      {{ formatBytes(node.total_bytes) }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </td>
+          </tr>
+        </template>
+        <template #empty>
+          暂无用户流量数据
+        </template>
+      </DataTable>
     </div>
 
     <p class="text-secondary refresh-tip">
@@ -346,21 +327,23 @@ function toCards(data: Dashboard): StatCard[] {
   gap: var(--spacing-md);
 }
 
-.dashboard-header {
-  align-items: flex-end;
+.stat-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  min-height: 96px;
 }
 
-.eyebrow {
-  margin: 0 0 var(--spacing-xs);
-  color: var(--color-primary);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
+.skeleton-line {
+  display: block;
+  height: 12px;
+  width: 40%;
 }
 
-.page-intro {
-  margin: calc(var(--spacing-sm) * -1) 0 0;
-  color: var(--color-text-secondary);
+.skeleton-value {
+  display: block;
+  height: 24px;
+  width: 60%;
 }
 
 .health-pill {
@@ -393,41 +376,6 @@ function toCards(data: Dashboard): StatCard[] {
   background: var(--color-warning);
 }
 
-.stat-card {
-  position: relative;
-  min-height: 112px;
-  padding: var(--spacing-lg);
-  overflow: hidden;
-}
-
-.stat-card::after {
-  position: absolute;
-  top: var(--spacing-md);
-  right: var(--spacing-md);
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--color-primary-border);
-  box-shadow: 0 0 0 6px var(--color-primary-soft);
-  content: '';
-}
-
-.stat-card.priority {
-  border-top: 3px solid var(--color-primary);
-}
-
-.stat-label {
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
-}
-
-.stat-value {
-  font-size: var(--font-size-xl);
-  font-weight: 700;
-  letter-spacing: -0.025em;
-  margin-top: var(--spacing-sm);
-}
-
 .refresh-tip {
   font-size: var(--font-size-sm);
   margin-top: var(--spacing-md);
@@ -446,15 +394,15 @@ function toCards(data: Dashboard): StatCard[] {
   margin-bottom: var(--spacing-md);
 }
 
-.toolbar-label {
-  color: var(--color-text);
-  font-weight: 600;
+.traffic-title {
+  margin: 0;
 }
 
-.toolbar-label span {
+.traffic-title span {
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
   font-weight: 400;
+  margin-left: var(--spacing-xs);
 }
 
 .range-switch {
@@ -490,52 +438,7 @@ function toCards(data: Dashboard): StatCard[] {
   box-shadow: none;
 }
 
-.traffic-table-wrap {
-  overflow-x: auto;
-  margin: 0 calc(var(--spacing-md) * -1);
-  padding: 0 var(--spacing-md);
-  scrollbar-color: var(--color-border-strong) transparent;
-}
-
-.traffic-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: var(--font-size-md);
-  min-width: 760px;
-}
-
-.traffic-table th {
-  text-align: left;
-  font-weight: 600;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
-  padding: 10px var(--spacing-sm);
-  border-bottom: 1px solid var(--color-border);
-  white-space: nowrap;
-  background: var(--color-surface-muted);
-  letter-spacing: 0.02em;
-}
-
-.traffic-table td {
-  padding: 12px var(--spacing-sm);
-  border-bottom: 1px solid var(--color-border);
-  vertical-align: middle;
-}
-
-.traffic-table th.num,
-.traffic-table td.num {
-  text-align: right;
-}
-
-.traffic-table tbody .user-row:hover {
-  background: var(--color-table-hover);
-}
-
-.traffic-table tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.user-row {
+.traffic-card :deep(.data-table tbody tr) {
   cursor: pointer;
 }
 
@@ -559,11 +462,6 @@ function toCards(data: Dashboard): StatCard[] {
   font-size: var(--font-size-sm);
 }
 
-.expand-col {
-  width: 40px;
-  text-align: center;
-}
-
 .expand-btn {
   display: inline-flex;
   align-items: center;
@@ -584,7 +482,6 @@ function toCards(data: Dashboard): StatCard[] {
 }
 
 .chevron {
-  display: inline-block;
   transition: transform 0.15s ease;
 }
 

@@ -3,6 +3,8 @@ import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { errorMessage } from '@/api/http'
+import ErrorBanner from '@/components/ErrorBanner.vue'
+import LoadingSpinner from '@/components/ui/LoadingSpinner.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -40,7 +42,7 @@ async function submit() {
       @submit.prevent="submit"
     >
       <div class="login-brand">
-        <span>V</span> VPS NODE
+        <span class="brand-mark">V</span>
       </div>
       <h1 class="login-title">
         VPS Node 管理面板
@@ -48,12 +50,10 @@ async function submit() {
       <p class="text-secondary login-sub">
         请使用管理员账号登录
       </p>
-      <div
-        v-if="error"
-        class="login-error"
-      >
-        {{ error }}
-      </div>
+      <ErrorBanner
+        :message="error"
+        @dismiss="error = ''"
+      />
       <div class="field">
         <label for="login-username">用户名</label>
         <input
@@ -77,8 +77,13 @@ async function submit() {
       <button
         type="submit"
         class="btn"
+        :class="{ 'is-loading': submitting }"
         :disabled="submitting"
       >
+        <LoadingSpinner
+          v-if="submitting"
+          size="sm"
+        />
         {{ submitting ? '登录中…' : '登录' }}
       </button>
     </form>
@@ -96,12 +101,12 @@ async function submit() {
 }
 
 .login-form {
-  width: min(420px, 100%);
+  width: min(400px, 100%);
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
   padding: var(--spacing-xl);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-xl);
   box-shadow: var(--shadow-card);
 }
 
@@ -109,23 +114,18 @@ async function submit() {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: var(--spacing-sm);
-  color: var(--color-primary);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
 }
 
-.login-brand span {
+.brand-mark {
   display: inline-block;
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
   border-radius: var(--radius-sm);
   background: var(--color-primary);
   color: var(--color-on-primary);
-  font-size: 17px;
-  letter-spacing: 0;
-  line-height: 30px;
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 36px;
   text-align: center;
 }
 
@@ -139,15 +139,6 @@ async function submit() {
 .login-sub {
   margin: 0;
   text-align: center;
-  font-size: var(--font-size-sm);
-}
-
-.login-error {
-  background: var(--color-danger-soft);
-  border: 1px solid var(--color-danger-border);
-  color: var(--color-danger);
-  border-radius: var(--radius-sm);
-  padding: var(--spacing-xs) var(--spacing-sm);
   font-size: var(--font-size-sm);
 }
 </style>

@@ -4,6 +4,7 @@ import { getUserConnectionLogs } from '@/api/users'
 import { errorMessage } from '@/api/http'
 import type { ConnectionLog, NodeBrief, Paged, Server } from '@/api/types'
 import DataTable, { type Column } from '@/components/DataTable.vue'
+import ErrorBanner from '@/components/ErrorBanner.vue'
 import TablePaginator from '@/components/TablePaginator.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import { formatBytes, formatDateTime, localInputToIso } from '@/utils/format'
@@ -99,12 +100,10 @@ onMounted(() => {
     <h2 class="card-title">
       连接日志
     </h2>
-    <p
-      v-if="error"
-      class="text-danger form-error"
-    >
-      {{ error }}
-    </p>
+    <ErrorBanner
+      :message="error"
+      @dismiss="error = ''"
+    />
     <div class="filters">
       <label>从</label>
       <input
@@ -129,6 +128,7 @@ onMounted(() => {
     <DataTable
       :columns="columns"
       :rows="items"
+      :row-key="(row) => row.id"
       :loading="loading"
     >
       <template #cell-connected_at="{ row }">
@@ -170,10 +170,3 @@ onMounted(() => {
     />
   </div>
 </template>
-
-<style scoped>
-.form-error {
-  margin: 0 0 var(--spacing-sm);
-  font-size: var(--font-size-sm);
-}
-</style>

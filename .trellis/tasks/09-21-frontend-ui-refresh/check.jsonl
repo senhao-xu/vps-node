@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "核对 token 语义引用、暗色同步、表格卡片化禁令、:deep() 使用、aria 属性"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "核对无 any/无非法断言、API 类型未在页面重复声明"}
+{"file": ".trellis/tasks/09-21-frontend-ui-refresh/prd.md", "reason": "验收标准 A1-A8 逐条核对"}
+{"file": ".trellis/tasks/09-21-frontend-ui-refresh/research/frontend-survey.md", "reason": "核对 15 个粗糙点全部闭环、重复 CSS 已删除"}

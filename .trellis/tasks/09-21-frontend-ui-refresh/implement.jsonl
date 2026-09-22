@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "目录布局、token 两层层级、暗色同步、表格不卡片化、full-bleed 负边距、dialog aria、Xboard neutral 色板方向——全部硬约束"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "禁 any、API 类型单一来源、DataTable 泛型 typed slots 约定"}
+{"file": ".trellis/tasks/09-21-frontend-ui-refresh/research/frontend-survey.md", "reason": "现状全量调研：路由/组件/重复点/15 个粗糙点 file:line + xboard 目标风格提炼"}
+{"file": ".trellis/tasks/09-21-frontend-ui-refresh/design.md", "reason": "组件契约、DataTable/ModalDialog v2 设计、布局方案、边界规则"}

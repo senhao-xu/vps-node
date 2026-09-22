@@ -7,6 +7,9 @@ import type { NodeBrief, NodeSettingsInput, Protocol, Server } from '@/api/types
 import ErrorBanner from '@/components/ErrorBanner.vue'
 import ModalDialog from '@/components/ModalDialog.vue'
 import CopyText from '@/components/CopyText.vue'
+import AppSelect from '@/components/ui/AppSelect.vue'
+import LoadingSpinner from '@/components/ui/LoadingSpinner.vue'
+import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
 import { SHADOWSOCKS_METHODS, protocolLabel } from '@/utils/labels'
 
 const props = withDefaults(
@@ -97,6 +100,13 @@ async function loadServers() {
 }
 
 const title = computed(() => (isEdit.value ? '编辑节点' : '添加节点'))
+
+const protocolOptions: Array<{ value: Protocol; label: string; dot: string }> = [
+  { value: 'shadowsocks', label: protocolLabel('shadowsocks'), dot: 'success' },
+  { value: 'vless', label: protocolLabel('vless'), dot: 'primary' },
+  { value: 'hysteria2', label: protocolLabel('hysteria2'), dot: 'warning' },
+  { value: 'anytls', label: protocolLabel('anytls'), dot: 'danger' },
+]
 
 const settingsPayload = computed<NodeSettingsInput | undefined>(() => {
   const payload: NodeSettingsInput = {}
@@ -246,6 +256,7 @@ async function submit() {
   <ModalDialog
     :open="props.open"
     :title="title"
+    :subtitle="isEdit ? '修改节点配置，协议不可变更' : '创建入站节点并配置协议参数'"
     :width="620"
     @close="emit('close')"
   >
@@ -315,43 +326,30 @@ async function submit() {
         </div>
         <div class="form-row">
           <div class="field protocol-field">
-            <label for="node-protocol">协议</label>
-            <select
-              id="node-protocol"
+            <label id="node-protocol-label">协议</label>
+            <AppSelect
               v-model="protocol"
+              :options="protocolOptions"
               :disabled="isEdit"
-              @change="changeProtocol"
-            >
-              <option value="shadowsocks">
-                {{ protocolLabel('shadowsocks') }}
-              </option>
-              <option value="vless">
-                {{ protocolLabel('vless') }}
-              </option>
-              <option value="hysteria2">
-                {{ protocolLabel('hysteria2') }}
-              </option>
-              <option value="anytls">
-                {{ protocolLabel('anytls') }}
-              </option>
-            </select>
+              label="协议"
+              @update:model-value="changeProtocol"
+            />
           </div>
           <div
             v-if="isEdit"
             class="field status-field"
           >
-            <label for="node-status">状态</label>
-            <select
-              id="node-status"
-              v-model="status"
-            >
-              <option value="active">
-                启用
-              </option>
-              <option value="disabled">
-                停用
-              </option>
-            </select>
+            <label>状态</label>
+            <div class="toggle-row status-toggle">
+              <div class="toggle-row-text">
+                <span class="toggle-row-label">启用节点</span>
+              </div>
+              <ToggleSwitch
+                :model-value="status === 'active'"
+                label="启用节点"
+                @update:model-value="status = $event ? 'active' : 'disabled'"
+              />
+            </div>
           </div>
         </div>
       </section>
@@ -569,9 +567,14 @@ async function submit() {
       <button
         type="button"
         class="btn"
+        :class="{ 'is-loading': submitting }"
         :disabled="submitting"
         @click="submit"
       >
+        <LoadingSpinner
+          v-if="submitting"
+          size="sm"
+        />
         {{ submitting ? '保存中…' : '保存' }}
       </button>
     </template>
@@ -696,6 +699,18 @@ async function submit() {
 .port-field,
 .status-field {
   flex: 0 1 140px !important;
+}
+
+.status-toggle {
+  padding: 0 var(--spacing-sm);
+  min-height: var(--control-height);
+  border-radius: var(--radius-sm);
+}
+
+.status-toggle .toggle-row-label {
+  font-weight: 400;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
 }
 
 .method-field {

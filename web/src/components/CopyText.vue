@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { copyText } from '@/utils/clipboard'
+import { useCopyFeedback } from '@/utils/clipboard'
 
 const props = withDefaults(
   defineProps<{
@@ -10,16 +9,10 @@ const props = withDefaults(
   { display: '' },
 )
 
-const copied = ref(false)
-let timer: ReturnType<typeof setTimeout> | null = null
+const { copied, copy } = useCopyFeedback()
 
-async function copy() {
-  const ok = await copyText(props.text)
-  copied.value = ok
-  if (timer) clearTimeout(timer)
-  timer = setTimeout(() => {
-    copied.value = false
-  }, 1500)
+async function onCopy() {
+  await copy(props.text)
 }
 </script>
 
@@ -29,7 +22,7 @@ async function copy() {
     <button
       type="button"
       class="btn link small"
-      @click="copy"
+      @click="onCopy"
     >
       {{ copied ? '已复制' : '复制' }}
     </button>

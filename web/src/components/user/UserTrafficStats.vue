@@ -3,7 +3,9 @@ import { onMounted, ref, watch } from 'vue'
 import { getUserTraffic } from '@/api/users'
 import { errorMessage } from '@/api/http'
 import type { TrafficBucket, TrafficSeries } from '@/api/types'
+import ErrorBanner from '@/components/ErrorBanner.vue'
 import TrafficChart from '@/components/TrafficChart.vue'
+import LoadingSpinner from '@/components/ui/LoadingSpinner.vue'
 import { formatBytes } from '@/utils/format'
 
 const props = defineProps<{
@@ -85,19 +87,26 @@ onMounted(() => {
         </select>
       </div>
     </div>
-    <p
-      v-if="error"
-      class="text-danger form-error"
-    >
-      {{ error }}
-    </p>
+    <ErrorBanner
+      :message="error"
+      @dismiss="error = ''"
+    />
     <div
       v-if="data"
-      class="totals text-secondary"
+      class="totals"
     >
-      <span>上行合计 {{ formatBytes(data.total_upload_bytes) }}</span>
-      <span>下行合计 {{ formatBytes(data.total_download_bytes) }}</span>
-      <span>总计 {{ formatBytes(data.total_upload_bytes + data.total_download_bytes) }}</span>
+      <span class="total-item">
+        <span class="text-secondary">上行合计</span>
+        <strong>{{ formatBytes(data.total_upload_bytes) }}</strong>
+      </span>
+      <span class="total-item">
+        <span class="text-secondary">下行合计</span>
+        <strong>{{ formatBytes(data.total_download_bytes) }}</strong>
+      </span>
+      <span class="total-item">
+        <span class="text-secondary">总计</span>
+        <strong>{{ formatBytes(data.total_upload_bytes + data.total_download_bytes) }}</strong>
+      </span>
     </div>
     <TrafficChart
       v-if="data"
@@ -105,46 +114,46 @@ onMounted(() => {
     />
     <div
       v-else-if="loading"
-      class="empty-tip"
+      class="loading-block"
     >
-      加载中…
+      <LoadingSpinner />
     </div>
   </div>
 </template>
 
 <style scoped>
-.card-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-md);
-}
-
-.card-head .card-title {
-  margin-bottom: 0;
-}
-
 .controls {
   display: flex;
   gap: var(--spacing-sm);
 }
 
-.form-error {
-  margin: var(--spacing-sm) 0;
-  font-size: var(--font-size-sm);
+.loading-block {
+  display: flex;
+  justify-content: center;
+  padding: var(--spacing-lg) 0;
 }
 
 .totals {
   display: flex;
-  gap: var(--spacing-lg);
+  flex-wrap: wrap;
+  gap: var(--spacing-sm) var(--spacing-lg);
+  margin: var(--spacing-sm) 0 var(--spacing-md);
   font-size: var(--font-size-sm);
-  margin: var(--spacing-sm) 0;
+}
+
+.total-item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-xs);
+}
+
+.total-item strong {
+  font-size: var(--font-size-md);
+  font-weight: 600;
 }
 
 @media (max-width: 560px) {
-  .card-head,
-  .controls,
-  .totals {
+  .card-head {
     align-items: flex-start;
     flex-direction: column;
   }

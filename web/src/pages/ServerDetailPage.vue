@@ -13,7 +13,10 @@ import NodeFormDialog from '@/components/NodeFormDialog.vue'
 import OneTimeSecret from '@/components/OneTimeSecret.vue'
 import ServerFormDialog from '@/components/ServerFormDialog.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
-import { copyText } from '@/utils/clipboard'
+import LoadingSpinner from '@/components/ui/LoadingSpinner.vue'
+import OverflowMenu, { type OverflowMenuItem } from '@/components/ui/OverflowMenu.vue'
+import PageHeader from '@/components/ui/PageHeader.vue'
+import { useCopyFeedback } from '@/utils/clipboard'
 import { formatDateTime, formatDuration, formatRelative } from '@/utils/format'
 import { binaryInstallCommand, dockerInstallCommand } from '@/utils/installCommands'
 import { nodeStatusInfo, protocolLabel, serverStatusInfo } from '@/utils/labels'
@@ -24,7 +27,6 @@ const router = useRouter()
 const server = ref<ServerDetail | null>(null)
 const loading = ref(false)
 const error = ref('')
-const actionError = ref('')
 
 const showEdit = ref(false)
 const showDeleteConfirm = ref(false)
@@ -38,8 +40,7 @@ const generatingRegisterToken = ref(false)
 type InstallTab = 'binary' | 'docker'
 
 const installTab = ref<InstallTab>('binary')
-const commandCopied = ref(false)
-let copyTimer: ReturnType<typeof setTimeout> | null = null
+const { copied: commandCopied, copy } = useCopyFeedback()
 
 const panelOrigin = window.location.origin
 const freshRegisterToken = computed(() => registerTokenResult.value?.register_token ?? '')
@@ -56,12 +57,7 @@ const activeInstallCommand = computed(() =>
 )
 
 async function copyInstallCommand() {
-  const ok = await copyText(activeInstallCommand.value)
-  commandCopied.value = ok
-  if (copyTimer) clearTimeout(copyTimer)
-  copyTimer = setTimeout(() => {
-    commandCopied.value = false
-  }, 1500)
+  await copy(activeInstallCommand.value)
 }
 
 const showNodeDialog = ref(false)
@@ -80,8 +76,15 @@ const nodeColumns: { key: string; label: string; align?: 'left' | 'right' | 'cen
   { key: 'protocol', label: '协议', width: '120px' },
   { key: 'port', label: '端口', align: 'right', width: '80px' },
   { key: 'status', label: '状态', width: '80px' },
-  { key: 'actions', label: '操作', width: '130px' },
+  { key: 'actions', label: '', width: '48px' },
 ]
+
+function nodeActions(row: NodeBrief): OverflowMenuItem[] {
+  return [
+    { label: '编辑', onSelect: () => (editNode.value = row) },
+    { label: '删除', danger: true, onSelect: () => (deleteNodeTarget.value = row) },
+  ]
+}
 
 async function load() {
   const id = serverId.value
@@ -108,12 +111,12 @@ async function toggleStatus() {
   if (!current) return
   const next: ServerStatus = current.status === 'disabled' ? 'active' : 'disabled'
   statusUpdating.value = true
-  actionError.value = ''
+  error.value = ''
   try {
     await updateServer(current.id, { status: next })
     await load()
   } catch (err) {
-    actionError.value = errorMessage(err)
+    error.value = errorMessage(err)
   } finally {
     statusUpdating.value = false
   }
@@ -123,11 +126,11 @@ async function rotateToken() {
   const current = server.value
   if (!current) return
   rotatingAgentToken.value = true
-  actionError.value = ''
+  error.value = ''
   try {
     agentTokenResult.value = await rotateAgentToken(current.id)
   } catch (err) {
-    actionError.value = errorMessage(err)
+    error.value = errorMessage(err)
   } finally {
     rotatingAgentToken.value = false
   }
@@ -137,11 +140,11 @@ async function generateRegisterToken() {
   const current = server.value
   if (!current) return
   generatingRegisterToken.value = true
-  actionError.value = ''
+  error.value = ''
   try {
     registerTokenResult.value = await createRegisterToken(current.id)
   } catch (err) {
-    actionError.value = errorMessage(err)
+    error.value = errorMessage(err)
   } finally {
     generatingRegisterToken.value = false
   }
@@ -165,12 +168,12 @@ async function confirmDeleteServer() {
   const current = server.value
   if (!current) return
   deleting.value = true
-  actionError.value = ''
+  error.value = ''
   try {
     await deleteServer(current.id)
     await router.replace('/servers')
   } catch (err) {
-    actionError.value = errorMessage(err)
+    error.value = errorMessage(err)
   } finally {
     deleting.value = false
   }
@@ -180,13 +183,13 @@ async function confirmDeleteNode() {
   const target = deleteNodeTarget.value
   if (!target) return
   deletingNode.value = true
-  actionError.value = ''
+  error.value = ''
   try {
     await deleteNode(target.id)
     deleteNodeTarget.value = null
     await load()
   } catch (err) {
-    actionError.value = errorMessage(err)
+    error.value = errorMessage(err)
   } finally {
     deletingNode.value = false
   }
@@ -213,66 +216,48 @@ onMounted(() => {
 
 <template>
   <section class="page">
-    <div class="page-header">
-      <h1 class="page-title">
-        <span class="eyebrow">INFRASTRUCTURE NODE</span>
-        服务器详情
-        <span
-          v-if="server"
-          class="head-status"
-        >
+    <PageHeader
+      :title="server ? server.name : '服务器详情'"
+      :subtitle="server ? server.address : undefined"
+    >
+      <template #actions>
+        <template v-if="server">
           <StatusBadge v-bind="serverStatusInfo(server.status)" />
-        </span>
-      </h1>
-      <div class="header-actions">
-        <button
-          v-if="server"
-          type="button"
-          class="btn secondary"
-          :disabled="statusUpdating"
-          @click="toggleStatus"
-        >
-          {{ server.status === 'disabled' ? '启用' : '禁用' }}
-        </button>
-        <button
-          v-if="server"
-          type="button"
-          class="btn secondary"
-          @click="showEdit = true"
-        >
-          编辑
-        </button>
-        <button
-          type="button"
-          class="btn secondary"
-          @click="void router.push('/servers')"
-        >
-          返回列表
-        </button>
-        <button
-          v-if="server"
-          type="button"
-          class="btn danger secondary"
-          @click="showDeleteConfirm = true"
-        >
-          删除
-        </button>
-      </div>
-    </div>
+          <button
+            type="button"
+            class="btn secondary"
+            :disabled="statusUpdating"
+            @click="toggleStatus"
+          >
+            {{ server.status === 'disabled' ? '启用' : '禁用' }}
+          </button>
+          <button
+            type="button"
+            class="btn secondary"
+            @click="showEdit = true"
+          >
+            编辑
+          </button>
+          <button
+            type="button"
+            class="btn danger secondary"
+            @click="showDeleteConfirm = true"
+          >
+            删除
+          </button>
+        </template>
+      </template>
+    </PageHeader>
     <ErrorBanner
       :message="error"
       @dismiss="error = ''"
     />
-    <ErrorBanner
-      :message="actionError"
-      @dismiss="actionError = ''"
-    />
 
     <div
       v-if="loading && !server"
-      class="empty-tip"
+      class="loading-block"
     >
-      加载中…
+      <LoadingSpinner size="lg" />
     </div>
     <template v-else-if="server">
       <div class="card">
@@ -478,6 +463,7 @@ onMounted(() => {
         <DataTable
           :columns="nodeColumns"
           :rows="server.nodes"
+          :row-key="(row) => row.id"
           :loading="loading"
         >
           <template #cell-protocol="{ row }">
@@ -487,18 +473,10 @@ onMounted(() => {
             <StatusBadge v-bind="nodeStatusInfo(row.status)" />
           </template>
           <template #cell-actions="{ row }">
-            <span class="actions">
-              <button
-                type="button"
-                class="btn link"
-                @click="editNode = row"
-              >编辑</button>
-              <button
-                type="button"
-                class="btn link"
-                @click="deleteNodeTarget = row"
-              >删除</button>
-            </span>
+            <OverflowMenu
+              :items="nodeActions(row)"
+              :label="`节点 ${row.name} 的操作`"
+            />
           </template>
           <template #empty>
             该服务器还没有节点，点击右上角添加
@@ -552,42 +530,10 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.header-actions {
+.loading-block {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-sm);
-}
-
-.eyebrow {
-  display: block;
-  margin-bottom: var(--spacing-xs);
-  color: var(--color-primary);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-}
-
-.head-status {
-  margin-left: var(--spacing-sm);
-  vertical-align: middle;
-}
-
-.info-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: var(--spacing-md) var(--spacing-lg);
-}
-
-.info-item {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xs);
-  min-width: 0;
-}
-
-.info-label {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
+  justify-content: center;
+  padding: var(--spacing-xl) 0;
 }
 
 .agent-missing {
@@ -696,38 +642,13 @@ onMounted(() => {
   font-size: var(--font-size-sm);
 }
 
-.card-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-md);
-}
-
-.card-head .card-title {
-  margin-bottom: 0;
-}
-
 .node-head-actions {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
 }
 
-.actions {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-}
-
 @media (max-width: 700px) {
-  .header-actions {
-    width: 100%;
-  }
-
-  .info-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
   .install-head,
   .install-code-head {
     align-items: stretch;
@@ -736,11 +657,6 @@ onMounted(() => {
 
   .install-tabs {
     align-self: flex-start;
-  }
-
-  .card-head {
-    align-items: flex-start;
-    flex-direction: column;
   }
 }
 </style>

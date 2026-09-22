@@ -5,6 +5,8 @@ import { errorMessage } from '@/api/http'
 import type { Server, ServerStatus } from '@/api/types'
 import ErrorBanner from '@/components/ErrorBanner.vue'
 import ModalDialog from '@/components/ModalDialog.vue'
+import LoadingSpinner from '@/components/ui/LoadingSpinner.vue'
+import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -70,6 +72,7 @@ async function submit() {
   <ModalDialog
     :open="props.open"
     :title="isEdit ? '编辑服务器' : '创建服务器'"
+    :subtitle="isEdit ? '修改服务器名称、地址与同步状态' : '创建后在服务器上安装 Agent 完成接入'"
     :width="460"
     @close="emit('close')"
   >
@@ -98,20 +101,17 @@ async function submit() {
       </div>
       <div
         v-if="isEdit"
-        class="field"
+        class="toggle-row"
       >
-        <label for="server-status">状态</label>
-        <select
-          id="server-status"
-          v-model="status"
-        >
-          <option value="active">
-            启用（同步配置）
-          </option>
-          <option value="disabled">
-            禁用（停止同步）
-          </option>
-        </select>
+        <div class="toggle-row-text">
+          <span class="toggle-row-label">启用状态</span>
+          <span class="toggle-row-desc">禁用后停止向该服务器同步配置</span>
+        </div>
+        <ToggleSwitch
+          :model-value="status === 'active'"
+          label="启用服务器"
+          @update:model-value="status = $event ? 'active' : 'disabled'"
+        />
       </div>
     </div>
     <template #footer>
@@ -126,9 +126,14 @@ async function submit() {
       <button
         type="button"
         class="btn"
+        :class="{ 'is-loading': submitting }"
         :disabled="submitting"
         @click="submit"
       >
+        <LoadingSpinner
+          v-if="submitting"
+          size="sm"
+        />
         {{ submitting ? '保存中…' : '保存' }}
       </button>
     </template>

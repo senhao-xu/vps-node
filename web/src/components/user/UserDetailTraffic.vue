@@ -4,9 +4,10 @@ import { resetUserTraffic, updateUser } from '@/api/users'
 import { errorMessage } from '@/api/http'
 import type { UserDetail } from '@/api/types'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import ErrorBanner from '@/components/ErrorBanner.vue'
 import ProgressBar from '@/components/ProgressBar.vue'
 import type { QuotaUnit } from '@/utils/format'
-import { formatBytes, formatPercent, quotaFromInput, splitQuota } from '@/utils/format'
+import { formatBytes, quotaFromInput, splitQuota } from '@/utils/format'
 
 const props = defineProps<{
   user: UserDetail
@@ -97,25 +98,22 @@ async function resetTraffic() {
         </button>
       </div>
     </div>
-    <p
-      v-if="error"
-      class="text-danger form-error"
-    >
-      {{ error }}
-    </p>
+    <ErrorBanner
+      :message="error"
+      @dismiss="error = ''"
+    />
 
     <div
       v-if="!editing"
       class="traffic-view"
     >
       <div class="traffic-summary">
-        <span>已使用 {{ formatBytes(props.user.used_bytes) }}</span>
-        <span class="text-secondary">/ {{ unlimited ? '不限' : formatBytes(props.user.quota_bytes) }}</span>
+        <span class="traffic-used">{{ formatBytes(props.user.used_bytes) }}</span>
+        <span class="traffic-quota text-secondary">/ {{ unlimited ? '不限流量' : formatBytes(props.user.quota_bytes) }}</span>
       </div>
       <ProgressBar :percent="props.user.used_percent" />
       <div class="traffic-detail text-secondary">
         <span>剩余 {{ unlimited ? '不限' : formatBytes(props.user.remaining_bytes) }}</span>
-        <span>{{ unlimited ? '不限额度' : formatPercent(props.user.used_percent) }}</span>
       </div>
     </div>
 
@@ -133,10 +131,10 @@ async function resetTraffic() {
       <template v-if="!editUnlimited">
         <input
           v-model.number="editValue"
+          class="quota-input"
           type="number"
           min="0"
           step="any"
-          style="width: 140px"
         >
         <select v-model="editUnit">
           <option value="MB">
@@ -173,26 +171,18 @@ async function resetTraffic() {
 </template>
 
 <style scoped>
-.card-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-md);
-}
-
-.card-head .card-title {
-  margin-bottom: 0;
+.card {
+  --card-padding: var(--spacing-md);
 }
 
 .head-actions {
   display: flex;
   gap: var(--spacing-sm);
-  margin-bottom: var(--spacing-md);
+  flex-wrap: wrap;
 }
 
-.form-error {
-  margin: var(--spacing-sm) 0;
-  font-size: var(--font-size-sm);
+.quota-input {
+  width: 140px;
 }
 
 .traffic-view {
@@ -204,12 +194,26 @@ async function resetTraffic() {
 
 .traffic-summary {
   display: flex;
+  align-items: baseline;
   gap: var(--spacing-xs);
+  flex-wrap: wrap;
+}
+
+.traffic-used {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.traffic-quota {
+  font-size: var(--font-size-md);
 }
 
 .traffic-detail {
   display: flex;
   justify-content: space-between;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
   font-size: var(--font-size-sm);
 }
 
@@ -222,10 +226,17 @@ async function resetTraffic() {
 }
 
 @media (max-width: 560px) {
-  .card-head,
-  .traffic-detail {
+  .card-head {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .head-actions {
+    width: 100%;
+  }
+
+  .head-actions .btn {
+    flex: 1;
   }
 }
 </style>

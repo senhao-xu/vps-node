@@ -10,3 +10,9 @@
 - 2026-09-21: 完成节点协议参数补全（09-21-node-protocol-params）。hy2 obfs/hop_ports、vless flow 三态/dest，singbox.VLESSFlow 统一解析，go test 17 包全绿，commit 6a3b8d3；另提交 UI 修复 bb687f1（Esc 关闭弹窗、form-row 溢出）。
 - 2026-09-21: 完成 AnyTLS 协议支持（09-21-anytls-protocol）。复用 hy2 TLS 证书模式，0006 迁移放宽 protocol CHECK，订阅/Clash/前端全链路，commit b8ea6ef；迁移前已备份 panel.db 到 /tmp/panel.db.bak-20260921。
 - 2026-09-21: 完成仪表盘用户流量明细（09-21-dashboard-user-traffic）。新 API `GET /api/dashboard/user-traffic?range=today|total`（repo 新增 SumTrafficByUser/SumTrafficByUserNode/ListUsersAll，trafficWhere 重构为 trafficWherePrefixed），前端仪表盘新增可展开的用户流量表（今日/累计切换）。6 个新后端测试，go test + 前端 typecheck/lint/build 全绿，commit a9652a1 已推送。另建占位任务 09-21-site-visit-stats（访问站点统计，待规划）。
+
+## 2026-09-21 auto-app-key 收尾
+- 任务 09-21-auto-app-key 完成并提交推送 (1fd4529):app_key 可选,首次启动自动生成存入 settings 表,优先级 env > yaml > database > auto;compose 去掉 PANEL_APP_KEY 强校验,新增 PANEL_IMAGE/AGENT_IMAGE。
+- trellis-check PASS,冒烟验证 auto/database/env 三种来源。
+- 顺带分析:agent 容器 docker stats 57MB 中 47MB 是 sing-box 二进制的文件页缓存(可回收),真实匿名内存 ~19MB,与 Xboard 相当。
+- 后续任务候选:精简 agent 镜像(源码编译 sing-box,仅 with_quic/with_utls/with_clash_api,预期 35MB→~20MB)。

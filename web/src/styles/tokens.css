@@ -53,8 +53,10 @@
   --color-offline: var(--gray-400);
   --color-muted-soft: var(--gray-100);
   --color-table-hover: var(--gray-50);
-  --color-overlay: rgba(15, 23, 42, 0.5);
+  --color-overlay: rgba(15, 23, 42, 0.6);
   --color-focus-ring: rgba(2, 8, 23, 0.1);
+  --color-skeleton: var(--gray-100);
+  --color-toggle-knob: var(--gray-0);
   --color-shell: var(--gray-0);
   --color-shell-muted: var(--gray-500);
   --color-shell-active: var(--gray-100);
@@ -63,6 +65,7 @@
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
+  --radius-xl: 20px;
 
   --spacing-xs: 4px;
   --spacing-sm: 8px;
@@ -132,8 +135,10 @@
   --color-offline: #5f6c82;
   --color-muted-soft: var(--dark-gray-800);
   --color-table-hover: rgba(255, 255, 255, 0.03);
-  --color-overlay: rgba(4, 8, 16, 0.6);
+  --color-overlay: rgba(4, 8, 16, 0.72);
   --color-focus-ring: rgba(203, 213, 225, 0.25);
+  --color-skeleton: var(--dark-gray-800);
+  --color-toggle-knob: var(--dark-gray-50);
   --color-shell: var(--dark-gray-950);
   --color-shell-muted: var(--dark-gray-400);
   --color-shell-active: var(--dark-gray-800);

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import ModalDialog from '@/components/ModalDialog.vue'
+import LoadingSpinner from '@/components/ui/LoadingSpinner.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -54,10 +55,14 @@ const lines = computed(() => props.message.split('\n'))
       <button
         type="button"
         class="btn"
-        :class="props.danger ? 'danger' : ''"
+        :class="[props.danger ? 'danger' : '', props.loading ? 'is-loading' : '']"
         :disabled="props.loading"
         @click="emit('confirm')"
       >
+        <LoadingSpinner
+          v-if="props.loading"
+          size="sm"
+        />
         {{ props.loading ? '处理中…' : props.confirmText }}
       </button>
     </template>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
-import { RouterLink, useRoute, useRouter } from 'vue-router'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { Plus } from 'lucide-vue-next'
 import { deleteNode, listNodes, updateNode } from '@/api/nodes'
 import { listServers } from '@/api/servers'
 import { errorMessage } from '@/api/http'
@@ -11,6 +12,10 @@ import ErrorBanner from '@/components/ErrorBanner.vue'
 import NodeFormDialog from '@/components/NodeFormDialog.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import TablePaginator from '@/components/TablePaginator.vue'
+import FilterChip from '@/components/ui/FilterChip.vue'
+import OverflowMenu, { type OverflowMenuItem } from '@/components/ui/OverflowMenu.vue'
+import PageHeader from '@/components/ui/PageHeader.vue'
+import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
 import { formatDateTime } from '@/utils/format'
 import { nodeStatusInfo, protocolLabel } from '@/utils/labels'
 
@@ -34,6 +39,9 @@ const selectedIds = ref<number[]>([])
 const batchBusy = ref(false)
 const statusUpdatingId = ref<number | null>(null)
 
+const sortKey = ref('')
+const sortDir = ref<'asc' | 'desc'>('asc')
+
 const showCreate = ref(false)
 const editTarget = ref<NodeBrief | null>(null)
 const deleteTarget = ref<NodeBrief | null>(null)
@@ -43,15 +51,78 @@ let searchTimer: ReturnType<typeof setTimeout> | null = null
 let suppressNextSearch = false
 
 const columns: Column[] = [
-  { key: 'select', label: '', width: '40px' },
-  { key: 'name', label: '名称' },
-  { key: 'protocol', label: '协议', width: '120px' },
-  { key: 'port', label: '端口', align: 'right', width: '80px' },
-  { key: 'server', label: '所属服务器', width: '160px' },
+  { key: 'name', label: '名称', width: '200px', sortable: true },
+  { key: 'protocol', label: '协议', width: '90px' },
+  { key: 'port', label: '端口', align: 'right', width: '72px', sortable: true },
+  { key: 'server', label: '所属服务器', width: '150px' },
   { key: 'status', label: '状态', width: '80px' },
-  { key: 'created_at', label: '创建时间', width: '160px' },
-  { key: 'actions', label: '操作', width: '150px' },
+  { key: 'enabled', label: '启用', width: '64px' },
+  { key: 'created_at', label: '创建时间', width: '140px', sortable: true },
+  { key: 'actions', label: '', width: '48px' },
 ]
+
+const protocolOptions: Array<{ value: Protocol | ''; label: string }> = [
+  { value: '', label: '全部协议' },
+  { value: 'shadowsocks', label: protocolLabel('shadowsocks') },
+  { value: 'vless', label: protocolLabel('vless') },
+  { value: 'hysteria2', label: protocolLabel('hysteria2') },
+  { value: 'anytls', label: protocolLabel('anytls') },
+]
+
+const statusOptions: Array<{ value: NodeStatus | ''; label: string }> = [
+  { value: '', label: '全部状态' },
+  { value: 'active', label: '启用' },
+  { value: 'disabled', label: '停用' },
+]
+
+const serverChipLabel = computed(() => {
+  if (!serverFilter.value) return '全部服务器'
+  const hit = servers.value.find((server) => String(server.id) === serverFilter.value)
+  return hit ? hit.name : '全部服务器'
+})
+
+const protocolChipLabel = computed(
+  () => protocolOptions.find((option) => option.value === protocolFilter.value)?.label ?? '全部协议',
+)
+
+const statusChipLabel = computed(
+  () => statusOptions.find((option) => option.value === statusFilter.value)?.label ?? '全部状态',
+)
+
+const sortedItems = computed(() => {
+  if (!sortKey.value) return items.value
+  const dir = sortDir.value === 'asc' ? 1 : -1
+  return [...items.value].sort((a, b) => {
+    if (sortKey.value === 'name') return a.name.localeCompare(b.name) * dir
+    if (sortKey.value === 'port') return (a.port - b.port) * dir
+    if (sortKey.value === 'created_at') return a.created_at.localeCompare(b.created_at) * dir
+    return 0
+  })
+})
+
+function onSort(key: string) {
+  if (sortKey.value === key) {
+    if (sortDir.value === 'asc') sortDir.value = 'desc'
+    else {
+      sortKey.value = ''
+      sortDir.value = 'asc'
+    }
+  } else {
+    sortKey.value = key
+    sortDir.value = 'asc'
+  }
+}
+
+function rowActions(row: NodeBrief): OverflowMenuItem[] {
+  return [
+    { label: '编辑', onSelect: () => (editTarget.value = row) },
+    {
+      label: row.status === 'active' ? '禁用' : '启用',
+      onSelect: () => void toggleStatus(row),
+    },
+    { label: '删除', danger: true, onSelect: () => (deleteTarget.value = row) },
+  ]
+}
 
 async function load() {
   loading.value = true
@@ -110,14 +181,6 @@ function onPageChange(nextPage: number, nextSize: number) {
   pageSize.value = nextSize
   syncQuery()
   void load()
-}
-
-function toggleSelect(id: number, checked: boolean) {
-  if (checked) {
-    if (!selectedIds.value.includes(id)) selectedIds.value = [...selectedIds.value, id]
-  } else {
-    selectedIds.value = selectedIds.value.filter((item) => item !== id)
-  }
 }
 
 async function toggleStatus(node: NodeBrief) {
@@ -210,102 +273,168 @@ onMounted(() => {
 
 <template>
   <section class="page">
-    <div class="page-header">
-      <div>
-        <p class="eyebrow">
-          INFRASTRUCTURE
-        </p>
-        <h1 class="page-title">
-          节点
-        </h1>
-      </div>
-      <button
-        type="button"
-        class="btn"
-        @click="showCreate = true"
-      >
-        新建节点
-      </button>
-    </div>
+    <PageHeader
+      title="节点"
+      :subtitle="`共 ${total} 个节点`"
+    >
+      <template #actions>
+        <button
+          type="button"
+          class="btn"
+          @click="showCreate = true"
+        >
+          <Plus :size="15" />
+          新建节点
+        </button>
+      </template>
+    </PageHeader>
     <ErrorBanner
       :message="error"
       @dismiss="error = ''"
     />
 
     <div class="card">
-      <div class="toolbar-label">
-        节点目录 <span>{{ total }} 个节点</span>
-      </div>
-      <div class="filters">
-        <input
-          v-model="query"
-          class="search-input"
-          type="text"
-          placeholder="按名称搜索"
-        >
-        <select
-          v-model="serverFilter"
-          @change="applyFilters"
-        >
-          <option value="">
-            全部服务器
-          </option>
-          <option
-            v-for="server in servers"
-            :key="server.id"
-            :value="String(server.id)"
+      <DataTable
+        :columns="columns"
+        :rows="sortedItems"
+        :row-key="(row) => row.id"
+        :loading="loading"
+        selectable
+        :selected="selectedIds"
+        :sort-key="sortKey"
+        :sort-dir="sortDir"
+        :total-count="total"
+        @update:selected="selectedIds = $event.map(Number)"
+        @sort="onSort"
+      >
+        <template #toolbar>
+          <input
+            v-model="query"
+            class="search-input"
+            type="text"
+            placeholder="按名称搜索"
           >
-            {{ server.name }}
-          </option>
-        </select>
-        <select
-          v-model="protocolFilter"
-          @change="applyFilters"
-        >
-          <option value="">
-            全部协议
-          </option>
-          <option value="shadowsocks">
-            {{ protocolLabel('shadowsocks') }}
-          </option>
-          <option value="vless">
-            {{ protocolLabel('vless') }}
-          </option>
-          <option value="hysteria2">
-            {{ protocolLabel('hysteria2') }}
-          </option>
-          <option value="anytls">
-            {{ protocolLabel('anytls') }}
-          </option>
-        </select>
-        <select
-          v-model="statusFilter"
-          @change="applyFilters"
-        >
-          <option value="">
-            全部状态
-          </option>
-          <option value="active">
-            启用
-          </option>
-          <option value="disabled">
-            停用
-          </option>
-        </select>
-        <button
-          type="button"
-          class="btn secondary"
-          @click="resetFilters"
-        >
-          重置
-        </button>
-      </div>
+          <FilterChip
+            :label="serverChipLabel"
+            :active="serverFilter !== ''"
+          >
+            <template #default="{ close }">
+              <div class="menu-list">
+                <button
+                  type="button"
+                  class="menu-list-item"
+                  :class="{ selected: serverFilter === '' }"
+                  @click="serverFilter = ''; applyFilters(); close()"
+                >
+                  全部服务器
+                </button>
+                <button
+                  v-for="server in servers"
+                  :key="server.id"
+                  type="button"
+                  class="menu-list-item"
+                  :class="{ selected: serverFilter === String(server.id) }"
+                  @click="serverFilter = String(server.id); applyFilters(); close()"
+                >
+                  {{ server.name }}
+                </button>
+              </div>
+            </template>
+          </FilterChip>
+          <FilterChip
+            :label="protocolChipLabel"
+            :active="protocolFilter !== ''"
+          >
+            <template #default="{ close }">
+              <div class="menu-list">
+                <button
+                  v-for="option in protocolOptions"
+                  :key="option.value"
+                  type="button"
+                  class="menu-list-item"
+                  :class="{ selected: protocolFilter === option.value }"
+                  @click="protocolFilter = option.value; applyFilters(); close()"
+                >
+                  {{ option.label }}
+                </button>
+              </div>
+            </template>
+          </FilterChip>
+          <FilterChip
+            :label="statusChipLabel"
+            :active="statusFilter !== ''"
+          >
+            <template #default="{ close }">
+              <div class="menu-list">
+                <button
+                  v-for="option in statusOptions"
+                  :key="option.value"
+                  type="button"
+                  class="menu-list-item"
+                  :class="{ selected: statusFilter === option.value }"
+                  @click="statusFilter = option.value; applyFilters(); close()"
+                >
+                  {{ option.label }}
+                </button>
+              </div>
+            </template>
+          </FilterChip>
+          <button
+            v-if="serverFilter || protocolFilter || statusFilter || query"
+            type="button"
+            class="btn link small"
+            @click="resetFilters"
+          >
+            重置
+          </button>
+        </template>
+
+        <template #cell-name="{ row }">
+          <span class="name-cell">
+            <i
+              class="status-dot"
+              :class="row.status === 'active' ? 'on' : 'off'"
+            />
+            {{ row.name }}
+          </span>
+        </template>
+        <template #cell-protocol="{ row }">
+          {{ protocolLabel(row.protocol) }}
+        </template>
+        <template #cell-server="{ row }">
+          <RouterLink :to="`/servers/${row.server.id}`">
+            {{ row.server.name }}
+          </RouterLink>
+        </template>
+        <template #cell-status="{ row }">
+          <StatusBadge v-bind="nodeStatusInfo(row.status)" />
+        </template>
+        <template #cell-enabled="{ row }">
+          <ToggleSwitch
+            :model-value="row.status === 'active'"
+            :disabled="statusUpdatingId === row.id"
+            :label="`${row.status === 'active' ? '禁用' : '启用'}节点 ${row.name}`"
+            @update:model-value="toggleStatus(row)"
+          />
+        </template>
+        <template #cell-created_at="{ row }">
+          {{ formatDateTime(row.created_at) }}
+        </template>
+        <template #cell-actions="{ row }">
+          <OverflowMenu
+            :items="rowActions(row)"
+            :label="`节点 ${row.name} 的操作`"
+          />
+        </template>
+        <template #empty>
+          没有符合条件的节点
+        </template>
+      </DataTable>
 
       <div
         v-if="selectedIds.length > 0"
         class="batch-bar"
       >
-        <span class="text-secondary">已选 {{ selectedIds.length }} 个节点</span>
         <button
           type="button"
           class="btn secondary small"
@@ -331,60 +460,6 @@ onMounted(() => {
           清除选择
         </button>
       </div>
-
-      <DataTable
-        :columns="columns"
-        :rows="items"
-        :loading="loading"
-      >
-        <template #cell-select="{ row }">
-          <input
-            type="checkbox"
-            :checked="selectedIds.includes(row.id)"
-            :aria-label="`选择节点 ${row.name}`"
-            @change="toggleSelect(row.id, ($event.target as HTMLInputElement).checked)"
-          >
-        </template>
-        <template #cell-protocol="{ row }">
-          {{ protocolLabel(row.protocol) }}
-        </template>
-        <template #cell-server="{ row }">
-          <RouterLink :to="`/servers/${row.server.id}`">
-            {{ row.server.name }}
-          </RouterLink>
-        </template>
-        <template #cell-status="{ row }">
-          <StatusBadge v-bind="nodeStatusInfo(row.status)" />
-        </template>
-        <template #cell-created_at="{ row }">
-          {{ formatDateTime(row.created_at) }}
-        </template>
-        <template #cell-actions="{ row }">
-          <span class="actions">
-            <button
-              type="button"
-              class="btn link"
-              @click="editTarget = row"
-            >编辑</button>
-            <button
-              type="button"
-              class="btn link"
-              :disabled="statusUpdatingId === row.id"
-              @click="toggleStatus(row)"
-            >
-              {{ row.status === 'active' ? '禁用' : '启用' }}
-            </button>
-            <button
-              type="button"
-              class="btn link"
-              @click="deleteTarget = row"
-            >删除</button>
-          </span>
-        </template>
-        <template #empty>
-          {{ loading ? '加载中…' : '没有符合条件的节点' }}
-        </template>
-      </DataTable>
 
       <TablePaginator
         :page="page"
@@ -420,32 +495,23 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.eyebrow {
-  margin: 0 0 var(--spacing-xs);
-  color: var(--color-primary);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-}
-
-.toolbar-label {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: var(--spacing-md);
-  color: var(--color-text);
-  font-weight: 600;
-}
-
-.toolbar-label span {
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
-  font-weight: 400;
-}
-
-.actions {
+.name-cell {
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-sm);
+  font-weight: 500;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--color-offline);
+}
+
+.status-dot.on {
+  background: var(--color-success);
 }
 
 .batch-bar {
@@ -453,11 +519,11 @@ onMounted(() => {
   align-items: center;
   flex-wrap: wrap;
   gap: var(--spacing-sm);
-  margin-bottom: var(--spacing-md);
+  padding-top: var(--spacing-md);
 }
 
 .search-input {
-  width: min(260px, 100%);
+  width: min(240px, 100%);
 }
 
 @media (max-width: 700px) {

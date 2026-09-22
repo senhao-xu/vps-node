@@ -1,19 +1,24 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { RouterLink } from 'vue-router'
+import { useRouter } from 'vue-router'
+import { Plus } from 'lucide-vue-next'
 import { deleteUser, listUsers, updateUser } from '@/api/users'
 import { errorMessage } from '@/api/http'
 import type { Paged, User, UserExpiryFilter, UserStatus } from '@/api/types'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
-import CopyText from '@/components/CopyText.vue'
 import DataTable, { type Column } from '@/components/DataTable.vue'
 import ErrorBanner from '@/components/ErrorBanner.vue'
 import TablePaginator from '@/components/TablePaginator.vue'
 import ProgressBar from '@/components/ProgressBar.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import UserCreateDialog from '@/components/UserCreateDialog.vue'
+import FilterChip from '@/components/ui/FilterChip.vue'
+import OverflowMenu, { type OverflowMenuItem } from '@/components/ui/OverflowMenu.vue'
+import PageHeader from '@/components/ui/PageHeader.vue'
 import { formatBytes, formatDate, formatDateTime, formatRemaining } from '@/utils/format'
 import { displayUserStatus } from '@/utils/labels'
+
+const router = useRouter()
 
 const items = ref<User[]>([])
 const total = ref(0)
@@ -32,17 +37,40 @@ const deleting = ref(false)
 const statusUpdatingId = ref<number | null>(null)
 
 const columns: Column[] = [
-  { key: 'id', label: 'ID', width: '70px' },
+  { key: 'id', label: 'ID', width: '80px' },
   { key: 'username', label: '用户名', width: '150px' },
-  { key: 'uuid', label: 'UUID' },
-  { key: 'status', label: '状态', width: '80px' },
   { key: 'traffic', label: '流量', width: '200px' },
-  { key: 'expires_at', label: '到期时间', width: '170px' },
+  { key: 'expires_at', label: '到期时间', width: '150px' },
   { key: 'node_count', label: '节点数', align: 'right', width: '70px' },
   { key: 'session_count', label: '在线', align: 'right', width: '60px' },
-  { key: 'created_at', label: '创建时间', width: '160px' },
-  { key: 'actions', label: '操作', width: '180px' },
+  { key: 'created_at', label: '创建时间', width: '150px' },
+  { key: 'status', label: '状态', width: '80px' },
+  { key: 'actions', label: '', width: '48px' },
 ]
+
+const statusOptions: Array<{ value: UserStatus | ''; label: string }> = [
+  { value: '', label: '全部状态' },
+  { value: 'active', label: '正常' },
+  { value: 'disabled', label: '已禁用' },
+  { value: 'expired', label: '已过期' },
+]
+
+const expiryOptions: Array<{ value: UserExpiryFilter | ''; label: string }> = [
+  { value: '', label: '全部到期状态' },
+  { value: 'valid', label: '未到期' },
+  { value: 'expired', label: '已到期' },
+]
+
+function rowActions(row: User): OverflowMenuItem[] {
+  return [
+    { label: '详情', onSelect: () => void router.push(`/users/${row.id}`) },
+    {
+      label: row.status === 'active' ? '禁用' : '启用',
+      onSelect: () => void toggleStatus(row),
+    },
+    { label: '删除', danger: true, onSelect: () => (deleteTarget.value = row) },
+  ]
+}
 
 async function load() {
   loading.value = true
@@ -96,6 +124,12 @@ function trafficText(user: User): string {
   return `${formatBytes(user.used_bytes)} / ${formatBytes(user.quota_bytes)}`
 }
 
+function isExpired(user: User): boolean {
+  if (!user.expires_at) return false
+  const time = new Date(user.expires_at).getTime()
+  return !Number.isNaN(time) && time <= Date.now()
+}
+
 async function toggleStatus(user: User) {
   const next: UserStatus = user.status === 'active' ? 'disabled' : 'active'
   statusUpdatingId.value = user.id
@@ -133,97 +167,104 @@ onMounted(() => {
 
 <template>
   <section class="page">
-    <div class="page-header">
-      <div>
-        <p class="eyebrow">
-          ACCESS MANAGEMENT
-        </p>
-        <h1 class="page-title">
-          用户
-        </h1>
-      </div>
-      <button
-        type="button"
-        class="btn"
-        @click="showCreate = true"
-      >
-        创建用户
-      </button>
-    </div>
+    <PageHeader
+      title="用户"
+      :subtitle="`共 ${total} 个用户`"
+    >
+      <template #actions>
+        <button
+          type="button"
+          class="btn"
+          @click="showCreate = true"
+        >
+          <Plus :size="15" />
+          创建用户
+        </button>
+      </template>
+    </PageHeader>
     <ErrorBanner
       :message="error"
       @dismiss="error = ''"
     />
 
     <div class="card">
-      <div class="toolbar-label">
-        用户目录 <span>{{ total }} 个用户</span>
-      </div>
-      <div class="filters">
-        <input
-          v-model="query"
-          class="search-input"
-          type="text"
-          placeholder="按 用户名 / UUID / Token 精确搜索"
-          @keyup.enter="applyFilters"
-        >
-        <select
-          v-model="statusFilter"
-          @change="applyFilters"
-        >
-          <option value="">
-            全部状态
-          </option>
-          <option value="active">
-            正常
-          </option>
-          <option value="disabled">
-            已禁用
-          </option>
-          <option value="expired">
-            已过期
-          </option>
-        </select>
-        <select
-          v-model="expiryFilter"
-          @change="applyFilters"
-        >
-          <option value="">
-            全部到期状态
-          </option>
-          <option value="valid">
-            未到期
-          </option>
-          <option value="expired">
-            已到期
-          </option>
-        </select>
-        <button
-          type="button"
-          class="btn"
-          @click="applyFilters"
-        >
-          搜索
-        </button>
-        <button
-          type="button"
-          class="btn secondary"
-          @click="resetFilters"
-        >
-          重置
-        </button>
-      </div>
-
       <DataTable
         :columns="columns"
         :rows="items"
+        :row-key="(row) => row.id"
         :loading="loading"
+        :total-count="total"
       >
-        <template #cell-uuid="{ row }">
-          <CopyText
-            class="mono"
-            :text="row.uuid"
-          />
+        <template #toolbar>
+          <input
+            v-model="query"
+            class="search-input"
+            type="text"
+            placeholder="按 用户名 / UUID / Token 精确搜索"
+            @keyup.enter="applyFilters"
+          >
+          <FilterChip
+            :label="statusOptions.find((o) => o.value === statusFilter)?.label ?? '全部状态'"
+            :active="statusFilter !== ''"
+          >
+            <template #default="{ close }">
+              <div class="menu-list">
+                <button
+                  v-for="option in statusOptions"
+                  :key="option.value"
+                  type="button"
+                  class="menu-list-item"
+                  :class="{ selected: statusFilter === option.value }"
+                  @click="statusFilter = option.value; applyFilters(); close()"
+                >
+                  {{ option.label }}
+                </button>
+              </div>
+            </template>
+          </FilterChip>
+          <FilterChip
+            :label="expiryOptions.find((o) => o.value === expiryFilter)?.label ?? '全部到期状态'"
+            :active="expiryFilter !== ''"
+          >
+            <template #default="{ close }">
+              <div class="menu-list">
+                <button
+                  v-for="option in expiryOptions"
+                  :key="option.value"
+                  type="button"
+                  class="menu-list-item"
+                  :class="{ selected: expiryFilter === option.value }"
+                  @click="expiryFilter = option.value; applyFilters(); close()"
+                >
+                  {{ option.label }}
+                </button>
+              </div>
+            </template>
+          </FilterChip>
+          <button
+            type="button"
+            class="btn secondary small"
+            @click="applyFilters"
+          >
+            搜索
+          </button>
+          <button
+            v-if="query || statusFilter || expiryFilter"
+            type="button"
+            class="btn link small"
+            @click="resetFilters"
+          >
+            重置
+          </button>
+        </template>
+
+        <template #cell-id="{ row }">
+          <span class="chip mono">#{{ row.id }}</span>
+        </template>
+        <template #cell-username="{ row }">
+          <RouterLink :to="`/users/${row.id}`">
+            {{ row.username }}
+          </RouterLink>
         </template>
         <template #cell-status="{ row }">
           <StatusBadge v-bind="displayUserStatus(row)" />
@@ -238,8 +279,21 @@ onMounted(() => {
           </div>
         </template>
         <template #cell-expires_at="{ row }">
-          <div class="expire-cell">
-            <span>{{ row.expires_at ? formatDate(row.expires_at) : '永不过期' }}</span>
+          <StatusBadge
+            v-if="!row.expires_at"
+            label="长期有效"
+            tone="muted"
+          />
+          <StatusBadge
+            v-else-if="isExpired(row)"
+            :label="`已过期 · ${formatDate(row.expires_at)}`"
+            tone="danger"
+          />
+          <div
+            v-else
+            class="expire-cell"
+          >
+            <span>{{ formatDate(row.expires_at) }}</span>
             <span class="text-secondary remaining">{{ formatRemaining(row.expires_at) }}</span>
           </div>
         </template>
@@ -247,25 +301,13 @@ onMounted(() => {
           {{ formatDateTime(row.created_at) }}
         </template>
         <template #cell-actions="{ row }">
-          <span class="actions">
-            <RouterLink :to="`/users/${row.id}`">详情</RouterLink>
-            <button
-              type="button"
-              class="btn link"
-              :disabled="statusUpdatingId === row.id"
-              @click="toggleStatus(row)"
-            >
-              {{ row.status === 'active' ? '禁用' : '启用' }}
-            </button>
-            <button
-              type="button"
-              class="btn link"
-              @click="deleteTarget = row"
-            >删除</button>
-          </span>
+          <OverflowMenu
+            :items="rowActions(row)"
+            :label="`用户 ${row.username} 的操作`"
+          />
         </template>
         <template #empty>
-          {{ loading ? '加载中…' : '没有符合条件的用户' }}
+          没有符合条件的用户
         </template>
       </DataTable>
 
@@ -304,28 +346,6 @@ onMounted(() => {
   min-width: 150px;
 }
 
-.eyebrow {
-  margin: 0 0 var(--spacing-xs);
-  color: var(--color-primary);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-}
-
-.toolbar-label {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: var(--spacing-md);
-  color: var(--color-text);
-  font-weight: 600;
-}
-
-.toolbar-label span {
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
-  font-weight: 400;
-}
-
 .traffic-text {
   font-size: var(--font-size-sm);
 }
@@ -339,14 +359,8 @@ onMounted(() => {
   font-size: var(--font-size-sm);
 }
 
-.actions {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-}
-
 .search-input {
-  width: min(300px, 100%);
+  width: min(280px, 100%);
 }
 
 @media (max-width: 700px) {

@@ -1,8 +1,23 @@
 <script setup lang="ts">
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import {
+  ArrowLeft,
+  ChevronsLeft,
+  LayoutDashboard,
+  Monitor,
+  Moon,
+  Search,
+  Server,
+  Settings,
+  Sun,
+  Users,
+  Waypoints,
+  type LucideIcon,
+} from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { useThemeStore, type ThemeMode } from '@/stores/theme'
+import MenuSearch from '@/components/MenuSearch.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -20,60 +35,49 @@ function toggleCollapse() {
 
 const collapseTitle = computed(() => (collapsed.value ? '展开侧边栏' : '收起侧边栏'))
 
-const navItems = [
-  {
-    to: '/',
-    label: '仪表盘',
-    exact: true,
-    icon: 'M3 3h7v9H3z M14 3h7v5h-7z M14 12h7v9h-7z M3 16h7v5H3z',
-  },
-  {
-    to: '/users',
-    label: '用户',
-    exact: false,
-    icon: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75',
-  },
-  {
-    to: '/servers',
-    label: '服务器',
-    exact: false,
-    icon: 'M2 2h20v8H2z M2 14h20v8H2z M6 6h.01 M6 18h.01',
-  },
-  {
-    to: '/nodes',
-    label: '节点',
-    exact: false,
-    icon: 'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71 M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71',
-  },
-  {
-    to: '/settings',
-    label: '设置',
-    exact: false,
-    icon: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z',
-  },
+interface NavItem {
+  to: string
+  label: string
+  exact: boolean
+  icon: LucideIcon
+}
+
+const navItems: NavItem[] = [
+  { to: '/', label: '仪表盘', exact: true, icon: LayoutDashboard },
+  { to: '/users', label: '用户', exact: false, icon: Users },
+  { to: '/servers', label: '服务器', exact: false, icon: Server },
+  { to: '/nodes', label: '节点', exact: false, icon: Waypoints },
+  { to: '/settings', label: '设置', exact: false, icon: Settings },
 ]
 
 const activePath = computed(() => route.path)
 
-function isActive(item: { to: string; exact: boolean }): boolean {
+function isActive(item: NavItem): boolean {
   if (item.exact) return activePath.value === item.to
   return activePath.value === item.to || activePath.value.startsWith(`${item.to}/`)
 }
 
-const themeOrder: ThemeMode[] = ['light', 'dark', 'system']
+const pageTitle = computed(() => route.meta.title ?? '')
+const parentTitle = computed(() => route.meta.parentTitle ?? '')
+const parentPath = computed(() => route.meta.parentPath ?? '')
 
-const themeLabels: Record<ThemeMode, string> = {
-  light: '浅色',
-  dark: '深色',
-  system: '跟随系统',
+const searchOpen = ref(false)
+
+function onGlobalKeydown(event: KeyboardEvent) {
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+    event.preventDefault()
+    searchOpen.value = !searchOpen.value
+  }
 }
 
-const themeTitle = computed(() => `主题：${themeLabels[theme.mode]}（点击切换）`)
+onMounted(() => window.addEventListener('keydown', onGlobalKeydown))
+onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKeydown))
 
-function cycleTheme() {
-  const next = themeOrder[(themeOrder.indexOf(theme.mode) + 1) % themeOrder.length]
-  theme.setMode(next)
-}
+const themeOptions: Array<{ mode: ThemeMode; label: string; icon: LucideIcon }> = [
+  { mode: 'light', label: '浅色', icon: Sun },
+  { mode: 'dark', label: '深色', icon: Moon },
+  { mode: 'system', label: '跟随系统', icon: Monitor },
+]
 
 async function handleLogout() {
   await auth.logout()
@@ -102,18 +106,11 @@ async function handleLogout() {
           :class="{ active: isActive(item) }"
           :title="collapsed ? item.label : undefined"
         >
-          <svg
+          <component
+            :is="item.icon"
+            :size="18"
             class="nav-icon"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.8"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            aria-hidden="true"
-          >
-            <path :d="item.icon" />
-          </svg>
+          />
           <span class="nav-label">{{ item.label }}</span>
         </RouterLink>
       </nav>
@@ -129,84 +126,104 @@ async function handleLogout() {
         :aria-expanded="!collapsed"
         @click="toggleCollapse"
       >
-        <svg
+        <ChevronsLeft
+          :size="15"
           class="collapse-icon"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <path d="m15 18-6-6 6-6" />
-        </svg>
+        />
       </button>
     </aside>
     <div class="main-area">
       <header class="topbar">
-        <div class="topbar-title">
-          {{ navItems.find((item) => isActive(item))?.label ?? '' }}
-        </div>
-        <div class="topbar-right">
-          <button
-            type="button"
-            class="theme-toggle"
-            :title="themeTitle"
-            :aria-label="themeTitle"
-            @click="cycleTheme"
+        <div class="topbar-row">
+          <RouterLink
+            class="mobile-brand"
+            to="/"
+            aria-label="返回仪表盘"
           >
-            <svg
-              v-if="theme.mode === 'light'"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
+            <span class="brand-mark">V</span>
+          </RouterLink>
+          <div class="topbar-heading">
+            <RouterLink
+              v-if="parentPath"
+              class="back-link"
+              :to="parentPath"
             >
-              <path d="M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10z M12 1v2 M12 21v2 M4.22 4.22l1.42 1.42 M18.36 18.36l1.42 1.42 M1 12h2 M21 12h2 M4.22 19.78l1.42-1.42 M18.36 5.64l1.42-1.42" />
-            </svg>
-            <svg
-              v-else-if="theme.mode === 'dark'"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
+              <ArrowLeft :size="13" />
+              {{ parentTitle }}
+            </RouterLink>
+            <div class="topbar-title">
+              {{ pageTitle }}
+            </div>
+          </div>
+          <div class="topbar-right">
+            <button
+              type="button"
+              class="search-trigger"
+              @click="searchOpen = true"
             >
-              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-            </svg>
-            <svg
-              v-else
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
+              <Search :size="14" />
+              <span class="search-text">搜索菜单</span>
+              <span class="kbd">⌘K</span>
+            </button>
+            <div
+              class="theme-switch"
+              role="group"
+              aria-label="主题"
             >
-              <path d="M2 3h20v14H2z M8 21h8 M12 17v4" />
-            </svg>
-          </button>
-          <span class="admin text-secondary">{{ auth.username || '管理员' }}</span>
-          <button
-            type="button"
-            class="btn secondary small"
-            @click="handleLogout"
-          >
-            退出登录
-          </button>
+              <button
+                v-for="option in themeOptions"
+                :key="option.mode"
+                type="button"
+                class="theme-option"
+                :class="{ active: theme.mode === option.mode }"
+                :title="option.label"
+                :aria-label="option.label"
+                :aria-pressed="theme.mode === option.mode"
+                @click="theme.setMode(option.mode)"
+              >
+                <component
+                  :is="option.icon"
+                  :size="15"
+                />
+              </button>
+            </div>
+            <span class="admin text-secondary">{{ auth.username || '管理员' }}</span>
+            <button
+              type="button"
+              class="btn secondary small"
+              @click="handleLogout"
+            >
+              退出登录
+            </button>
+          </div>
         </div>
+        <nav
+          class="mobile-nav"
+          aria-label="主导航"
+        >
+          <RouterLink
+            v-for="item in navItems"
+            :key="item.to"
+            :to="item.to"
+            class="mobile-nav-item"
+            :class="{ active: isActive(item) }"
+          >
+            <component
+              :is="item.icon"
+              :size="15"
+            />
+            <span>{{ item.label }}</span>
+          </RouterLink>
+        </nav>
       </header>
       <main class="content">
         <RouterView />
       </main>
     </div>
+    <MenuSearch
+      :open="searchOpen"
+      @close="searchOpen = false"
+    />
   </div>
 </template>
 
@@ -277,8 +294,6 @@ async function handleLogout() {
 }
 
 .nav-icon {
-  width: 18px;
-  height: 18px;
   flex: none;
 }
 
@@ -342,8 +357,6 @@ async function handleLogout() {
 }
 
 .collapse-icon {
-  width: 15px;
-  height: 15px;
   transition: transform 0.2s ease;
 }
 
@@ -390,11 +403,6 @@ async function handleLogout() {
 }
 
 .topbar {
-  min-height: 64px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 var(--spacing-lg);
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
   position: sticky;
@@ -402,43 +410,111 @@ async function handleLogout() {
   z-index: 1;
 }
 
+.topbar-row {
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  padding: 0 var(--spacing-lg);
+}
+
+.mobile-brand {
+  display: none;
+}
+
+.topbar-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.back-link:hover {
+  color: var(--color-text);
+}
+
 .topbar-title {
   color: var(--color-text);
-  font-size: var(--font-size-xl);
+  font-size: var(--font-size-lg);
   font-weight: 700;
   letter-spacing: -0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .topbar-right {
   display: flex;
   align-items: center;
   gap: var(--spacing-md);
+  flex: none;
 }
 
-.theme-toggle {
+.search-trigger {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
+  gap: var(--spacing-sm);
+  min-height: 32px;
+  padding: 0 10px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-surface);
   color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
   cursor: pointer;
-  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+  transition: border-color 0.15s ease, color 0.15s ease;
 }
 
-.theme-toggle svg {
-  width: 17px;
-  height: 17px;
-}
-
-.theme-toggle:hover {
-  color: var(--color-text);
+.search-trigger:hover {
   border-color: var(--color-border-strong);
+  color: var(--color-text);
+}
+
+.theme-switch {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
   background: var(--color-muted-soft);
+}
+
+.theme-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.theme-option:hover {
+  color: var(--color-text);
+}
+
+.theme-option.active {
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: var(--shadow-card);
+}
+
+.mobile-nav {
+  display: none;
 }
 
 .content {
@@ -447,76 +523,67 @@ async function handleLogout() {
 }
 
 @media (max-width: 900px) {
-  .layout {
-    flex-direction: column;
-  }
-
   .sidebar {
-    width: 100%;
-    flex-direction: row;
-    align-items: center;
-    border-right: none;
-    border-bottom: 1px solid var(--color-border);
-    overflow: hidden;
+    display: none;
   }
 
-  .brand {
-    border-bottom: none;
-    padding: var(--spacing-md);
+  .topbar-row {
+    min-height: 56px;
+    padding: 0 var(--spacing-md);
+  }
+
+  .mobile-brand {
+    display: inline-flex;
     flex: none;
   }
 
-  .nav {
-    flex-direction: row;
+  .mobile-nav {
+    display: flex;
+    gap: var(--spacing-xs);
     overflow-x: auto;
-    padding: var(--spacing-sm);
+    padding: 0 var(--spacing-md) var(--spacing-sm);
     scrollbar-width: none;
   }
 
-  .nav::-webkit-scrollbar {
+  .mobile-nav::-webkit-scrollbar {
     display: none;
   }
 
-  .nav-item {
+  .mobile-nav-item {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-xs);
     flex: none;
-    min-height: 40px;
+    min-height: 34px;
+    padding: 0 12px;
+    border-radius: 999px;
+    color: var(--color-shell-muted);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
     white-space: nowrap;
   }
 
-  .collapse-btn,
-  .sidebar-footer {
-    display: none;
+  .mobile-nav-item:hover {
+    color: var(--color-text);
+    background: var(--color-muted-soft);
   }
 
-  .topbar {
-    min-height: 56px;
+  .mobile-nav-item.active {
+    color: var(--color-text);
+    background: var(--color-shell-active);
+    font-weight: 600;
   }
 }
 
 @media (max-width: 600px) {
-  .sidebar {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .brand {
-    padding: 14px var(--spacing-md) var(--spacing-sm);
-  }
-
-  .nav {
-    padding: 0 var(--spacing-sm) var(--spacing-sm);
-  }
-
-  .topbar {
-    padding: 0 var(--spacing-md);
+  .search-text,
+  .search-trigger .kbd,
+  .admin {
+    display: none;
   }
 
   .topbar-title {
-    font-size: var(--font-size-lg);
-  }
-
-  .admin {
-    display: none;
+    font-size: var(--font-size-md);
   }
 }
 </style>
