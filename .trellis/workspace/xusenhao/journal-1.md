@@ -50,3 +50,24 @@
 - 最终校验全绿：go build/vet/gofmt/test（含 `-tags integration,with_quic,with_utls`）+ 前端
   typecheck/build/lint。AC1–AC9 全部达成（AC4 仅单节点本地，已知限制）。
 - 未提交（工作区改动待用户 review）；未验证 docker build（沙箱无 Docker）；实机端到端建议手测。
+
+
+## Session 1: 访问站点统计：Agent 采集目标站点 + Panel 存储/展示
+
+**Date**: 2026-09-22
+**Task**: 访问站点统计：Agent 采集目标站点 + Panel 存储/展示
+**Branch**: `main`
+
+### Summary
+
+实现 process-in sing-box ConnectionTracker 采集连接目标（metadata.Destination），Agent 增量上报 POST /api/agent/visits；Panel 迁移 0002（visit_records/visit_daily_domains/visit_batches）单事务幂等落库，管理端 /api/visits 等端点，设置 collection_visits/retention_visit_days(7)/retention_visit_aggregate_days(90) 与 janitor 清理；前端用户详情/服务器详情/独立 /visits 页。trellis-check 修复 flushVisits 冻结期丢事件的 data-loss 缺陷（pendingVisits 积压+回归测试），并更正 spec 残留（decodeJSONStrict/connection-logs）与 design.md §2.2。全量 go/web 校验通过。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0fdb03d` | (see git log) |
+
+### Status
+
+[OK] **Completed**
