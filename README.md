@@ -1,6 +1,6 @@
 # vps-node
 
-轻量级多节点用户管理面板：Panel（唯一业务数据源）+ Agent（节点运行时）+ sing-box（数据面）。
+轻量级多节点用户管理面板：Panel（唯一业务数据源）+ Agent（内嵌 sing-box 的节点运行时）。
 
 ## Architecture
 
@@ -10,24 +10,24 @@ Browser --HTTPS/Admin session--> Panel API + Web UI --SQLite
                                       | HTTPS REST polling + Agent Bearer Token
                                       v
                                Agent (one per Server)
-                                      |
+                                      │
                                       v
-                         sing-box (one process, many Nodes)
+                    embedded sing-box (in-process, many Nodes)
 ```
 
-- **Panel** owns users, servers, nodes, authorizations, traffic totals, sessions and connection logs. It is the single source of truth.
+- **Panel** owns users, servers, nodes, authorizations, traffic totals and online devices. It is the single source of truth.
 - **Server** is a physical VPS with exactly **one** Agent; it may host **many** protocol Nodes.
-- **Node** is one sing-box inbound (Shadowsocks 2022 / VLESS Reality / Hysteria2 / AnyTLS) with a port and protocol settings. AnyTLS requires sing-box ≥ 1.12 (the pinned agent image already satisfies this; binary installs must provide it themselves).
+- **Node** is one sing-box inbound (Shadowsocks 2022 / VLESS Reality / Hysteria2 / AnyTLS) with a port and protocol settings. AnyTLS requires sing-box ≥ 1.12; the embedded runtime is pinned to sing-box ≥ 1.13 (the agent image is built with `-tags with_quic,with_utls`).
 - **User ⇄ Node** is N:N (`user_nodes`). A user has one global UUID; VLESS/Hysteria2/AnyTLS use it directly, Shadowsocks credentials are derived by the Panel per node+UUID.
-- **Agent** polls the Panel for versioned, server-scoped config, validates it with `sing-box check`, atomically replaces the config file, and reports traffic, sessions and connection logs. The Agent never stores business data.
+- **Agent** polls the Panel for versioned, server-scoped config, loads it into an **in-process embedded sing-box** instance, and reports per-user traffic and online devices. The Agent never stores business data.
 
 Control flow (design contract):
 
 1. Admin change commits → the affected Server revision increments monotonically.
 2. Agent heartbeats carry metrics; the heartbeat response returns the current revision.
 3. Agent polls `GET /api/agent/config?version=<applied>`; unchanged revision → `{"status":"current"}` (no payload).
-4. On `updated`, the Agent writes a temp file (0600), runs `sing-box check -c`, then atomically renames it over the active config and (optionally) runs the configured reload command.
-5. Any validation/reload failure keeps the previous file and the old revision; the failure is reported via heartbeat (`last_apply_error`) and logs. The Panel stays unreachable-safe: the Agent retries with backoff and keeps the last valid config forever.
+4. On `updated`, the Agent rebuilds its embedded sing-box instance from the rendered config (stops the previous instance, starts the new one) and registers a per-user connection tracker.
+5. Any parse/start failure keeps the last applied revision; the failure is reported via heartbeat (`last_apply_error`) and logs, and the Agent keeps retrying on the next sync. The Panel stays unreachable-safe: the Agent keeps the last valid config loaded forever.
 
 ## Quickstart
 
@@ -40,7 +40,7 @@ make panel                    # go build -o panel ./cmd/panel
 PANEL_ADMIN_PASSWORD=... ./panel
 ```
 
-Panel config keys (yaml or `PANEL_*` env): `listen`, `db_path`, `log_level`, `app_key` (optional 32-byte hex; encrypts protocol secrets at rest — when omitted, one is auto-generated on first start and persisted in the `settings` table), `secure_cookie`, `admin.username`, `admin.password`, `retention.raw_log_days`, `retention.aggregate_days`, `retention.sweep_interval_seconds`, `retention.max_connection_logs`, `retention.max_traffic_records`. Precedence: `PANEL_APP_KEY` env > yaml > database.
+Panel config keys (yaml or `PANEL_*` env): `listen`, `db_path`, `log_level`, `app_key` (optional 32-byte hex; encrypts protocol secrets at rest — when omitted, one is auto-generated on first start and persisted in the `settings` table), `secure_cookie`, `admin.username`, `admin.password`, `retention.aggregate_days`, `retention.sweep_interval_seconds`, `retention.max_traffic_records`. Precedence: `PANEL_APP_KEY` env > yaml > database.
 
 ### Web UI
 
@@ -55,7 +55,7 @@ make build-embed              # npm ci + npm run build + go build -tags embed_ui
 ### Agent
 
 1. In the Panel web UI: **Servers → Server detail → Generate register token** (one-time, hashed at rest).
-2. On the VPS (with sing-box installed):
+2. On the VPS (no separate sing-box install needed — it is embedded in the agent):
 
 ```sh
 PANEL_DOWNLOAD_BASE=https://example.com/downloads/vps-node \
@@ -81,15 +81,10 @@ Re-registration with a fresh register token rotates the agent token; the old one
 | `log_level` | `info` | `debug`…`error` |
 | `heartbeat_interval` | `30s` | metrics + liveness; panel response can retune it |
 | `sync_interval` | `30s` | config poll cadence (a newer-revision heartbeat triggers an extra poll) |
-| `traffic_interval` | `60s` | traffic/session/log report cadence |
-| `singbox.config_path` | `/etc/sing-box/config.json` | active config the agent atomically replaces |
-| `singbox.check_bin` | `sing-box` | binary used for `check -c <file>` |
-| `singbox.reload_command` | *(empty)* | optional **single binary + fixed args** (e.g. `/bin/systemctl restart sing-box`); empty = no automatic reload (logged) |
-| `collection.traffic` / `collection.sessions` / `collection.connection_logs` | `true` | agent-side collection switches |
+| `traffic_interval` | `60s` | traffic/device report cadence |
+| `collection.traffic` | `true` | agent-side traffic collection switch |
 
-All keys have `AGENT_*` environment equivalents (e.g. `AGENT_PANEL_URL`, `AGENT_REGISTER_TOKEN`, `AGENT_SINGBOX_RELOAD_COMMAND`).
-
-Reload privileges: `systemctl restart sing-box` as the non-root `panel-agent` user needs polkit/sudo. Prefer a privilege-free strategy (sing-box watchdog or signal-based reload via a small helper) — the agent only ever executes the one allowlisted command from its own config file, never anything from the Panel.
+All keys have `AGENT_*` environment equivalents (e.g. `AGENT_PANEL_URL`, `AGENT_REGISTER_TOKEN`). Per-user traffic is counted in-process by the embedded sing-box connection tracker; there is no external sing-box binary or config file to manage.
 
 ## Docker deployment
 
@@ -98,20 +93,16 @@ Docker is the second supported deployment path next to systemd. Two images are b
 | Image | Contents | Base |
 | --- | --- | --- |
 | `vps-node-panel` | Panel binary with the web UI embedded (`embed_ui`) + `/panel-healthcheck` helper | `scratch` |
-| `vps-node-agent` | `panel-agent` + pinned `sing-box` + `singbox-reload` helper + CA certs | `scratch` |
+| `vps-node-agent` | `panel-agent` with embedded sing-box (`-tags with_quic,with_utls`) + CA certs | `scratch` |
 
-The agent image is self-contained: sing-box ships inside it, and `singbox-reload` (a tiny Go binary, no shell) starts/stops sing-box via the pid file `/run/singbox/singbox.pid` whenever the agent applies a new config. All binaries are static (CGO off), so the runtime base is `FROM scratch`.
+The agent image is self-contained: sing-box is compiled into the `panel-agent` binary and runs in-process, so there is no separate sing-box binary, config file or reload helper to manage. All binaries are static (CGO off), so the runtime base is `FROM scratch`.
 
 ### Build
 
 ```sh
 make docker-panel                                        # vps-node-panel:latest
-make docker-agent                                        # vps-node-agent:latest, sing-box at the pinned default below
-make docker-agent SINGBOX_VERSION=1.13.7 \
-    SINGBOX_SHA256_AMD64=<sha256> SINGBOX_SHA256_ARM64=<sha256>   # bump sing-box (checksums from its GitHub release)
+make docker-agent                                        # vps-node-agent:latest
 ```
-
-sing-box is downloaded at build time from the official GitHub release (`ARG SINGBOX_VERSION`, the static `*-musl` build, amd64/arm64 via `TARGETARCH`) and verified against pinned sha256 checksums (`SINGBOX_SHA256_AMD64`/`SINGBOX_SHA256_ARM64`, matching the default version). When you bump `SINGBOX_VERSION`, pass the matching checksums for the two `*-musl.tar.gz` files — a mismatch fails the build. Set `SINGBOX_DOWNLOAD_URL` to a mirror if GitHub is unreachable from your builder (the mirror must serve byte-identical tarballs for the checksums to pass).
 
 ### Run: Panel only
 
@@ -144,7 +135,7 @@ cp .env.example .env      # set AGENT_PANEL_URL, AGENT_SERVER_ID and one of the 
 docker compose -f agent.docker-compose.yml up -d
 ```
 
-The agent registers on first start and stores its identity in the `agent-state` volume (`/var/lib/panel-agent/state.json`); delete that volume to re-register. The rendered sing-box config lives in the `agent-config` volume (`/etc/sing-box`) so it survives container recreation. The agent re-applies its config (and restarts sing-box) on every start, so a container restart brings the nodes back up without any manual step. After a config apply the agent spawns sing-box itself via `singbox-reload` — there is no separate sing-box container. Publish one port pair (`tcp`+`udp`) per node, e.g. `8388:8388/tcp` and `8388:8388/udp` (override the host side with `NODE_PORT`); with many nodes consider `network_mode: host`. Ports ≤1024 additionally require root (the container runs as root by default).
+The agent registers on first start and stores its identity in the `agent-state` volume (`/var/lib/panel-agent/state.json`); delete that volume to re-register. The agent forces a config re-apply at startup, so a restart reloads the Panel-rendered config into the embedded sing-box instance and brings the nodes back up without any manual step — there is no separate sing-box container, binary, or config volume. Publish one port pair (`tcp`+`udp`) per node, e.g. `8388:8388/tcp` and `8388:8388/udp` (override the host side with `NODE_PORT`); with many nodes consider `network_mode: host`. Ports ≤1024 additionally require root (the container runs as root by default).
 
 ### Run: All-in-one (panel + agent on one host)
 
@@ -161,35 +152,28 @@ Panel↔agent traffic stays on the compose-internal network (`http://panel:8080`
 
 ### Measured footprint
 
-Measured with sing-box 1.14.1 on linux/amd64 (Docker 29.7.2), idle all-in-one stack:
+The agent binary with the embedded sing-box runtime is about **38 MB** on linux/amd64 (built with `-tags with_quic,with_utls`, `CGO_ENABLED=0`); the panel is a few MB smaller. Idle memory: panel ≈ 6.5 MiB; agent with embedded sing-box ≈ 16 MiB, growing with active connections — size accordingly. Rebuild locally for current figures.
 
-| Item | Unpacked (`docker images`) | Serialized (`docker save` ≈ pull size) |
-| --- | --- | --- |
-| `vps-node-panel` | 24.5 MB | 7.4 MB |
-| `vps-node-agent` | 138 MB | 37.1 MB |
-
-Idle memory: panel ≈ 6.5 MiB; agent container incl. running sing-box ≈ 16 MiB (sing-box grows with active connections — size it accordingly).
-
-> The 60 MB agent-image target refers to pull/transfer size (37 MB ✓). The unpacked 138 MB is dominated by the official sing-box 1.14.1 binary itself (~92 MB unpacked; 1.13.x ≈ 68 MB — no current official release ships smaller). To shrink further, build sing-box from source with minimal feature tags (`with_quic,with_utls,with_clash_api`) in place of the release download.
+> The embedded sing-box build uses only the `with_quic,with_utls` tags, so the agent binary carries just the inbound protocols/transports it needs rather than the full upstream feature set.
 
 ### Upgrades
 
 - **Panel**: `git pull && make docker-panel && docker compose up -d` — the image is replaced, the `panel-data` volume is untouched; roll back by re-deploying the previous image (no data migration either way).
-- **Agent**: `make docker-agent SINGBOX_VERSION=<new>` then `docker compose -f agent.docker-compose.yml up -d`. The state volume (identity, applied revision, batch sequences) survives; traffic idempotency is preserved across upgrades. To change sing-box only, rebuild with a new `SINGBOX_VERSION` — the agent re-checks and re-applies its config on start.
+- **Agent**: `git pull && make docker-agent && docker compose -f agent.docker-compose.yml up -d`. The state volume (identity, applied revision, batch sequences) survives; traffic idempotency is preserved across upgrades. The embedded sing-box version is pinned in `go.mod`; bump it with `go get github.com/sagernet/sing-box@<version> && go mod tidy` and rebuild.
 
 ### Notes and caveats
 
-- The runtime base is `scratch`: no shell, no busybox. Debug with `docker exec <c> /usr/local/bin/sing-box version` style direct execs, `docker cp`, or `docker top` (processes are visible from the host).
-- sing-box is a child of the agent. Each reload replaces the running sing-box: the previous process is SIGTERMed by `singbox-reload` and would linger as a zombie, because the agent (a plain Go binary) does not reap reparented orphans. The compose files therefore set `init: true`, which runs Docker's built-in init as PID 1 to reap it — keep that setting. If you run the image with bare `docker run`, pass `--init` for the same effect; without it every config apply leaks one zombie process until the container restarts. Note that `docker top` does not show defunct processes — check for zombies with `ps aux | grep defunct` on the host. `docker stop` SIGTERMs the agent; any remaining sing-box is killed when the container's PID namespace goes away.
+- The runtime base is `scratch`: no shell, no busybox. Debug with direct execs of the agent binary, `docker cp`, or `docker top` (processes are visible from the host).
+- The agent embeds sing-box in-process, so it forks no children and leaks no zombies; `init: true` in the compose files is harmless and remains recommended for general process hygiene.
 - The agent reads host-style `/proc` metrics (`cpu`, `meminfo`, `uptime`), so reported CPU/memory percentages reflect the host, not the cgroup limit.
-- Container env defaults mirror `deploy/agent.example.yaml` container paths: `AGENT_STATE_PATH=/var/lib/panel-agent/state.json`, `AGENT_SINGBOX_CONFIG_PATH=/etc/sing-box/config.json`, `AGENT_SINGBOX_CHECK_BIN=/usr/local/bin/sing-box`, `AGENT_SINGBOX_RELOAD_COMMAND=/usr/local/bin/singbox-reload`. Env overrides the YAML file, so bind-mounting an `agent.yaml` into this image only works for keys not pinned by these envs.
+- Container env defaults mirror `deploy/agent.example.yaml`: `AGENT_STATE_PATH=/var/lib/panel-agent/state.json`. Env overrides the YAML file, so bind-mounting an `agent.yaml` into this image only works for keys not pinned by these envs.
 
 ### systemd vs Docker
 
 | | systemd | Docker |
 | --- | --- | --- |
-| Isolation | hardened units (`ProtectSystem=strict`, non-root) | container boundary, root user by default |
-| sing-box lifecycle | host package + `systemctl restart` | pinned version inside the image, helper-managed |
+| Isolation | hardened units (`ProtectSystem=strict`, non-root, `CAP_NET_BIND_SERVICE`) | container boundary, root user by default |
+| sing-box lifecycle | embedded in the agent process | embedded in the agent process |
 | Upgrades | replace binary + restart | replace image + restart container |
 | Data | filesystem paths | named volumes |
 | Best for | long-lived dedicated VPS | fast provisioning, reproducible nodes, all-in-one test stacks |
@@ -199,19 +183,14 @@ Both paths are fully supported and produce identical panel-side behavior (same a
 
 ## Data collection model
 
-- **Traffic** is reported as per-interval **deltas** per (user, node), computed from sing-box Clash API `/connections` totals. Every batch carries a monotonically increasing `batch_seq` per kind; the Panel treats `(agent, batch_seq)` as the idempotency key, so resend-on-uncertainty never double counts (worst case undercounts one interval). Sequence numbers are persisted only after a confirmed ack.
-- **Sessions** are full-replacement snapshots per report; the Panel replaces the server's session set transactionally. Snapshots older than `session_freshness_seconds` stop counting as online.
-- **Connection logs** are emitted when a tracked connection disappears from the Clash API (status `closed`, lifetime totals). Logs never contain destination host/port or payload; the Panel strips/rejects such fields.
-- **Attribution**: connections are attributed via the inbound tag (`vless-<id>` / `shadowsocks-<id>` / `hysteria2-<id>`) and the inbound user name (`u-<user_id>`, the name the Panel renders into sing-box). Connections without reliable attribution are excluded from reports and counted in agent logs — missing fields are never inferred.
+- **Traffic** is reported as per-interval **deltas** per (user, node), computed from the embedded sing-box connection tracker's per-`(user,node)` cumulative byte counters (read from inbound = upload, write to inbound = download). Every batch carries a monotonically increasing `batch_seq` per kind; the Panel treats `(agent, batch_seq)` as the idempotency key, so resend-on-uncertainty never double counts. Unconfirmed deltas stay pending and are retried with the same frozen payload (so a lost ack is deduplicated), while a permanently rejected batch (non-retryable 4xx, e.g. a `recorded_at` that aged out of the acceptance window during a long panel outage) is requeued under a fresh sequence instead of blocking the queue; sequence numbers are persisted only after a confirmed ack.
+- **Devices** are full-replacement snapshots per report; the Panel replaces the server's `online_devices` set transactionally and refreshes each user's `online_count`/`last_online_at`.
+- **Visits** record the destination a user reached through a node: the requested host/port, `tcp`/`udp` network, and the client source IP. The agent reads sing-box `metadata.Destination` (the client-requested address; **no sniffing** is enabled, so a client that requests a bare IP is recorded as that IP), keeps a bounded in-memory queue (10000 entries, oldest dropped and counted on overflow), and reports them in the same idempotent `batch_seq` style as traffic. The Panel stores each record in `visit_records` and upserts a per-UTC-day `visit_daily_domains` aggregate used for "most visited" summaries. Visits never carry byte counters — traffic accounting stays on its own channel.
+- **Attribution**: connections are attributed in-process from sing-box inbound metadata — the inbound tag (`vless-<id>` / `shadowsocks-<id>` / `hysteria2-<id>`) selects the node and the inbound user name (`u-<user_id>`, the name the Panel renders into sing-box) selects the user. Connections without reliable attribution are excluded from reports and counted in agent logs — missing fields are never inferred.
 
-## sing-box verification status
+## Embedded sing-box runtime
 
-> **Pending pinned-version verification.** The Panel renderer and the Agent apply path are covered by tests, but **user-level traffic measurement is NOT yet verified against a pinned sing-box release**. Specifically:
-> - whether the pinned sing-box exposes per-connection inbound user (`inboundUser`) in the Clash API metadata,
-> - whether Hysteria2/Reality inbound configs pass `sing-box check` exactly as rendered,
-> - real throughput behavior of user-level stats.
->
-> Run `make test-integration` on a host with the pinned `sing-box` in `PATH`; the integration tests print the binary version (`sing-box version`) and validate the rendered config of all three protocols with the real `sing-box check`. Until they pass on the pinned version, treat traffic/connection measurement as unverified (per the task's review gate).
+> The agent embeds `github.com/sagernet/sing-box` (pinned in `go.mod`) and builds with `-tags with_quic,with_utls`, running one instance in-process. A custom `adapter.ConnectionTracker` wraps TCP and UDP connections and counts bytes per user as the traffic flows, so per-user accounting no longer depends on polling the Clash API. `go test -tags integration,with_quic,with_utls ./internal/e2e/` validates that the Panel-rendered config parses and starts against the pinned embedded sing-box (no external binary required).
 
 ## Auth model
 
@@ -224,22 +203,23 @@ The two scopes share no middleware and no token space. Agent `server_id` is alwa
 
 ## Retention
 
-- Raw connection logs: default **7 days**; aggregates: default **90 days** (configurable via `/api/settings` and panel config); the janitor sweeps on a configurable interval. Hard row-count caps (`retention.max_connection_logs`, default 1,000,000; `retention.max_traffic_records`, default 5,000,000; `0` disables) bound storage even if the retention window is large — the oldest rows are deleted first.
+- Traffic records: default **90 days** (configurable via `/api/settings` and panel config); the janitor sweeps on a configurable interval. The `retention.max_traffic_records` cap (default 5,000,000; `0` disables) bounds storage even if the retention window is large — the oldest rows are deleted first. Stale `online_devices` rows are swept after 24h without a report.
 - Traffic records feed user/node/server totals transactionally and survive user/server deletion until retention cleanup.
-- Heartbeat is the only liveness source; a server goes `offline` after `server_offline_after_seconds` (default 60s) without heartbeat. Traffic/session/log reports never affect online status.
+- Visit records: raw `visit_records` default **7 days** (`retention.visit_days`), the daily `visit_daily_domains` aggregate and `visit_batches` markers default **90 days** (`retention.visit_aggregate_days`). Visit collection can be switched off globally with `collection_visits`; the agent can also disable its local `collection.visits`. Recorded source IPs and destination hosts are sensitive operational data and never leave the Panel database.
+- Heartbeat is the only liveness source; a server goes `offline` after `server_offline_after_seconds` (default 60s) without heartbeat. Traffic/device/visit reports never affect server online status.
 
 ## Development
 
 ```sh
 make build              # vet + test + build both binaries
-make test               # go test ./... (includes hermetic agent e2e with a fake sing-box)
+make test               # go test ./... (includes hermetic agent e2e with a stub kernel)
 make test-race          # go test -race ./...
-make test-integration   # go test -tags integration ./... (skips when sing-box is absent)
+make test-integration   # go test -tags integration,with_quic,with_utls ./... (validates + starts the embedded sing-box)
 make ui                 # build the Vue frontend (web/dist)
 make build-embed        # frontend embedded into the panel binary
 make release-agent      # linux amd64/arm64/386 release tarballs in dist/
 make docker-panel       # build vps-node-panel image (web UI embedded)
-make docker-agent       # build vps-node-agent image (agent + sing-box + reload helper)
+make docker-agent       # build vps-node-agent image (agent with embedded sing-box)
 ```
 
 Module layout:
@@ -250,11 +230,12 @@ cmd/agent            agent binary (register/heartbeat/sync/telemetry loop)
 internal/web         panel HTTP handlers (admin + agent)
 internal/repo        SQLite repositories and transactions
 internal/singbox     config renderer + credential derivation contract
+internal/kernel/singbox embedded sing-box runtime + per-user connection tracker (agent side)
 internal/agentclient typed agent→panel HTTP client (retry/backoff, idempotent batches)
-internal/agentruntime agent-side runtime: config applier, metrics, Clash collectors, loop
+internal/agentruntime agent-side loop: config sync, telemetry deltas, metrics
 internal/agentstate  agent state file (identity, revision, batch seqs)
 internal/webui       web/dist embedding (build tag embed_ui)
-internal/e2e         end-to-end smoke test + sing-box integration tests
+internal/e2e         end-to-end smoke test + embedded sing-box integration tests
 deploy/              systemd units, example configs, installer, Dockerfiles + compose files
 ```
 

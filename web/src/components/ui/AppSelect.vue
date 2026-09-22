@@ -176,9 +176,17 @@ watch(
 }
 
 .app-select:disabled {
-  background: var(--color-bg);
+  background: var(--color-muted-soft);
   color: var(--color-text-secondary);
   cursor: not-allowed;
+}
+
+.app-select:disabled .chevron {
+  opacity: 0.5;
+}
+
+.app-select:disabled .dot {
+  opacity: 0.5;
 }
 
 .value {

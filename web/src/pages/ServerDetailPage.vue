@@ -3,11 +3,13 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { deleteServer, getServer, rotateAgentToken, createRegisterToken, updateServer } from '@/api/servers'
 import { deleteNode } from '@/api/nodes'
+import { getServerVisits } from '@/api/visits'
 import { errorMessage } from '@/api/http'
-import type { AgentTokenResult, NodeBrief, RegisterTokenResult, ServerDetail, ServerStatus } from '@/api/types'
+import type { AgentTokenResult, NodeBrief, RegisterTokenResult, ServerDetail, ServerStatus, Visit } from '@/api/types'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import DataTable from '@/components/DataTable.vue'
 import ErrorBanner from '@/components/ErrorBanner.vue'
+import TablePaginator from '@/components/TablePaginator.vue'
 import MetricBar from '@/components/MetricBar.vue'
 import NodeFormDialog from '@/components/NodeFormDialog.vue'
 import OneTimeSecret from '@/components/OneTimeSecret.vue'
@@ -41,6 +43,50 @@ type InstallTab = 'binary' | 'docker'
 
 const installTab = ref<InstallTab>('binary')
 const { copied: commandCopied, copy } = useCopyFeedback()
+
+const visits = ref<Visit[]>([])
+const visitTotal = ref(0)
+const visitPage = ref(1)
+const visitPageSize = ref(20)
+const visitsLoading = ref(false)
+const visitsError = ref('')
+
+const visitColumns: { key: string; label: string; width?: string }[] = [
+  { key: 'created_at', label: '时间', width: '170px' },
+  { key: 'username', label: '用户' },
+  { key: 'node_name', label: '节点' },
+  { key: 'target', label: '目标' },
+  { key: 'client_ip', label: '来源 IP', width: '150px' },
+]
+
+function formatTarget(row: Visit): string {
+  if (row.dest_port <= 0) return row.dest_host
+  return row.dest_host.includes(':')
+    ? `[${row.dest_host}]:${row.dest_port}`
+    : `${row.dest_host}:${row.dest_port}`
+}
+
+async function loadVisits() {
+  const id = serverId.value
+  if (id === null) return
+  visitsLoading.value = true
+  visitsError.value = ''
+  try {
+    const result = await getServerVisits(id, { page: visitPage.value, pageSize: visitPageSize.value })
+    visits.value = result.items
+    visitTotal.value = result.total
+  } catch (err) {
+    visitsError.value = errorMessage(err)
+  } finally {
+    visitsLoading.value = false
+  }
+}
+
+function onVisitPageChange(nextPage: number, nextSize: number) {
+  visitPage.value = nextPage
+  visitPageSize.value = nextSize
+  void loadVisits()
+}
 
 const panelOrigin = window.location.origin
 const freshRegisterToken = computed(() => registerTokenResult.value?.register_token ?? '')
@@ -202,15 +248,18 @@ function onSaved() {
 watch(serverId, () => {
   agentTokenResult.value = null
   registerTokenResult.value = null
+  visitPage.value = 1
   void load().then(() => {
     void autoGenerateRegisterToken()
   })
+  void loadVisits()
 })
 
 onMounted(() => {
   void load().then(() => {
     void autoGenerateRegisterToken()
   })
+  void loadVisits()
 })
 </script>
 
@@ -219,6 +268,8 @@ onMounted(() => {
     <PageHeader
       :title="server ? server.name : '服务器详情'"
       :subtitle="server ? server.address : undefined"
+      back-to="/servers"
+      back-title="服务器"
     >
       <template #actions>
         <template v-if="server">
@@ -465,6 +516,7 @@ onMounted(() => {
           :rows="server.nodes"
           :row-key="(row) => row.id"
           :loading="loading"
+          :bordered="false"
         >
           <template #cell-protocol="{ row }">
             {{ protocolLabel(row.protocol) }}
@@ -482,6 +534,60 @@ onMounted(() => {
             该服务器还没有节点，点击右上角添加
           </template>
         </DataTable>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2 class="card-title">
+            访问站点
+          </h2>
+          <span class="text-secondary visit-count">共 {{ visitTotal }} 条</span>
+        </div>
+        <ErrorBanner
+          :message="visitsError"
+          @dismiss="visitsError = ''"
+        />
+        <DataTable
+          :columns="visitColumns"
+          :rows="visits"
+          :row-key="(row) => row.id"
+          :loading="visitsLoading"
+          :bordered="false"
+        >
+          <template #cell-created_at="{ row }">
+            {{ formatDateTime(row.created_at) }}
+          </template>
+          <template #cell-username="{ row }">
+            <RouterLink :to="`/users/${row.user_id}`">
+              {{ row.username }}
+            </RouterLink>
+          </template>
+          <template #cell-node_name="{ row }">
+            {{ row.node_name || '—' }}
+          </template>
+          <template #cell-target="{ row }">
+            <span class="mono">{{ formatTarget(row) }}</span>
+          </template>
+          <template #cell-client_ip="{ row }">
+            <span
+              v-if="row.client_ip"
+              class="mono"
+            >{{ row.client_ip }}</span>
+            <span
+              v-else
+              class="text-secondary"
+            >—</span>
+          </template>
+          <template #empty>
+            该服务器暂无访问记录
+          </template>
+        </DataTable>
+        <TablePaginator
+          :page="visitPage"
+          :page-size="visitPageSize"
+          :total="visitTotal"
+          @change="onVisitPageChange"
+        />
       </div>
     </template>
 
@@ -646,6 +752,10 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
+}
+
+.visit-count {
+  font-size: var(--font-size-sm);
 }
 
 @media (max-width: 700px) {

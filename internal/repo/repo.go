@@ -68,6 +68,14 @@ func timeArg(t *time.Time) any {
 	return t.Unix()
 }
 
+func rowsAffected(res sql.Result) int64 {
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
 func normalizePage(page, size int) (int, int) {
 	if page < 1 {
 		page = 1

@@ -17,7 +17,7 @@ const emit = defineEmits<{
   (e: 'updated', user: UserDetail): void
 }>()
 
-const unlimited = computed(() => props.user.quota_bytes <= 0)
+const unlimited = computed(() => props.user.transfer_enable <= 0)
 
 const editing = ref(false)
 const editUnlimited = ref(false)
@@ -31,26 +31,26 @@ const resetting = ref(false)
 watch(editing, (editingNow) => {
   if (!editingNow) return
   error.value = ''
-  const split = splitQuota(props.user.quota_bytes)
+  const split = splitQuota(props.user.transfer_enable)
   editUnlimited.value = unlimited.value
   editValue.value = unlimited.value ? null : split.value
   editUnit.value = split.unit
 })
 
 async function saveQuota() {
-  let quota: number | null = 0
+  let transferEnable = 0
   if (!editUnlimited.value) {
     const value = editValue.value
     if (value === null || Number.isNaN(value) || value < 0) {
       error.value = '请输入有效的流量额度'
       return
     }
-    quota = quotaFromInput(value, editUnit.value)
+    transferEnable = quotaFromInput(value, editUnit.value)
   }
   saving.value = true
   error.value = ''
   try {
-    const updated = await updateUser(props.user.id, { quota_bytes: quota })
+    const updated = await updateUser(props.user.id, { transfer_enable: transferEnable })
     editing.value = false
     emit('updated', updated)
   } catch (err) {
@@ -109,9 +109,13 @@ async function resetTraffic() {
     >
       <div class="traffic-summary">
         <span class="traffic-used">{{ formatBytes(props.user.used_bytes) }}</span>
-        <span class="traffic-quota text-secondary">/ {{ unlimited ? '不限流量' : formatBytes(props.user.quota_bytes) }}</span>
+        <span class="traffic-quota text-secondary">/ {{ unlimited ? '不限流量' : formatBytes(props.user.transfer_enable) }}</span>
       </div>
       <ProgressBar :percent="props.user.used_percent" />
+      <div class="traffic-detail text-secondary">
+        <span>上传 {{ formatBytes(props.user.u) }}</span>
+        <span>下载 {{ formatBytes(props.user.d) }}</span>
+      </div>
       <div class="traffic-detail text-secondary">
         <span>剩余 {{ unlimited ? '不限' : formatBytes(props.user.remaining_bytes) }}</span>
       </div>

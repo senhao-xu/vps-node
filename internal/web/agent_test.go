@@ -164,7 +164,7 @@ func TestAgentServerIDDerivedFromCredentialNotBody(t *testing.T) {
 		"server_id": serverB,
 		"records": []map[string]any{
 			{"user_id": u1, "node_id": nodeA, "server_id": serverB,
-				"upload_bytes": 10, "download_bytes": 20, "recorded_at": now},
+				"u": 10, "d": 20, "recorded_at": now},
 		},
 	}
 	resp, body := e.doAgent(t, "POST", "/api/agent/traffic", traffic, tokenA)
@@ -172,8 +172,8 @@ func TestAgentServerIDDerivedFromCredentialNotBody(t *testing.T) {
 		t.Fatalf("traffic with spoofed server_id must be accepted: %d %s", resp.StatusCode, body)
 	}
 	u, _ := e.repo.GetUser(ctx, u1)
-	if u.UsedBytes != 30 {
-		t.Fatalf("expected used_bytes 30, got %d", u.UsedBytes)
+	if u.UsedBytes() != 30 {
+		t.Fatalf("expected used_bytes 30, got %d", u.UsedBytes())
 	}
 	var recServerID int64
 	if err := e.db.QueryRow(`SELECT server_id FROM traffic_records WHERE node_id = ?`, nodeA).Scan(&recServerID); err != nil {
@@ -187,50 +187,195 @@ func TestAgentServerIDDerivedFromCredentialNotBody(t *testing.T) {
 		"batch_seq": 2,
 		"server_id": serverB,
 		"records": []map[string]any{
-			{"user_id": u1, "node_id": nodeB, "upload_bytes": 5, "download_bytes": 5, "recorded_at": now},
+			{"user_id": u1, "node_id": nodeB, "u": 5, "d": 5, "recorded_at": now},
 		},
 	}, tokenA)
 	if resp.StatusCode != http.StatusUnprocessableEntity {
 		t.Fatalf("foreign node must be 422 regardless of body server_id, got %d %s", resp.StatusCode, body)
 	}
 	u, _ = e.repo.GetUser(ctx, u1)
-	if u.UsedBytes != 30 {
-		t.Fatalf("rejected batch must not mutate totals, got %d", u.UsedBytes)
+	if u.UsedBytes() != 30 {
+		t.Fatalf("rejected batch must not mutate totals, got %d", u.UsedBytes())
 	}
 
-	resp, body = e.doAgent(t, "POST", "/api/agent/sessions", map[string]any{
-		"reported_at": now,
+	resp, body = e.doAgent(t, "POST", "/api/agent/devices", map[string]any{
+		"batch_seq":   1,
+		"recorded_at": now,
 		"server_id":   serverB,
-		"sessions": []map[string]any{
-			{"user_id": u1, "node_id": nodeA, "ip": "1.2.3.4", "upload_bytes": 1, "download_bytes": 1,
-				"connected_at": now, "last_seen_at": now},
+		"devices": []map[string]any{
+			{"user_id": u1, "node_id": nodeA, "ips": []string{"1.2.3.4"}, "online": 1},
 		},
 	}, tokenA)
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("sessions with spoofed server_id must be accepted: %d %s", resp.StatusCode, body)
+		t.Fatalf("devices with spoofed server_id must be accepted: %d %s", resp.StatusCode, body)
 	}
-	var sessServerID int64
-	if err := e.db.QueryRow(`SELECT server_id FROM sessions WHERE node_id = ?`, nodeA).Scan(&sessServerID); err != nil {
-		t.Fatalf("query session: %v", err)
+	var deviceServerID int64
+	if err := e.db.QueryRow(`SELECT server_id FROM online_devices WHERE node_id = ?`, nodeA).Scan(&deviceServerID); err != nil {
+		t.Fatalf("query device: %v", err)
 	}
-	if sessServerID != serverA {
-		t.Fatalf("session must be attributed to credential server %d, got %d", serverA, sessServerID)
+	if deviceServerID != serverA {
+		t.Fatalf("device must be attributed to credential server %d, got %d", serverA, deviceServerID)
 	}
 
-	resp, body = e.doAgent(t, "POST", "/api/agent/sessions", map[string]any{
-		"reported_at": now,
+	resp, body = e.doAgent(t, "POST", "/api/agent/devices", map[string]any{
+		"batch_seq":   2,
+		"recorded_at": now,
 		"server_id":   serverB,
-		"sessions": []map[string]any{
-			{"user_id": u1, "node_id": nodeB, "ip": "1.2.3.4", "upload_bytes": 1, "download_bytes": 1,
-				"connected_at": now, "last_seen_at": now},
+		"devices": []map[string]any{
+			{"user_id": u1, "node_id": nodeB, "ips": []string{"1.2.3.4"}, "online": 1},
 		},
 	}, tokenA)
 	if resp.StatusCode != http.StatusUnprocessableEntity {
-		t.Fatalf("foreign node session must be 422 regardless of body server_id, got %d %s", resp.StatusCode, body)
+		t.Fatalf("foreign node device must be 422 regardless of body server_id, got %d %s", resp.StatusCode, body)
 	}
-	resp, body = e.do(t, "GET", fmt.Sprintf("/api/users/%d/sessions", u1), nil, cookie)
+	resp, body = e.do(t, "GET", fmt.Sprintf("/api/users/%d/devices", u1), nil, cookie)
 	if items := jsonMap(t, body)["items"].([]any); len(items) != 1 {
 		t.Fatalf("rejected report must not replace snapshot, got %s", body)
+	}
+}
+
+func TestAgentVisitIngestion(t *testing.T) {
+	e := newTestEnv(t)
+	cookie := e.login(t)
+	ctx := context.Background()
+
+	serverA := e.seedServer(t, "a")
+	serverB := e.seedServer(t, "b")
+	nodeA := e.seedNode(t, serverA, "a1", 443)
+	nodeB := e.seedNode(t, serverB, "b1", 443)
+	tokenA := e.registerAgent(t, cookie, serverA, "1.0.0")
+	tokenB := e.registerAgent(t, cookie, serverB, "1.0.0")
+
+	u1 := e.seedUser(t, "u1")
+	u2 := e.seedUser(t, "u2")
+	u3 := e.seedUser(t, "u3")
+	if err := e.repo.AuthorizeUserNode(ctx, u1, nodeA); err != nil {
+		t.Fatalf("authorize: %v", err)
+	}
+	if err := e.repo.AuthorizeUserNode(ctx, u2, nodeB); err != nil {
+		t.Fatalf("authorize: %v", err)
+	}
+	if err := e.repo.AuthorizeUserNode(ctx, u3, nodeB); err != nil {
+		t.Fatalf("authorize: %v", err)
+	}
+
+	now := time.Now().UTC().Truncate(time.Second).Format(time.RFC3339)
+	visit := func(seq int64, user, node int64, host string, port int, network, at string) map[string]any {
+		return map[string]any{
+			"batch_seq": seq,
+			"records": []map[string]any{
+				{"user_id": user, "node_id": node, "dest_host": host, "dest_port": port,
+					"network": network, "client_ip": "1.2.3.4", "recorded_at": at},
+			},
+		}
+	}
+
+	resp, body := e.doAgent(t, "POST", "/api/agent/visits", visit(1, u1, nodeA, "Example.COM", 443, "tcp", now), tokenA)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("visit ingest: %d %s", resp.StatusCode, body)
+	}
+	m := jsonMap(t, body)
+	if m["accepted"] != true || m["records"].(float64) != 1 {
+		t.Fatalf("unexpected response: %s", body)
+	}
+	visits, total, err := e.repo.ListVisits(ctx, repo.VisitFilter{})
+	if err != nil || total != 1 {
+		t.Fatalf("expected 1 stored visit, total=%d err=%v", total, err)
+	}
+	if visits[0].DestHost != "example.com" || visits[0].ServerID != serverA {
+		t.Fatalf("visit must be lowercased and attributed to credential server, got %+v", visits[0])
+	}
+
+	resp, body = e.doAgent(t, "POST", "/api/agent/visits", visit(1, u1, nodeA, "Example.COM", 443, "tcp", now), tokenA)
+	if resp.StatusCode != http.StatusOK || jsonMap(t, body)["accepted"] != true {
+		t.Fatalf("duplicate batch must return accepted: %d %s", resp.StatusCode, body)
+	}
+	if _, total, _ := e.repo.ListVisits(ctx, repo.VisitFilter{}); total != 1 {
+		t.Fatalf("duplicate batch must not double store, total=%d", total)
+	}
+
+	resp, body = e.doAgent(t, "POST", "/api/agent/visits", visit(1, u2, nodeB, "b.example.com", 80, "tcp", now), tokenB)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("same seq from another agent must be accepted: %d %s", resp.StatusCode, body)
+	}
+
+	reject := func(name string, payload map[string]any, wantCode int, wantErr string) {
+		t.Helper()
+		resp, body := e.doAgent(t, "POST", "/api/agent/visits", payload, tokenA)
+		if resp.StatusCode != wantCode || (wantErr != "" && errorCode(t, body) != wantErr) {
+			t.Fatalf("%s: expected %d %s, got %d %s", name, wantCode, wantErr, resp.StatusCode, body)
+		}
+	}
+
+	reject("foreign node", visit(2, u2, nodeB, "b.example.com", 80, "tcp", now), http.StatusUnprocessableEntity, "validation")
+	reject("unauthorized user", visit(2, u3, nodeA, "a.example.com", 80, "tcp", now), http.StatusUnprocessableEntity, "validation")
+	reject("missing user", visit(2, 0, nodeA, "a.example.com", 80, "tcp", now), http.StatusUnprocessableEntity, "validation")
+	reject("empty host", visit(2, u1, nodeA, "   ", 80, "tcp", now), http.StatusUnprocessableEntity, "validation")
+	reject("negative port", visit(2, u1, nodeA, "a.example.com", -1, "tcp", now), http.StatusUnprocessableEntity, "validation")
+	reject("port too large", visit(2, u1, nodeA, "a.example.com", 70000, "tcp", now), http.StatusUnprocessableEntity, "validation")
+	reject("illegal network", visit(2, u1, nodeA, "a.example.com", 80, "icmp", now), http.StatusUnprocessableEntity, "validation")
+	reject("stale timestamp", visit(2, u1, nodeA, "a.example.com", 80, "tcp",
+		time.Now().Add(-25*time.Hour).UTC().Format(time.RFC3339)), http.StatusUnprocessableEntity, "validation")
+	reject("bad timestamp", visit(2, u1, nodeA, "a.example.com", 80, "tcp", "not-a-time"), http.StatusUnprocessableEntity, "validation")
+	reject("bad batch_seq", visit(0, u1, nodeA, "a.example.com", 80, "tcp", now), http.StatusUnprocessableEntity, "validation")
+
+	longHost := make([]byte, 254)
+	for i := range longHost {
+		longHost[i] = 'a'
+	}
+	reject("host too long", visit(2, u1, nodeA, string(longHost), 80, "tcp", now), http.StatusUnprocessableEntity, "validation")
+
+	oversized := map[string]any{"batch_seq": 2, "records": []map[string]any{}}
+	for i := 0; i < 1001; i++ {
+		oversized["records"] = append(oversized["records"].([]map[string]any), map[string]any{
+			"user_id": u1, "node_id": nodeA, "dest_host": "a.example.com", "dest_port": 80,
+			"network": "tcp", "recorded_at": now,
+		})
+	}
+	resp, body = e.doAgent(t, "POST", "/api/agent/visits", oversized, tokenA)
+	if resp.StatusCode != http.StatusRequestEntityTooLarge || errorCode(t, body) != "payload_too_large" {
+		t.Fatalf("oversized batch must be 413, got %d %s", resp.StatusCode, body)
+	}
+
+	if err := e.repo.SetSetting(ctx, "collection.visits", "false"); err != nil {
+		t.Fatalf("set setting: %v", err)
+	}
+	resp, body = e.doAgent(t, "POST", "/api/agent/visits", visit(3, u1, nodeA, "disabled.example.com", 443, "tcp", now), tokenA)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("disabled collection must still ack: %d %s", resp.StatusCode, body)
+	}
+	m = jsonMap(t, body)
+	if m["accepted"] != false || m["records"].(float64) != 0 {
+		t.Fatalf("disabled collection must not store: %s", body)
+	}
+	if _, total, _ := e.repo.ListVisits(ctx, repo.VisitFilter{}); total != 2 {
+		t.Fatalf("disabled collection must not add storage, total=%d", total)
+	}
+
+	if err := e.repo.SetSetting(ctx, "collection.visits", "true"); err != nil {
+		t.Fatalf("re-enable setting: %v", err)
+	}
+	resp, body = e.do(t, "GET", fmt.Sprintf("/api/users/%d/visits", u1), nil, cookie)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("user visits: %d %s", resp.StatusCode, body)
+	}
+	page := jsonMap(t, body)
+	if page["total"].(float64) != 1 {
+		t.Fatalf("user visits must be scoped, got %s", body)
+	}
+	if items := page["items"].([]any); items[0].(map[string]any)["username"] != "user-u1" {
+		t.Fatalf("user visits must include display names, got %s", body)
+	}
+	resp, body = e.do(t, "GET", fmt.Sprintf("/api/servers/%d/visits", serverB), nil, cookie)
+	if resp.StatusCode != http.StatusOK || jsonMap(t, body)["total"].(float64) != 1 {
+		t.Fatalf("server visits must be scoped, got %d %s", resp.StatusCode, body)
+	}
+	resp, body = e.do(t, "GET", "/api/visits/top?days=7", nil, cookie)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("visit top: %d %s", resp.StatusCode, body)
+	}
+	if items := jsonMap(t, body)["items"].([]any); len(items) != 2 {
+		t.Fatalf("expected 2 top hosts, got %s", body)
 	}
 }
 
@@ -299,19 +444,19 @@ func TestAgentConfigCurrentAndPayload(t *testing.T) {
 
 	_, body := e.do(t, "POST", "/api/nodes", map[string]any{
 		"server_id": serverA, "name": "a-vless", "protocol": "vless", "port": 443,
-		"settings": map[string]any{"private_key": realityPrivateKey, "short_id": "abcd1234", "server_names": []string{"example.com"}},
+		"settings": map[string]any{"private_key": realityPrivateKey, "reality_settings": map[string]any{"server_name": "example.com", "short_id": "abcd1234"}},
 	}, cookie)
 	nodeA1 := int64(jsonMap(t, body)["id"].(float64))
 
 	_, body = e.do(t, "POST", "/api/nodes", map[string]any{
 		"server_id": serverA, "name": "a-ss", "protocol": "shadowsocks", "port": 8388,
-		"settings": map[string]any{"method": "2022-blake3-aes-128-gcm", "password": "server-secret-pw"},
+		"settings": map[string]any{"cipher": "2022-blake3-aes-128-gcm", "password": "server-secret-pw"},
 	}, cookie)
 	nodeA2 := int64(jsonMap(t, body)["id"].(float64))
 
 	_, body = e.do(t, "POST", "/api/nodes", map[string]any{
 		"server_id": serverB, "name": "b-ss", "protocol": "shadowsocks", "port": 8443,
-		"settings": map[string]any{"method": "2022-blake3-aes-128-gcm", "password": "ss-pw"},
+		"settings": map[string]any{"cipher": "2022-blake3-aes-128-gcm", "password": "ss-pw"},
 	}, cookie)
 	nodeB := int64(jsonMap(t, body)["id"].(float64))
 
@@ -522,7 +667,7 @@ func TestAgentTrafficIngestion(t *testing.T) {
 	batch := map[string]any{
 		"batch_seq": 1,
 		"records": []map[string]any{
-			{"user_id": u1, "node_id": nodeA, "upload_bytes": 100, "download_bytes": 200, "recorded_at": now},
+			{"user_id": u1, "node_id": nodeA, "u": 100, "d": 200, "recorded_at": now},
 		},
 	}
 	resp, body := e.doAgent(t, "POST", "/api/agent/traffic", batch, tokenA)
@@ -534,8 +679,8 @@ func TestAgentTrafficIngestion(t *testing.T) {
 		t.Fatalf("unexpected response: %s", body)
 	}
 	u, _ := e.repo.GetUser(ctx, u1)
-	if u.UsedBytes != 300 {
-		t.Fatalf("expected used_bytes 300, got %d", u.UsedBytes)
+	if u.UsedBytes() != 300 {
+		t.Fatalf("expected used_bytes 300, got %d", u.UsedBytes())
 	}
 
 	resp, body = e.doAgent(t, "POST", "/api/agent/traffic", batch, tokenA)
@@ -543,8 +688,8 @@ func TestAgentTrafficIngestion(t *testing.T) {
 		t.Fatalf("duplicate batch must return accepted: %d %s", resp.StatusCode, body)
 	}
 	u, _ = e.repo.GetUser(ctx, u1)
-	if u.UsedBytes != 300 {
-		t.Fatalf("duplicate batch must not double count, got %d", u.UsedBytes)
+	if u.UsedBytes() != 300 {
+		t.Fatalf("duplicate batch must not double count, got %d", u.UsedBytes())
 	}
 	upload, download, err := e.repo.SumTraffic(ctx, repo.TrafficFilter{UserID: u1})
 	if err != nil || upload != 100 || download != 200 {
@@ -554,7 +699,7 @@ func TestAgentTrafficIngestion(t *testing.T) {
 	crossBatch := map[string]any{
 		"batch_seq": 1,
 		"records": []map[string]any{
-			{"user_id": u2, "node_id": nodeB, "upload_bytes": 30, "download_bytes": 20, "recorded_at": now},
+			{"user_id": u2, "node_id": nodeB, "u": 30, "d": 20, "recorded_at": now},
 		},
 	}
 	resp, body = e.doAgent(t, "POST", "/api/agent/traffic", crossBatch, tokenB)
@@ -562,8 +707,8 @@ func TestAgentTrafficIngestion(t *testing.T) {
 		t.Fatalf("same seq from another agent must be accepted: %d %s", resp.StatusCode, body)
 	}
 	u2rec, _ := e.repo.GetUser(ctx, u2)
-	if u2rec.UsedBytes != 50 {
-		t.Fatalf("expected u2 used 50, got %d", u2rec.UsedBytes)
+	if u2rec.UsedBytes() != 50 {
+		t.Fatalf("expected u2 used 50, got %d", u2rec.UsedBytes())
 	}
 
 	reject := func(name string, payload map[string]any, wantCode int, wantErr string) {
@@ -577,45 +722,45 @@ func TestAgentTrafficIngestion(t *testing.T) {
 	reject("foreign node", map[string]any{
 		"batch_seq": 2,
 		"records": []map[string]any{
-			{"user_id": u2, "node_id": nodeB, "upload_bytes": 1, "download_bytes": 1, "recorded_at": now},
+			{"user_id": u2, "node_id": nodeB, "u": 1, "d": 1, "recorded_at": now},
 		},
 	}, http.StatusUnprocessableEntity, "validation")
 	reject("unauthorized user", map[string]any{
 		"batch_seq": 2,
 		"records": []map[string]any{
-			{"user_id": u3, "node_id": nodeA, "upload_bytes": 1, "download_bytes": 1, "recorded_at": now},
+			{"user_id": u3, "node_id": nodeA, "u": 1, "d": 1, "recorded_at": now},
 		},
 	}, http.StatusUnprocessableEntity, "validation")
 	reject("negative counter", map[string]any{
 		"batch_seq": 2,
 		"records": []map[string]any{
-			{"user_id": u1, "node_id": nodeA, "upload_bytes": -1, "download_bytes": 1, "recorded_at": now},
+			{"user_id": u1, "node_id": nodeA, "u": -1, "d": 1, "recorded_at": now},
 		},
 	}, http.StatusUnprocessableEntity, "validation")
 	reject("old timestamp", map[string]any{
 		"batch_seq": 2,
 		"records": []map[string]any{
-			{"user_id": u1, "node_id": nodeA, "upload_bytes": 1, "download_bytes": 1,
+			{"user_id": u1, "node_id": nodeA, "u": 1, "d": 1,
 				"recorded_at": time.Now().Add(-25 * time.Hour).UTC().Format(time.RFC3339)},
 		},
 	}, http.StatusUnprocessableEntity, "validation")
 	reject("bad timestamp", map[string]any{
 		"batch_seq": 2,
 		"records": []map[string]any{
-			{"user_id": u1, "node_id": nodeA, "upload_bytes": 1, "download_bytes": 1, "recorded_at": "not-a-time"},
+			{"user_id": u1, "node_id": nodeA, "u": 1, "d": 1, "recorded_at": "not-a-time"},
 		},
 	}, http.StatusUnprocessableEntity, "validation")
 	reject("bad batch_seq", map[string]any{
 		"batch_seq": 0,
 		"records": []map[string]any{
-			{"user_id": u1, "node_id": nodeA, "upload_bytes": 1, "download_bytes": 1, "recorded_at": now},
+			{"user_id": u1, "node_id": nodeA, "u": 1, "d": 1, "recorded_at": now},
 		},
 	}, http.StatusUnprocessableEntity, "validation")
 
 	oversized := map[string]any{"batch_seq": 2, "records": []map[string]any{}}
 	for i := 0; i < 1001; i++ {
 		oversized["records"] = append(oversized["records"].([]map[string]any), map[string]any{
-			"user_id": u1, "node_id": nodeA, "upload_bytes": 1, "download_bytes": 1, "recorded_at": now,
+			"user_id": u1, "node_id": nodeA, "u": 1, "d": 1, "recorded_at": now,
 		})
 	}
 	resp, body = e.doAgent(t, "POST", "/api/agent/traffic", oversized, tokenA)
@@ -624,12 +769,12 @@ func TestAgentTrafficIngestion(t *testing.T) {
 	}
 
 	u, _ = e.repo.GetUser(ctx, u1)
-	if u.UsedBytes != 300 {
-		t.Fatalf("rejected batches must not mutate totals, got %d", u.UsedBytes)
+	if u.UsedBytes() != 300 {
+		t.Fatalf("rejected batches must not mutate totals, got %d", u.UsedBytes())
 	}
 }
 
-func TestAgentSessionsSnapshot(t *testing.T) {
+func TestAgentDevicesSnapshot(t *testing.T) {
 	e := newTestEnv(t)
 	cookie := e.login(t)
 	ctx := context.Background()
@@ -646,181 +791,105 @@ func TestAgentSessionsSnapshot(t *testing.T) {
 	}
 
 	now := time.Now().UTC().Truncate(time.Second)
-	report := func(ip string, lastSeen time.Time) map[string]any {
+	reportTime := now.Add(-time.Minute)
+	report := func(seq int64, ips []string, online int) map[string]any {
+		reportTime = reportTime.Add(time.Second)
 		return map[string]any{
-			"reported_at": now.Format(time.RFC3339),
-			"sessions": []map[string]any{
-				{"user_id": u1, "node_id": nodeA, "ip": ip, "upload_bytes": 10, "download_bytes": 20,
-					"connected_at": lastSeen.Add(-5 * time.Minute).Format(time.RFC3339),
-					"last_seen_at": lastSeen.Format(time.RFC3339)},
+			"batch_seq":   seq,
+			"recorded_at": reportTime.Format(time.RFC3339),
+			"devices": []map[string]any{
+				{"user_id": u1, "node_id": nodeA, "ips": ips, "online": online},
 			},
 		}
 	}
 
-	resp, body := e.doAgent(t, "POST", "/api/agent/sessions", report("1.2.3.4", now), tokenA)
-	if resp.StatusCode != http.StatusOK || jsonMap(t, body)["sessions"].(float64) != 1 {
-		t.Fatalf("session report: %d %s", resp.StatusCode, body)
+	resp, body := e.doAgent(t, "POST", "/api/agent/devices", report(1, []string{"1.2.3.4", "5.6.7.8"}, 2), tokenA)
+	if resp.StatusCode != http.StatusOK || jsonMap(t, body)["devices"].(float64) != 2 {
+		t.Fatalf("device report: %d %s", resp.StatusCode, body)
 	}
 
-	resp, body = e.do(t, "GET", fmt.Sprintf("/api/users/%d/sessions", u1), nil, cookie)
+	resp, body = e.do(t, "GET", fmt.Sprintf("/api/users/%d/devices", u1), nil, cookie)
 	items := jsonMap(t, body)["items"].([]any)
-	if len(items) != 1 || items[0].(map[string]any)["ip"] != "1.2.3.4" {
-		t.Fatalf("expected fresh session, got %s", body)
+	if len(items) != 2 {
+		t.Fatalf("expected 2 devices, got %s", body)
+	}
+	resp, body = e.do(t, "GET", fmt.Sprintf("/api/users/%d", u1), nil, cookie)
+	if jsonMap(t, body)["online_count"].(float64) != 2 {
+		t.Fatalf("expected online_count 2, got %s", body)
 	}
 
-	resp, body = e.doAgent(t, "POST", "/api/agent/sessions", report("5.6.7.8", now), tokenA)
+	resp, body = e.doAgent(t, "POST", "/api/agent/devices", report(2, []string{"9.9.9.9"}, 1), tokenA)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("second report: %d %s", resp.StatusCode, body)
 	}
-	resp, body = e.do(t, "GET", fmt.Sprintf("/api/users/%d/sessions", u1), nil, cookie)
+	resp, body = e.do(t, "GET", fmt.Sprintf("/api/users/%d/devices", u1), nil, cookie)
 	items = jsonMap(t, body)["items"].([]any)
-	if len(items) != 1 || items[0].(map[string]any)["ip"] != "5.6.7.8" {
+	if len(items) != 1 || items[0].(map[string]any)["ip"] != "9.9.9.9" {
 		t.Fatalf("snapshot must be fully replaced, got %s", body)
 	}
 
-	resp, body = e.doAgent(t, "POST", "/api/agent/sessions", report("9.9.9.9", now.Add(-time.Hour)), tokenA)
+	resp, body = e.doAgent(t, "POST", "/api/agent/devices", report(3, nil, 0), tokenA)
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("stale report: %d %s", resp.StatusCode, body)
+		t.Fatalf("empty report: %d %s", resp.StatusCode, body)
 	}
-	resp, body = e.do(t, "GET", fmt.Sprintf("/api/users/%d/sessions", u1), nil, cookie)
+	resp, body = e.do(t, "GET", fmt.Sprintf("/api/users/%d/devices", u1), nil, cookie)
 	if items := jsonMap(t, body)["items"].([]any); len(items) != 0 {
-		t.Fatalf("stale session must not be shown as online, got %s", body)
+		t.Fatalf("empty report must clear devices, got %s", body)
 	}
-	resp, body = e.do(t, "GET", fmt.Sprintf("/api/users/%d/sessions?include_stale=true", u1), nil, cookie)
-	if items := jsonMap(t, body)["items"].([]any); len(items) != 1 {
-		t.Fatalf("stale session must appear with include_stale, got %s", body)
+	resp, body = e.do(t, "GET", fmt.Sprintf("/api/users/%d", u1), nil, cookie)
+	if jsonMap(t, body)["online_count"].(float64) != 0 {
+		t.Fatalf("expected online_count 0, got %s", body)
 	}
 
-	resp, body = e.doAgent(t, "POST", "/api/agent/sessions", map[string]any{
-		"reported_at": now.Format(time.RFC3339),
-		"sessions": []map[string]any{
-			{"user_id": u1, "node_id": nodeB, "ip": "1.2.3.4", "upload_bytes": 1, "download_bytes": 1,
-				"connected_at": now.Format(time.RFC3339), "last_seen_at": now.Format(time.RFC3339)},
+	resp, body = e.doAgent(t, "POST", "/api/agent/devices", map[string]any{
+		"batch_seq":   4,
+		"recorded_at": now.Format(time.RFC3339),
+		"devices": []map[string]any{
+			{"user_id": u1, "node_id": nodeB, "ips": []string{"1.2.3.4"}, "online": 1},
 		},
 	}, tokenA)
 	if resp.StatusCode != http.StatusUnprocessableEntity {
-		t.Fatalf("foreign node session must be 422, got %d %s", resp.StatusCode, body)
-	}
-	resp, body = e.do(t, "GET", fmt.Sprintf("/api/users/%d/sessions", u1), nil, cookie)
-	if items := jsonMap(t, body)["items"].([]any); len(items) != 0 {
-		t.Fatalf("failed report must not replace snapshot, got %s", body)
+		t.Fatalf("foreign node device must be 422, got %d %s", resp.StatusCode, body)
 	}
 
-	resp, body = e.doAgent(t, "POST", "/api/agent/sessions", map[string]any{
-		"reported_at": now.Format(time.RFC3339),
-		"sessions": []map[string]any{
-			{"user_id": u1, "node_id": nodeA, "ip": "1.2.3.4", "upload_bytes": 1, "download_bytes": 1,
-				"connected_at": now.Add(time.Minute).Format(time.RFC3339), "last_seen_at": now.Format(time.RFC3339)},
+	resp, body = e.doAgent(t, "POST", "/api/agent/devices", map[string]any{
+		"batch_seq":   4,
+		"recorded_at": now.Format(time.RFC3339),
+		"devices": []map[string]any{
+			{"user_id": u1, "node_id": nodeA, "ips": []string{""}, "online": 1},
 		},
 	}, tokenA)
 	if resp.StatusCode != http.StatusUnprocessableEntity {
-		t.Fatalf("connected_at after last_seen_at must be 422, got %d %s", resp.StatusCode, body)
-	}
-}
-
-func TestAgentConnectionLogsIngestion(t *testing.T) {
-	e := newTestEnv(t)
-	cookie := e.login(t)
-	ctx := context.Background()
-
-	serverA := e.seedServer(t, "a")
-	nodeA := e.seedNode(t, serverA, "a1", 443)
-	tokenA := e.registerAgent(t, cookie, serverA, "1.0.0")
-
-	u1 := e.seedUser(t, "u1")
-	if err := e.repo.AuthorizeUserNode(ctx, u1, nodeA); err != nil {
-		t.Fatalf("authorize: %v", err)
+		t.Fatalf("empty ip must be 422, got %d %s", resp.StatusCode, body)
 	}
 
-	now := time.Now().UTC().Truncate(time.Second)
-	logBatch := map[string]any{
-		"batch_seq": 5,
-		"logs": []map[string]any{
-			{"user_id": u1, "node_id": nodeA, "ip": "1.2.3.4", "protocol": "vless",
-				"upload_bytes": 100, "download_bytes": 200,
-				"connected_at": now.Add(-5 * time.Minute).Format(time.RFC3339),
-				"closed_at":    now.Format(time.RFC3339), "status": "closed"},
-		},
-	}
-	resp, body := e.doAgent(t, "POST", "/api/agent/connection-logs", logBatch, tokenA)
-	if resp.StatusCode != http.StatusOK || jsonMap(t, body)["logs"].(float64) != 1 {
-		t.Fatalf("log ingest: %d %s", resp.StatusCode, body)
-	}
-
-	resp, body = e.doAgent(t, "POST", "/api/agent/connection-logs", logBatch, tokenA)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("duplicate log batch: %d %s", resp.StatusCode, body)
-	}
-	_, total, err := e.repo.ListConnectionLogs(ctx, repo.LogFilter{UserID: u1})
-	if err != nil || total != 1 {
-		t.Fatalf("duplicate log batch must not double insert, got %d %v", total, err)
-	}
-
-	resp, body = e.do(t, "GET", fmt.Sprintf("/api/users/%d/connection-logs", u1), nil, cookie)
-	list := jsonMap(t, body)
-	if list["total"].(float64) != 1 {
-		t.Fatalf("expected 1 log, got %s", body)
-	}
-	entry := list["items"].([]any)[0].(map[string]any)
-	for _, forbidden := range []string{"destination", "target", "host", "payload"} {
-		if _, has := entry[forbidden]; has {
-			t.Fatalf("log entries must not contain %s field: %s", forbidden, body)
-		}
-	}
-
-	withDestination := map[string]any{
-		"batch_seq": 6,
-		"logs": []map[string]any{
-			{"user_id": u1, "node_id": nodeA, "ip": "1.2.3.4", "protocol": "vless",
-				"upload_bytes": 1, "download_bytes": 1,
-				"connected_at": now.Format(time.RFC3339), "status": "active",
-				"destination_host": "evil.com"},
-		},
-	}
-	resp, body = e.doAgent(t, "POST", "/api/agent/connection-logs", withDestination, tokenA)
-	if resp.StatusCode != http.StatusUnprocessableEntity || errorCode(t, body) != "validation" {
-		t.Fatalf("destination field must be rejected with 422, got %d %s", resp.StatusCode, body)
-	}
-
-	resp, body = e.doAgent(t, "POST", "/api/agent/connection-logs", map[string]any{
-		"batch_seq": 6,
-		"logs": []map[string]any{
-			{"user_id": u1, "node_id": nodeA, "ip": "1.2.3.4", "protocol": "vless",
-				"upload_bytes": 1, "download_bytes": 1,
-				"connected_at": now.Format(time.RFC3339), "status": "open"},
-		},
-	}, tokenA)
-	if resp.StatusCode != http.StatusBadRequest || errorCode(t, body) != "invalid_request" {
-		t.Fatalf("unknown status enum must be 400, got %d %s", resp.StatusCode, body)
-	}
-
-	resp, body = e.doAgent(t, "POST", "/api/agent/connection-logs", map[string]any{
-		"batch_seq": 6,
-		"logs": []map[string]any{
-			{"user_id": u1, "node_id": nodeA, "ip": "1.2.3.4", "protocol": "vless",
-				"upload_bytes": -5, "download_bytes": 1,
-				"connected_at": now.Format(time.RFC3339), "status": "active"},
+	resp, body = e.doAgent(t, "POST", "/api/agent/devices", map[string]any{
+		"batch_seq": 4,
+		"devices": []map[string]any{
+			{"user_id": u1, "node_id": nodeA, "ips": []string{"1.2.3.4"}, "online": 1},
 		},
 	}, tokenA)
 	if resp.StatusCode != http.StatusUnprocessableEntity {
-		t.Fatalf("negative counters must be 422, got %d %s", resp.StatusCode, body)
+		t.Fatalf("missing recorded_at must be 422, got %d %s", resp.StatusCode, body)
 	}
 
-	bigBatch := map[string]any{"batch_seq": 7, "logs": []map[string]any{}}
+	oversized := map[string]any{"batch_seq": 5, "recorded_at": now.Format(time.RFC3339), "devices": []map[string]any{}}
 	for i := 0; i < 1001; i++ {
-		bigBatch["logs"] = append(bigBatch["logs"].([]map[string]any), map[string]any{
-			"user_id": u1, "node_id": nodeA, "ip": "1.2.3.4", "protocol": "vless",
-			"upload_bytes": 1, "download_bytes": 1,
-			"connected_at": now.Format(time.RFC3339), "status": "closed",
+		oversized["devices"] = append(oversized["devices"].([]map[string]any), map[string]any{
+			"user_id": u1, "node_id": nodeA, "ips": []string{"1.2.3.4"}, "online": 1,
 		})
 	}
-	resp, body = e.doAgent(t, "POST", "/api/agent/connection-logs", bigBatch, tokenA)
-	if resp.StatusCode != http.StatusRequestEntityTooLarge {
-		t.Fatalf("oversized log batch must be 413, got %d %s", resp.StatusCode, body)
+	resp, body = e.doAgent(t, "POST", "/api/agent/devices", oversized, tokenA)
+	if resp.StatusCode != http.StatusRequestEntityTooLarge || errorCode(t, body) != "payload_too_large" {
+		t.Fatalf("oversized device batch must be 413, got %d %s", resp.StatusCode, body)
 	}
 
-	_, total, _ = e.repo.ListConnectionLogs(ctx, repo.LogFilter{UserID: u1})
-	if total != 1 {
-		t.Fatalf("rejected log batches must not insert, got %d", total)
+	resp, body = e.doAgent(t, "POST", "/api/agent/devices", report(3, []string{"1.2.3.4"}, 1), tokenA)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("duplicate batch_seq must be idempotent: %d %s", resp.StatusCode, body)
+	}
+	resp, body = e.do(t, "GET", fmt.Sprintf("/api/users/%d/devices", u1), nil, cookie)
+	if items := jsonMap(t, body)["items"].([]any); len(items) != 0 {
+		t.Fatalf("duplicate batch_seq must not recreate devices, got %s", body)
 	}
 }

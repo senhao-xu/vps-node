@@ -18,8 +18,12 @@ func (h *Handler) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	freshCutoff := now.Add(-h.sessionFreshness(ctx))
-	usersOnline, err := h.repo.CountUsersWithFreshSession(ctx, freshCutoff)
+	usersOnline, err := h.repo.CountUsersOnline(ctx)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	devicesCurrent, err := h.repo.CountOnlineDevices(ctx)
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -40,11 +44,6 @@ func (h *Handler) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	sessionsCurrent, err := h.repo.CountActiveSessions(ctx, freshCutoff)
-	if err != nil {
-		writeErr(w, err)
-		return
-	}
 
 	httpx.WriteJSON(w, http.StatusOK, dashboardDTO{
 		UsersTotal:        usersTotal,
@@ -52,7 +51,7 @@ func (h *Handler) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		ServersTotal:      serversTotal,
 		ServersOnline:     serversOnline,
 		TrafficTodayBytes: up + down,
-		SessionsCurrent:   sessionsCurrent,
+		DevicesCurrent:    devicesCurrent,
 	})
 }
 
@@ -101,36 +100,36 @@ func (h *Handler) handleDashboardUserTraffic(w http.ResponseWriter, r *http.Requ
 			NodeName:      n.NodeName,
 			ServerID:      n.ServerID,
 			ServerName:    n.ServerName,
-			UploadBytes:   n.UploadBytes,
-			DownloadBytes: n.DownloadBytes,
-			TotalBytes:    n.UploadBytes + n.DownloadBytes,
+			UploadBytes:   n.U,
+			DownloadBytes: n.D,
+			TotalBytes:    n.U + n.D,
 		})
 	}
 
 	items := make([]dashboardUserTrafficItemDTO, 0, len(users))
 	for _, u := range users {
 		item := dashboardUserTrafficItemDTO{
-			UserID:     u.ID,
-			Username:   u.Username,
-			Status:     u.Status,
-			QuotaBytes: u.QuotaBytes,
-			Nodes:      nodesByUser[u.ID],
+			UserID:         u.ID,
+			Username:       u.Username,
+			Status:         u.Status,
+			TransferEnable: u.TransferEnable,
+			Nodes:          nodesByUser[u.ID],
 		}
 		if item.Nodes == nil {
 			item.Nodes = []dashboardUserNodeTrafficDTO{}
 		}
 		if rangeParam == "total" {
-			// users.used_bytes 与用户列表口径一致；上传/下载拆分只有流量记录可查，
-			// 受保留策略与流量重置影响，合计以 used_bytes 为准。
+			// users.u/users.d 与用户列表口径一致；上传/下载拆分只有流量记录可查，
+			// 受保留策略与流量重置影响，合计以 u+d 为准。
 			s := sumByUser[u.ID]
-			item.UploadBytes = s.UploadBytes
-			item.DownloadBytes = s.DownloadBytes
-			item.TotalBytes = u.UsedBytes
+			item.UploadBytes = s.U
+			item.DownloadBytes = s.D
+			item.TotalBytes = u.UsedBytes()
 		} else {
 			s := sumByUser[u.ID]
-			item.UploadBytes = s.UploadBytes
-			item.DownloadBytes = s.DownloadBytes
-			item.TotalBytes = s.UploadBytes + s.DownloadBytes
+			item.UploadBytes = s.U
+			item.DownloadBytes = s.D
+			item.TotalBytes = s.U + s.D
 		}
 		items = append(items, item)
 	}

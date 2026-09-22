@@ -2,6 +2,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
+  Globe,
   LayoutDashboard,
   Server,
   Settings,
@@ -31,6 +32,7 @@ const menuItems: MenuItem[] = [
   { to: '/users', label: '用户', keywords: 'users yonghu', icon: Users },
   { to: '/servers', label: '服务器', keywords: 'servers fuwuqi', icon: Server },
   { to: '/nodes', label: '节点', keywords: 'nodes jiedian', icon: Waypoints },
+  { to: '/visits', label: '访问记录', keywords: 'visits fangwen jilu sites', icon: Globe },
   { to: '/settings', label: '设置', keywords: 'settings shezhi', icon: Settings },
 ]
 
@@ -161,7 +163,7 @@ function onKeydown(event: KeyboardEvent) {
   width: min(440px, 100%);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-dialog);
   box-shadow: var(--shadow-dialog);
   overflow: hidden;
 }

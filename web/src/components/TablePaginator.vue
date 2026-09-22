@@ -20,24 +20,6 @@ const emit = defineEmits<{
 
 const totalPages = computed(() => Math.max(1, Math.ceil(props.total / props.pageSize)))
 
-const pages = computed<Array<number | 'ellipsis'>>(() => {
-  const count = totalPages.value
-  const current = props.page
-  if (count <= 7) return Array.from({ length: count }, (_, i) => i + 1)
-  const windowPages = new Set<number>([1, count, current - 1, current, current + 1])
-  const sorted = Array.from(windowPages)
-    .filter((p) => p >= 1 && p <= count)
-    .sort((a, b) => a - b)
-  const result: Array<number | 'ellipsis'> = []
-  let prev = 0
-  for (const p of sorted) {
-    if (prev && p - prev > 1) result.push('ellipsis')
-    result.push(p)
-    prev = p
-  }
-  return result
-})
-
 function changePage(page: number) {
   const clamped = Math.min(Math.max(1, page), totalPages.value)
   if (clamped !== props.page) emit('change', clamped, props.pageSize)
@@ -53,81 +35,64 @@ function changePageSize(size: number) {
     v-if="props.total > 0 || props.page > 1"
     class="paginator"
   >
-    <span class="text-secondary">共 {{ props.total }} 条</span>
-    <div class="spacer" />
-    <label class="size">
-      每页显示
-      <select
-        :value="props.pageSize"
-        @change="changePageSize(Number(($event.target as HTMLSelectElement).value))"
+    <span class="total text-secondary">共 {{ props.total }} 条</span>
+    <div class="right">
+      <label class="size">
+        每页显示
+        <select
+          :value="props.pageSize"
+          @change="changePageSize(Number(($event.target as HTMLSelectElement).value))"
+        >
+          <option
+            v-for="size in props.pageSizeOptions"
+            :key="size"
+            :value="size"
+          >{{ size }}</option>
+        </select>
+      </label>
+      <span class="page-info">第 {{ props.page }} / {{ totalPages }} 页</span>
+      <nav
+        class="pager"
+        aria-label="分页"
       >
-        <option
-          v-for="size in props.pageSizeOptions"
-          :key="size"
-          :value="size"
-        >{{ size }}</option>
-      </select>
-    </label>
-    <nav
-      class="pager"
-      aria-label="分页"
-    >
-      <button
-        type="button"
-        class="page-btn"
-        aria-label="第一页"
-        :disabled="props.page <= 1"
-        @click="changePage(1)"
-      >
-        <ChevronsLeft :size="14" />
-      </button>
-      <button
-        type="button"
-        class="page-btn"
-        aria-label="上一页"
-        :disabled="props.page <= 1"
-        @click="changePage(props.page - 1)"
-      >
-        <ChevronLeft :size="14" />
-      </button>
-      <template
-        v-for="(item, index) in pages"
-        :key="index"
-      >
-        <span
-          v-if="item === 'ellipsis'"
-          class="ellipsis"
-        >…</span>
         <button
-          v-else
           type="button"
           class="page-btn"
-          :class="{ current: item === props.page }"
-          :aria-current="item === props.page ? 'page' : undefined"
-          @click="changePage(item)"
+          aria-label="第一页"
+          :disabled="props.page <= 1"
+          @click="changePage(1)"
         >
-          {{ item }}
+          <ChevronsLeft :size="14" />
         </button>
-      </template>
-      <button
-        type="button"
-        class="page-btn"
-        aria-label="下一页"
-        :disabled="props.page >= totalPages"
-        @click="changePage(props.page + 1)"
-      >
-        <ChevronRight :size="14" />
-      </button>
-      <button
-        type="button"
-        class="page-btn"
-        aria-label="最后一页"
-        :disabled="props.page >= totalPages"
-        @click="changePage(totalPages)"
-      >
-        <ChevronsRight :size="14" />
-      </button>
-    </nav>
+        <button
+          type="button"
+          class="page-btn"
+          aria-label="上一页"
+          :disabled="props.page <= 1"
+          @click="changePage(props.page - 1)"
+        >
+          <ChevronLeft :size="14" />
+        </button>
+        <button
+          type="button"
+          class="page-btn"
+          aria-label="下一页"
+          :disabled="props.page >= totalPages"
+          @click="changePage(props.page + 1)"
+        >
+          <ChevronRight :size="14" />
+        </button>
+        <button
+          type="button"
+          class="page-btn"
+          aria-label="最后一页"
+          :disabled="props.page >= totalPages"
+          @click="changePage(totalPages)"
+        >
+          <ChevronsRight :size="14" />
+        </button>
+      </nav>
+    </div>
   </div>
 </template>
 
@@ -135,42 +100,50 @@ function changePageSize(size: number) {
 .paginator {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--spacing-md);
   padding-top: var(--spacing-md);
   font-size: var(--font-size-sm);
   flex-wrap: wrap;
 }
 
-.spacer {
-  flex: 1;
+.right {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-lg);
 }
 
 .size {
   display: inline-flex;
   align-items: center;
-  gap: var(--spacing-xs);
+  gap: 6px;
   color: var(--color-text-secondary);
 }
 
 .size select {
-  min-height: 30px;
+  min-height: 32px;
   padding: 3px 26px 3px 8px;
   font-size: var(--font-size-sm);
   background-position: right 6px center;
 }
 
+.page-info {
+  font-weight: 500;
+  white-space: nowrap;
+}
+
 .pager {
   display: inline-flex;
   align-items: center;
-  gap: var(--spacing-xs);
+  gap: 4px;
 }
 
 .page-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 30px;
-  height: 30px;
+  min-width: 32px;
+  height: 32px;
   padding: 0 6px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
@@ -181,8 +154,8 @@ function changePageSize(size: number) {
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
-.page-btn:hover:not(:disabled):not(.current) {
-  background: var(--color-primary-soft);
+.page-btn:hover:not(:disabled) {
+  background: var(--color-muted-soft);
 }
 
 .page-btn:disabled {
@@ -190,24 +163,9 @@ function changePageSize(size: number) {
   cursor: not-allowed;
 }
 
-.page-btn.current {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
-  color: var(--color-on-primary);
-}
-
-.ellipsis {
-  color: var(--color-text-secondary);
-  padding: 0 2px;
-}
-
-@media (max-width: 560px) {
-  .spacer {
+@media (max-width: 640px) {
+  .size {
     display: none;
-  }
-
-  .paginator > :first-child {
-    width: 100%;
   }
 }
 </style>

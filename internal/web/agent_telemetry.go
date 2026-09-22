@@ -2,7 +2,6 @@ package web
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -17,7 +16,7 @@ const (
 	maxAgentBatchRecords = 1000
 	agentTimestampWindow = 24 * time.Hour
 	maxIPStrLen          = 64
-	maxProtocolLen       = 32
+	maxVisitHostLen      = 253
 )
 
 type pairKey struct {
@@ -60,11 +59,11 @@ func parseAgentTimestamp(raw string, now time.Time) (time.Time, error) {
 }
 
 type agentTrafficRecord struct {
-	UserID        int64  `json:"user_id"`
-	NodeID        int64  `json:"node_id"`
-	UploadBytes   int64  `json:"upload_bytes"`
-	DownloadBytes int64  `json:"download_bytes"`
-	RecordedAt    string `json:"recorded_at"`
+	UserID     int64  `json:"user_id"`
+	NodeID     int64  `json:"node_id"`
+	U          int64  `json:"u"`
+	D          int64  `json:"d"`
+	RecordedAt string `json:"recorded_at"`
 }
 
 func (h *Handler) handleAgentTraffic(w http.ResponseWriter, r *http.Request) {
@@ -93,14 +92,13 @@ func (h *Handler) handleAgentTraffic(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now()
 	records := make([]repo.NewTrafficRecord, 0, len(req.Records))
-	deltas := make(map[int64]int64)
 	for i, in := range req.Records {
 		field := fmt.Sprintf("records[%d]", i)
 		if in.UserID < 1 || in.NodeID < 1 {
 			writeErr(w, errValidation(field+" user_id and node_id are required"))
 			return
 		}
-		if in.UploadBytes < 0 || in.DownloadBytes < 0 {
+		if in.U < 0 || in.D < 0 {
 			writeErr(w, errValidation(field+" counters must be non-negative"))
 			return
 		}
@@ -118,17 +116,16 @@ func (h *Handler) handleAgentTraffic(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		records = append(records, repo.NewTrafficRecord{
-			UserID:        in.UserID,
-			NodeID:        in.NodeID,
-			ServerID:      serverID,
-			UploadBytes:   in.UploadBytes,
-			DownloadBytes: in.DownloadBytes,
-			CreatedAt:     ts,
+			UserID:    in.UserID,
+			NodeID:    in.NodeID,
+			ServerID:  serverID,
+			U:         in.U,
+			D:         in.D,
+			CreatedAt: ts,
 		})
-		deltas[in.UserID] += in.UploadBytes + in.DownloadBytes
 	}
 
-	count, _, err := h.repo.IngestTrafficBatch(r.Context(), agentID, req.BatchSeq, records, deltas)
+	count, _, err := h.repo.IngestTrafficBatch(r.Context(), agentID, req.BatchSeq, records)
 	if errors.Is(err, repo.ErrConflict) {
 		count, _, err = h.repo.TrafficBatchCount(r.Context(), agentID, req.BatchSeq)
 	}
@@ -143,32 +140,35 @@ func (h *Handler) handleAgentTraffic(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-type agentSessionReport struct {
-	UserID        int64  `json:"user_id"`
-	NodeID        int64  `json:"node_id"`
-	IP            string `json:"ip"`
-	UploadBytes   int64  `json:"upload_bytes"`
-	DownloadBytes int64  `json:"download_bytes"`
-	ConnectedAt   string `json:"connected_at"`
-	LastSeenAt    string `json:"last_seen_at"`
+type agentDeviceReport struct {
+	UserID int64    `json:"user_id"`
+	NodeID int64    `json:"node_id"`
+	IPs    []string `json:"ips"`
+	Online int      `json:"online"`
 }
 
-func (h *Handler) handleAgentSessions(w http.ResponseWriter, r *http.Request) {
-	serverID := agentServerIDFrom(r.Context())
+func (h *Handler) handleAgentDevices(w http.ResponseWriter, r *http.Request) {
+	agentID, serverID := agentIDFrom(r.Context()), agentServerIDFrom(r.Context())
 	var req struct {
-		ReportedAt string               `json:"reported_at"`
-		Sessions   []agentSessionReport `json:"sessions"`
+		BatchSeq   int64               `json:"batch_seq"`
+		RecordedAt string              `json:"recorded_at"`
+		Devices    []agentDeviceReport `json:"devices"`
 	}
 	if err := decodeJSON(w, r, &req); err != nil {
 		writeErr(w, err)
 		return
 	}
-	if req.ReportedAt == "" {
-		writeErr(w, errValidation("reported_at is required"))
+	if req.BatchSeq < 1 {
+		writeErr(w, errValidation("batch_seq must be a positive integer"))
 		return
 	}
-	if _, err := time.Parse(time.RFC3339, req.ReportedAt); err != nil {
-		writeErr(w, errValidation("reported_at must be an RFC3339 timestamp"))
+	if len(req.Devices) > maxAgentBatchRecords {
+		writeErr(w, errTooLarge(fmt.Sprintf("batch exceeds %d devices", maxAgentBatchRecords)))
+		return
+	}
+	seenAt, err := parseAgentTimestamp(req.RecordedAt, time.Now())
+	if err != nil {
+		writeErr(w, errValidation("recorded_at "+err.Error()))
 		return
 	}
 	nodeSet, pairSet, err := h.agentScopes(r.Context(), serverID)
@@ -177,19 +177,16 @@ func (h *Handler) handleAgentSessions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sessions := make([]repo.NewSession, 0, len(req.Sessions))
-	for i, in := range req.Sessions {
-		field := fmt.Sprintf("sessions[%d]", i)
+	devices := make([]repo.NewOnlineDevice, 0, len(req.Devices))
+	onlineByUser := make(map[int64]int)
+	for i, in := range req.Devices {
+		field := fmt.Sprintf("devices[%d]", i)
 		if in.UserID < 1 || in.NodeID < 1 {
 			writeErr(w, errValidation(field+" user_id and node_id are required"))
 			return
 		}
-		if in.IP == "" || len(in.IP) > maxIPStrLen {
-			writeErr(w, errValidation(field+" ip must be 1-64 characters"))
-			return
-		}
-		if in.UploadBytes < 0 || in.DownloadBytes < 0 {
-			writeErr(w, errValidation(field+" counters must be non-negative"))
+		if in.Online < 0 {
+			writeErr(w, errValidation(field+" online must be non-negative"))
 			return
 		}
 		if !nodeSet[in.NodeID] {
@@ -200,78 +197,53 @@ func (h *Handler) handleAgentSessions(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, errValidation(field+" user is not authorized on this node"))
 			return
 		}
-		connectedAt, err := parseAgentTimestamp(in.ConnectedAt, time.Now())
-		if err != nil {
-			writeErr(w, errValidation(field+" connected_at "+err.Error()))
-			return
+		seenIPs := map[string]bool{}
+		for j, ip := range in.IPs {
+			if ip == "" || len(ip) > maxIPStrLen {
+				writeErr(w, errValidation(fmt.Sprintf("%s.ips[%d] must be 1-64 characters", field, j)))
+				return
+			}
+			if seenIPs[ip] {
+				continue
+			}
+			seenIPs[ip] = true
+			devices = append(devices, repo.NewOnlineDevice{UserID: in.UserID, NodeID: in.NodeID, IP: ip, Online: in.Online})
 		}
-		lastSeenAt, err := parseAgentTimestamp(in.LastSeenAt, time.Now())
-		if err != nil {
-			writeErr(w, errValidation(field+" last_seen_at "+err.Error()))
-			return
-		}
-		if connectedAt.After(lastSeenAt) {
-			writeErr(w, errValidation(field+" connected_at must not be after last_seen_at"))
-			return
-		}
-		sessions = append(sessions, repo.NewSession{
-			UserID:        in.UserID,
-			NodeID:        in.NodeID,
-			ServerID:      serverID,
-			IP:            in.IP,
-			UploadBytes:   in.UploadBytes,
-			DownloadBytes: in.DownloadBytes,
-			ConnectedAt:   connectedAt,
-			LastSeenAt:    lastSeenAt,
-		})
+		onlineByUser[in.UserID] += in.Online
 	}
 
-	if err := h.repo.ReplaceServerSessions(r.Context(), serverID, sessions); err != nil {
+	count, _, err := h.repo.IngestDeviceBatch(r.Context(), agentID, req.BatchSeq, serverID, devices, onlineByUser, seenAt.Unix())
+	if errors.Is(err, repo.ErrConflict) {
+		count, _, err = h.repo.DeviceBatchCount(r.Context(), agentID, req.BatchSeq)
+	}
+	if err != nil {
 		writeErr(w, err)
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{
-		"accepted": true,
-		"sessions": len(sessions),
+		"accepted":  true,
+		"batch_seq": req.BatchSeq,
+		"devices":   count,
 	})
 }
 
-type agentLogReport struct {
-	UserID        int64   `json:"user_id"`
-	NodeID        int64   `json:"node_id"`
-	IP            string  `json:"ip"`
-	Protocol      string  `json:"protocol"`
-	UploadBytes   int64   `json:"upload_bytes"`
-	DownloadBytes int64   `json:"download_bytes"`
-	ConnectedAt   string  `json:"connected_at"`
-	ClosedAt      *string `json:"closed_at"`
-	Status        string  `json:"status"`
+type agentVisitRecord struct {
+	UserID     int64  `json:"user_id"`
+	NodeID     int64  `json:"node_id"`
+	DestHost   string `json:"dest_host"`
+	DestPort   int    `json:"dest_port"`
+	Network    string `json:"network"`
+	ClientIP   string `json:"client_ip"`
+	RecordedAt string `json:"recorded_at"`
 }
 
-func decodeJSONStrict(w http.ResponseWriter, r *http.Request, dst any) error {
-	r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
-	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(dst); err != nil {
-		var mbe *http.MaxBytesError
-		if errors.As(err, &mbe) {
-			return errTooLarge("request body too large")
-		}
-		if strings.Contains(err.Error(), "unknown field") {
-			return errValidation(err.Error())
-		}
-		return errInvalid("malformed JSON body")
-	}
-	return nil
-}
-
-func (h *Handler) handleAgentConnectionLogs(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleAgentVisits(w http.ResponseWriter, r *http.Request) {
 	agentID, serverID := agentIDFrom(r.Context()), agentServerIDFrom(r.Context())
 	var req struct {
-		BatchSeq int64            `json:"batch_seq"`
-		Logs     []agentLogReport `json:"logs"`
+		BatchSeq int64              `json:"batch_seq"`
+		Records  []agentVisitRecord `json:"records"`
 	}
-	if err := decodeJSONStrict(w, r, &req); err != nil {
+	if err := decodeJSON(w, r, &req); err != nil {
 		writeErr(w, err)
 		return
 	}
@@ -279,8 +251,16 @@ func (h *Handler) handleAgentConnectionLogs(w http.ResponseWriter, r *http.Reque
 		writeErr(w, errValidation("batch_seq must be a positive integer"))
 		return
 	}
-	if len(req.Logs) > maxAgentBatchRecords {
-		writeErr(w, errTooLarge(fmt.Sprintf("batch exceeds %d logs", maxAgentBatchRecords)))
+	if len(req.Records) > maxAgentBatchRecords {
+		writeErr(w, errTooLarge(fmt.Sprintf("batch exceeds %d records", maxAgentBatchRecords)))
+		return
+	}
+	if !h.visitsCollectionEnabled(r.Context()) {
+		httpx.WriteJSON(w, http.StatusOK, map[string]any{
+			"accepted":  false,
+			"batch_seq": req.BatchSeq,
+			"records":   0,
+		})
 		return
 	}
 	nodeSet, pairSet, err := h.agentScopes(r.Context(), serverID)
@@ -290,27 +270,11 @@ func (h *Handler) handleAgentConnectionLogs(w http.ResponseWriter, r *http.Reque
 	}
 
 	now := time.Now()
-	logs := make([]repo.NewConnectionLog, 0, len(req.Logs))
-	for i, in := range req.Logs {
-		field := fmt.Sprintf("logs[%d]", i)
+	records := make([]repo.NewVisitRecord, 0, len(req.Records))
+	for i, in := range req.Records {
+		field := fmt.Sprintf("records[%d]", i)
 		if in.UserID < 1 || in.NodeID < 1 {
 			writeErr(w, errValidation(field+" user_id and node_id are required"))
-			return
-		}
-		if in.IP == "" || len(in.IP) > maxIPStrLen {
-			writeErr(w, errValidation(field+" ip must be 1-64 characters"))
-			return
-		}
-		if in.Protocol == "" || len(in.Protocol) > maxProtocolLen {
-			writeErr(w, errValidation(field+" protocol must be 1-32 characters"))
-			return
-		}
-		if in.Status != "active" && in.Status != "closed" {
-			writeErr(w, errInvalid(field+" status must be active or closed"))
-			return
-		}
-		if in.UploadBytes < 0 || in.DownloadBytes < 0 {
-			writeErr(w, errValidation(field+" counters must be non-negative"))
 			return
 		}
 		if !nodeSet[in.NodeID] {
@@ -321,37 +285,43 @@ func (h *Handler) handleAgentConnectionLogs(w http.ResponseWriter, r *http.Reque
 			writeErr(w, errValidation(field+" user is not authorized on this node"))
 			return
 		}
-		connectedAt, err := parseAgentTimestamp(in.ConnectedAt, now)
-		if err != nil {
-			writeErr(w, errValidation(field+" connected_at "+err.Error()))
+		host := strings.ToLower(strings.TrimSpace(in.DestHost))
+		if host == "" || len(host) > maxVisitHostLen {
+			writeErr(w, errValidation(fmt.Sprintf("%s dest_host must be 1-%d characters", field, maxVisitHostLen)))
 			return
 		}
-		var closedAt *time.Time
-		if in.ClosedAt != nil {
-			t, err := parseAgentTimestamp(*in.ClosedAt, now)
-			if err != nil {
-				writeErr(w, errValidation(field+" closed_at "+err.Error()))
-				return
-			}
-			closedAt = &t
+		if in.DestPort < 0 || in.DestPort > 65535 {
+			writeErr(w, errValidation(field+" dest_port must be between 0 and 65535"))
+			return
 		}
-		logs = append(logs, repo.NewConnectionLog{
-			UserID:        in.UserID,
-			NodeID:        in.NodeID,
-			ServerID:      serverID,
-			IP:            in.IP,
-			Protocol:      in.Protocol,
-			UploadBytes:   in.UploadBytes,
-			DownloadBytes: in.DownloadBytes,
-			ConnectedAt:   connectedAt,
-			ClosedAt:      closedAt,
-			Status:        in.Status,
+		if in.Network != "" && in.Network != "tcp" && in.Network != "udp" {
+			writeErr(w, errValidation(field+" network must be tcp, udp, or empty"))
+			return
+		}
+		if len(in.ClientIP) > maxIPStrLen {
+			writeErr(w, errValidation(fmt.Sprintf("%s client_ip must be at most %d characters", field, maxIPStrLen)))
+			return
+		}
+		ts, err := parseAgentTimestamp(in.RecordedAt, now)
+		if err != nil {
+			writeErr(w, errValidation(field+" recorded_at "+err.Error()))
+			return
+		}
+		records = append(records, repo.NewVisitRecord{
+			UserID:    in.UserID,
+			NodeID:    in.NodeID,
+			ServerID:  serverID,
+			DestHost:  host,
+			DestPort:  in.DestPort,
+			Network:   in.Network,
+			ClientIP:  in.ClientIP,
+			CreatedAt: ts,
 		})
 	}
 
-	count, _, err := h.repo.IngestLogBatch(r.Context(), agentID, req.BatchSeq, logs)
+	count, _, err := h.repo.IngestVisitBatch(r.Context(), agentID, req.BatchSeq, serverID, records)
 	if errors.Is(err, repo.ErrConflict) {
-		count, _, err = h.repo.LogBatchCount(r.Context(), agentID, req.BatchSeq)
+		count, _, err = h.repo.VisitBatchCount(r.Context(), agentID, req.BatchSeq)
 	}
 	if err != nil {
 		writeErr(w, err)
@@ -360,6 +330,6 @@ func (h *Handler) handleAgentConnectionLogs(w http.ResponseWriter, r *http.Reque
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{
 		"accepted":  true,
 		"batch_seq": req.BatchSeq,
-		"logs":      count,
+		"records":   count,
 	})
 }

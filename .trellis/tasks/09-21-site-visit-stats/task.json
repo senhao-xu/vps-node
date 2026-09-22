@@ -3,7 +3,7 @@
   "name": "site-visit-stats",
   "title": "访问站点统计",
   "description": "Agent 采集 sing-box 连接目标域名/地址并上报，Panel 存储与展示用户访问站点统计（独立于 dashboard-user-traffic）",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,

@@ -15,17 +15,13 @@ services:
       - "${NODE_PORT:-8388}:8388/udp"
     volumes:
       - agent-state:/var/lib/panel-agent
-      - agent-config:/etc/sing-box
 
 volumes:
   agent-state:
-  agent-config:
 
-# The agent image contains agent + sing-box + singbox-reload (all-in-one container;
-# sing-box is started by the agent's reload command after each config apply, including
-# at startup, so a restart brings sing-box back up).
-# Agent identity lives in the agent-state volume; rendered sing-box config lives in the
-# agent-config volume so it survives container recreation. Deleting agent-state forces
+# The agent image is self-contained: the agent binary embeds sing-box (built with
+# -tags with_quic,with_utls) and runs it in-process, applying each config revision without a
+# helper process. Agent identity lives in the agent-state volume; deleting it forces
 # re-registration.
 #
 # Port mapping notes:

@@ -57,7 +57,7 @@ if [ -f "$TMP/$SERVICE" ]; then
 fi
 
 id panel-agent >/dev/null 2>&1 || useradd --system --home-dir "$STATE_DIR" --shell /usr/sbin/nologin panel-agent
-mkdir -p "$ETC_DIR" "$STATE_DIR" /etc/sing-box
+mkdir -p "$ETC_DIR" "$STATE_DIR"
 chown panel-agent:panel-agent "$STATE_DIR"
 chmod 0750 "$STATE_DIR"
 
@@ -72,14 +72,8 @@ log_level: info
 heartbeat_interval: 30
 sync_interval: 30
 traffic_interval: 60
-singbox:
-  config_path: /etc/sing-box/config.json
-  check_bin: /usr/local/bin/sing-box
-  reload_command: ""
 collection:
   traffic: true
-  sessions: true
-  connection_logs: true
 EOF
     chmod 0600 "$ETC_DIR/agent.yaml"
 else

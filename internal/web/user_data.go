@@ -2,7 +2,6 @@ package web
 
 import (
 	"net/http"
-	"time"
 
 	"vps-node/internal/httpx"
 	"vps-node/internal/repo"
@@ -16,7 +15,7 @@ func toNodeDTOs(nodes []repo.Node) []nodeDTO {
 	return items
 }
 
-func (h *Handler) handleUserSessions(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleUserDevices(w http.ResponseWriter, r *http.Request) {
 	id, err := pathID(r)
 	if err != nil {
 		writeErr(w, err)
@@ -26,25 +25,19 @@ func (h *Handler) handleUserSessions(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-
-	includeStale := r.URL.Query().Get("include_stale") == "true" || r.URL.Query().Get("include_stale") == "1"
-	var cutoff time.Time
-	if !includeStale {
-		cutoff = time.Now().Add(-h.sessionFreshness(r.Context()))
-	}
-	sessions, err := h.repo.ListSessionsByUser(r.Context(), id, cutoff)
+	devices, err := h.repo.ListDevicesByUser(r.Context(), id)
 	if err != nil {
 		writeErr(w, err)
 		return
 	}
-	items := make([]sessionDTO, 0, len(sessions))
-	for _, s := range sessions {
-		items = append(items, toSessionDTO(s))
+	items := make([]deviceDTO, 0, len(devices))
+	for _, d := range devices {
+		items = append(items, toDeviceDTO(d))
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"items": items})
 }
 
-func (h *Handler) handleUserConnectionLogs(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleUserVisits(w http.ResponseWriter, r *http.Request) {
 	id, err := pathID(r)
 	if err != nil {
 		writeErr(w, err)
@@ -59,33 +52,21 @@ func (h *Handler) handleUserConnectionLogs(w http.ResponseWriter, r *http.Reques
 		writeErr(w, err)
 		return
 	}
-	from, err := parseTimeParam(r, "from")
+	filter, err := visitFilterFromQuery(r)
 	if err != nil {
 		writeErr(w, err)
 		return
 	}
-	to, err := parseTimeParam(r, "to")
-	if err != nil {
-		writeErr(w, err)
-		return
-	}
+	filter.UserID = id
+	filter.Page = page.Page
+	filter.PageSize = page.PageSize
 
-	logs, total, err := h.repo.ListConnectionLogs(r.Context(), repo.LogFilter{
-		UserID:   id,
-		From:     from,
-		To:       to,
-		Page:     page.Page,
-		PageSize: page.PageSize,
-	})
+	visits, total, err := h.repo.ListVisits(r.Context(), filter)
 	if err != nil {
 		writeErr(w, err)
 		return
 	}
-	items := make([]connectionLogDTO, 0, len(logs))
-	for _, l := range logs {
-		items = append(items, toConnectionLogDTO(l))
-	}
-	writePage(w, items, total, page)
+	writePage(w, visitDTOs(visits), total, page)
 }
 
 func (h *Handler) handleUserTraffic(w http.ResponseWriter, r *http.Request) {
@@ -136,8 +117,8 @@ func (h *Handler) handleUserTraffic(w http.ResponseWriter, r *http.Request) {
 	for _, b := range buckets {
 		series = append(series, trafficBucketDTO{
 			BucketStart:   rfc3339(b.BucketStart),
-			UploadBytes:   b.UploadBytes,
-			DownloadBytes: b.DownloadBytes,
+			UploadBytes:   b.U,
+			DownloadBytes: b.D,
 		})
 	}
 	httpx.WriteJSON(w, http.StatusOK, trafficSeriesDTO{

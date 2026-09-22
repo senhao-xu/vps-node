@@ -18,7 +18,6 @@ const (
 	defaultListen        = ":8080"
 	defaultDBPath        = "data/panel.db"
 	defaultLogLevel      = "info"
-	defaultRawLogDays    = 7
 	defaultAggregateDays = 90
 	defaultAdminUsername = "admin"
 	appKeySize           = 32
@@ -28,14 +27,11 @@ const (
 	defaultTrafficInterval   = 60 * time.Second
 	minAgentInterval         = 5 * time.Second
 
-	defaultAgentStatePath    = "agent_state.json"
-	defaultSingBoxConfigPath = "/etc/sing-box/config.json"
-	defaultSingBoxCheckBin   = "sing-box"
+	defaultAgentStatePath = "agent_state.json"
 
 	defaultSweepInterval = time.Hour
 	minSweepInterval     = time.Second
 
-	defaultMaxConnectionLogs = 1_000_000
 	defaultMaxTrafficRecords = 5_000_000
 )
 
@@ -51,12 +47,10 @@ const (
 )
 
 type Retention struct {
-	RawLogDays    int
 	AggregateDays int
 	SweepInterval time.Duration
-	// MaxConnectionLogs and MaxTrafficRecords bound raw rows regardless of the
-	// retention window; 0 disables the cap.
-	MaxConnectionLogs int64
+	// MaxTrafficRecords bounds raw rows regardless of the retention window;
+	// 0 disables the cap.
 	MaxTrafficRecords int64
 }
 
@@ -119,16 +113,9 @@ func (p *Panel) ResolveAppKey(ctx context.Context, get func(context.Context) (st
 	return nil
 }
 
-type SingBox struct {
-	ConfigPath    string
-	CheckBin      string
-	ReloadCommand string
-}
-
 type Collection struct {
-	Traffic        bool
-	Sessions       bool
-	ConnectionLogs bool
+	Traffic bool
+	Visits  bool
 }
 
 type Agent struct {
@@ -141,7 +128,6 @@ type Agent struct {
 	HeartbeatInterval time.Duration
 	SyncInterval      time.Duration
 	TrafficInterval   time.Duration
-	SingBox           SingBox
 	Collection        Collection
 }
 
@@ -156,10 +142,8 @@ type panelFile struct {
 		Password string `yaml:"password"`
 	} `yaml:"admin"`
 	Retention struct {
-		RawLogDays    int    `yaml:"raw_log_days"`
 		AggregateDays int    `yaml:"aggregate_days"`
 		SweepInterval int    `yaml:"sweep_interval_seconds"`
-		MaxConnLogs   *int64 `yaml:"max_connection_logs"`
 		MaxTraffic    *int64 `yaml:"max_traffic_records"`
 	} `yaml:"retention"`
 }
@@ -174,15 +158,9 @@ type agentFile struct {
 	HeartbeatIntervalSec int    `yaml:"heartbeat_interval"`
 	SyncIntervalSec      int    `yaml:"sync_interval"`
 	TrafficIntervalSec   int    `yaml:"traffic_interval"`
-	SingBox              struct {
-		ConfigPath    string `yaml:"config_path"`
-		CheckBin      string `yaml:"check_bin"`
-		ReloadCommand string `yaml:"reload_command"`
-	} `yaml:"singbox"`
-	Collection struct {
-		Traffic        *bool `yaml:"traffic"`
-		Sessions       *bool `yaml:"sessions"`
-		ConnectionLogs *bool `yaml:"connection_logs"`
+	Collection           struct {
+		Traffic *bool `yaml:"traffic"`
+		Visits  *bool `yaml:"visits"`
 	} `yaml:"collection"`
 }
 
@@ -192,10 +170,8 @@ func LoadPanel(path string) (*Panel, error) {
 		DBPath:   defaultDBPath,
 		LogLevel: defaultLogLevel,
 		Retention: Retention{
-			RawLogDays:        defaultRawLogDays,
 			AggregateDays:     defaultAggregateDays,
 			SweepInterval:     defaultSweepInterval,
-			MaxConnectionLogs: defaultMaxConnectionLogs,
 			MaxTrafficRecords: defaultMaxTrafficRecords,
 		},
 		Admin: Admin{Username: defaultAdminUsername},
@@ -220,17 +196,11 @@ func LoadPanel(path string) (*Panel, error) {
 		if pf.LogLevel != "" {
 			cfg.LogLevel = pf.LogLevel
 		}
-		if pf.Retention.RawLogDays > 0 {
-			cfg.Retention.RawLogDays = pf.Retention.RawLogDays
-		}
 		if pf.Retention.AggregateDays > 0 {
 			cfg.Retention.AggregateDays = pf.Retention.AggregateDays
 		}
 		if pf.Retention.SweepInterval > 0 {
 			cfg.Retention.SweepInterval = time.Duration(pf.Retention.SweepInterval) * time.Second
-		}
-		if pf.Retention.MaxConnLogs != nil {
-			cfg.Retention.MaxConnectionLogs = max64(*pf.Retention.MaxConnLogs, 0)
 		}
 		if pf.Retention.MaxTraffic != nil {
 			cfg.Retention.MaxTrafficRecords = max64(*pf.Retention.MaxTraffic, 0)
@@ -252,15 +222,6 @@ func LoadPanel(path string) (*Panel, error) {
 	if v := os.Getenv("PANEL_LOG_LEVEL"); v != "" {
 		cfg.LogLevel = v
 	}
-	if v := os.Getenv("PANEL_RETENTION_RAW_LOG_DAYS"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil {
-			return nil, fmt.Errorf("PANEL_RETENTION_RAW_LOG_DAYS: %w", err)
-		}
-		if n > 0 {
-			cfg.Retention.RawLogDays = n
-		}
-	}
 	if v := os.Getenv("PANEL_RETENTION_AGGREGATE_DAYS"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil {
@@ -278,13 +239,6 @@ func LoadPanel(path string) (*Panel, error) {
 		if n > 0 {
 			cfg.Retention.SweepInterval = time.Duration(n) * time.Second
 		}
-	}
-	if v := os.Getenv("PANEL_RETENTION_MAX_CONNECTION_LOGS"); v != "" {
-		n, err := strconv.ParseInt(v, 10, 64)
-		if err != nil {
-			return nil, fmt.Errorf("PANEL_RETENTION_MAX_CONNECTION_LOGS: %w", err)
-		}
-		cfg.Retention.MaxConnectionLogs = max64(n, 0)
 	}
 	if v := os.Getenv("PANEL_RETENTION_MAX_TRAFFIC_RECORDS"); v != "" {
 		n, err := strconv.ParseInt(v, 10, 64)
@@ -330,7 +284,7 @@ func LoadPanel(path string) (*Panel, error) {
 	if err := validateLogLevel(cfg.LogLevel); err != nil {
 		return nil, err
 	}
-	if cfg.Retention.RawLogDays < 1 || cfg.Retention.AggregateDays < 1 {
+	if cfg.Retention.AggregateDays < 1 {
 		return nil, fmt.Errorf("retention days must be >= 1")
 	}
 	if cfg.Retention.SweepInterval < minSweepInterval {
@@ -346,11 +300,7 @@ func LoadAgent(path string) (*Agent, error) {
 		SyncInterval:      defaultSyncInterval,
 		TrafficInterval:   defaultTrafficInterval,
 		StatePath:         defaultAgentStatePath,
-		SingBox: SingBox{
-			ConfigPath: defaultSingBoxConfigPath,
-			CheckBin:   defaultSingBoxCheckBin,
-		},
-		Collection: Collection{Traffic: true, Sessions: true, ConnectionLogs: true},
+		Collection:        Collection{Traffic: true, Visits: true},
 	}
 
 	if path != "" {
@@ -381,21 +331,11 @@ func LoadAgent(path string) (*Agent, error) {
 		if af.TrafficIntervalSec > 0 {
 			cfg.TrafficInterval = time.Duration(af.TrafficIntervalSec) * time.Second
 		}
-		if af.SingBox.ConfigPath != "" {
-			cfg.SingBox.ConfigPath = strings.TrimSpace(af.SingBox.ConfigPath)
-		}
-		if af.SingBox.CheckBin != "" {
-			cfg.SingBox.CheckBin = strings.TrimSpace(af.SingBox.CheckBin)
-		}
-		cfg.SingBox.ReloadCommand = strings.TrimSpace(af.SingBox.ReloadCommand)
 		if af.Collection.Traffic != nil {
 			cfg.Collection.Traffic = *af.Collection.Traffic
 		}
-		if af.Collection.Sessions != nil {
-			cfg.Collection.Sessions = *af.Collection.Sessions
-		}
-		if af.Collection.ConnectionLogs != nil {
-			cfg.Collection.ConnectionLogs = *af.Collection.ConnectionLogs
+		if af.Collection.Visits != nil {
+			cfg.Collection.Visits = *af.Collection.Visits
 		}
 	}
 
@@ -436,14 +376,12 @@ func LoadAgent(path string) (*Agent, error) {
 			cfg.TrafficInterval = time.Duration(n) * time.Second
 		}
 	}
-	if v := os.Getenv("AGENT_SINGBOX_CONFIG_PATH"); v != "" {
-		cfg.SingBox.ConfigPath = v
-	}
-	if v := os.Getenv("AGENT_SINGBOX_CHECK_BIN"); v != "" {
-		cfg.SingBox.CheckBin = v
-	}
-	if v := os.Getenv("AGENT_SINGBOX_RELOAD_COMMAND"); v != "" {
-		cfg.SingBox.ReloadCommand = v
+	if v := os.Getenv("AGENT_COLLECTION_VISITS"); v != "" {
+		enabled, err := strconv.ParseBool(v)
+		if err != nil {
+			return nil, fmt.Errorf("AGENT_COLLECTION_VISITS: %w", err)
+		}
+		cfg.Collection.Visits = enabled
 	}
 
 	if cfg.PanelURL == "" {
@@ -457,12 +395,6 @@ func LoadAgent(path string) (*Agent, error) {
 	}
 	if cfg.StatePath == "" {
 		return nil, fmt.Errorf("state_path is required")
-	}
-	if cfg.SingBox.ConfigPath == "" {
-		return nil, fmt.Errorf("singbox.config_path is required")
-	}
-	if cfg.SingBox.CheckBin == "" {
-		return nil, fmt.Errorf("singbox.check_bin is required")
 	}
 	if err := validateLogLevel(cfg.LogLevel); err != nil {
 		return nil, err

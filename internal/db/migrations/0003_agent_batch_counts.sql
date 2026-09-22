@@ -1,2 +1,0 @@
-ALTER TABLE traffic_batches ADD COLUMN records INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE connection_log_batches ADD COLUMN logs INTEGER NOT NULL DEFAULT 0;

@@ -145,7 +145,7 @@ func (h *Handler) handlePublicSubscription(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	now := time.Now()
-	if u.Status != repo.UserStatusActive || (u.StartedAt != nil && u.StartedAt.After(now)) || (u.ExpiresAt != nil && !u.ExpiresAt.After(now)) || (u.QuotaBytes > 0 && u.UsedBytes >= u.QuotaBytes) {
+	if u.Status != repo.UserStatusActive || (u.StartedAt != nil && u.StartedAt.After(now)) || (u.ExpiresAt != nil && !u.ExpiresAt.After(now)) || (u.TransferEnable > 0 && u.UsedBytes() >= u.TransferEnable) {
 		writeErr(w, errForbidden("subscription is unavailable"))
 		return
 	}
@@ -157,7 +157,7 @@ func (h *Handler) handlePublicSubscription(w http.ResponseWriter, r *http.Reques
 	nodes := make([]subscription.Node, 0, len(repoNodes))
 	for _, n := range repoNodes {
 		settings, secret := map[string]any{}, map[string]any{}
-		if err := json.Unmarshal([]byte(n.Settings), &settings); err != nil {
+		if err := json.Unmarshal([]byte(n.ProtocolSettings), &settings); err != nil {
 			writeErr(w, err)
 			return
 		}
@@ -172,7 +172,8 @@ func (h *Handler) handlePublicSubscription(w http.ResponseWriter, r *http.Reques
 				return
 			}
 		}
-		if (n.Protocol == repo.ProtocolHysteria2 || n.Protocol == repo.ProtocolAnyTLS) && (fmt.Sprint(settings["server_name"]) == "" || secret["certificate"] == nil || secret["private_key"] == nil) {
+		tlsSettings, _ := settings["tls"].(map[string]any)
+		if (n.Protocol == repo.ProtocolHysteria2 || n.Protocol == repo.ProtocolAnyTLS) && (fmt.Sprint(tlsSettings["server_name"]) == "" || secret["certificate"] == nil || secret["private_key"] == nil) {
 			continue
 		}
 		nodes = append(nodes, subscription.Node{ID: n.ID, Name: n.Name, Protocol: n.Protocol, Address: n.ServerAddress, Port: n.Port, Settings: settings, Secret: secret})
@@ -224,7 +225,7 @@ func (h *Handler) handlePublicSubscription(w http.ResponseWriter, r *http.Reques
 }
 
 func subscriptionUserinfo(u repo.User) string {
-	value := fmt.Sprintf("upload=0; download=%d; total=%d", u.UsedBytes, u.QuotaBytes)
+	value := fmt.Sprintf("upload=%d; download=%d; total=%d", u.U, u.D, u.TransferEnable)
 	if u.ExpiresAt != nil {
 		value += fmt.Sprintf("; expire=%d", u.ExpiresAt.Unix())
 	}

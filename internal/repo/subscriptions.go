@@ -82,13 +82,13 @@ func (r *Repo) RotateUserSubscription(ctx context.Context, userID int64, tokenHa
 }
 
 func (r *Repo) ResolveSubscription(ctx context.Context, tokenHash string) (User, error) {
-	row := r.DB.QueryRowContext(ctx, `SELECT users.id, users.uuid, users.username, users.token_hash, users.status, users.quota_bytes, users.used_bytes, users.started_at, users.expires_at, users.created_at, users.updated_at
+	row := r.DB.QueryRowContext(ctx, `SELECT users.id, users.uuid, users.username, users.token_hash, users.status, users.transfer_enable, users.u, users.d, users.speed_limit, users.device_limit, users.online_count, users.last_online_at, users.started_at, users.expires_at, users.created_at, users.updated_at
 		FROM users JOIN user_subscriptions us ON us.user_id = users.id WHERE us.token_hash = ?`, tokenHash)
 	return scanUser(row.Scan)
 }
 
 func (r *Repo) ListSubscriptionNodes(ctx context.Context, userID int64) ([]SubscriptionNode, error) {
-	rows, err := r.DB.QueryContext(ctx, `SELECT n.id, n.server_id, n.name, n.protocol, n.port, n.settings, n.secret_enc, n.status, n.created_at, n.updated_at, s.address
+	rows, err := r.DB.QueryContext(ctx, `SELECT n.id, n.server_id, n.name, n.protocol, n.port, n.protocol_settings, n.secret_enc, n.status, n.created_at, n.updated_at, s.address
 		FROM nodes n JOIN user_nodes un ON un.node_id = n.id JOIN servers s ON s.id = n.server_id
 		WHERE un.user_id = ? AND n.status = 'active' AND s.status = 'active' ORDER BY n.id`, userID)
 	if err != nil {
@@ -99,7 +99,7 @@ func (r *Repo) ListSubscriptionNodes(ctx context.Context, userID int64) ([]Subsc
 	for rows.Next() {
 		var n SubscriptionNode
 		var created, updated int64
-		if err := rows.Scan(&n.ID, &n.ServerID, &n.Name, &n.Protocol, &n.Port, &n.Settings, &n.SecretEnc, &n.Status, &created, &updated, &n.ServerAddress); err != nil {
+		if err := rows.Scan(&n.ID, &n.ServerID, &n.Name, &n.Protocol, &n.Port, &n.ProtocolSettings, &n.SecretEnc, &n.Status, &created, &updated, &n.ServerAddress); err != nil {
 			return nil, mapErr(err)
 		}
 		n.CreatedAt, n.UpdatedAt = toTime(created), toTime(updated)

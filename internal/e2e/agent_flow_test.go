@@ -2,14 +2,10 @@ package e2e
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strings"
-	"sync/atomic"
+	"sync"
 	"testing"
 	"time"
 
@@ -17,36 +13,52 @@ import (
 	"vps-node/internal/agentruntime"
 	"vps-node/internal/agentstate"
 	"vps-node/internal/config"
+	kernelsingbox "vps-node/internal/kernel/singbox"
 )
 
-type fakeClash struct {
-	snapshot atomic.Value
-	secret   string
+type stubKernel struct {
+	mu       sync.Mutex
+	started  int
+	snapshot kernelsingbox.Snapshot
+	visits   []kernelsingbox.Visit
 }
 
-func (f *fakeClash) setSnapshot(conns []map[string]any) {
-	f.snapshot.Store(conns)
+func (k *stubKernel) Start([]byte, []kernelsingbox.UserRef) error {
+	k.mu.Lock()
+	k.started++
+	k.mu.Unlock()
+	return nil
 }
 
-func (f *fakeClash) handler() http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /connections", func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer "+f.secret {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		conns, _ := f.snapshot.Load().([]map[string]any)
-		if conns == nil {
-			conns = []map[string]any{}
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"downloadTotal": 0,
-			"uploadTotal":   0,
-			"connections":   conns,
-		})
-	})
-	return mux
+func (k *stubKernel) Stop() error { return nil }
+
+func (k *stubKernel) Snapshot() kernelsingbox.Snapshot {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if k.snapshot.Traffic == nil {
+		return kernelsingbox.Snapshot{Traffic: map[kernelsingbox.Pair]kernelsingbox.Traffic{}}
+	}
+	return k.snapshot
+}
+
+func (k *stubKernel) setSnapshot(snap kernelsingbox.Snapshot) {
+	k.mu.Lock()
+	k.snapshot = snap
+	k.mu.Unlock()
+}
+
+func (k *stubKernel) DrainVisits() []kernelsingbox.Visit {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	visits := k.visits
+	k.visits = nil
+	return visits
+}
+
+func (k *stubKernel) setVisits(visits []kernelsingbox.Visit) {
+	k.mu.Lock()
+	k.visits = visits
+	k.mu.Unlock()
 }
 
 func TestAgentEndToEndFlow(t *testing.T) {
@@ -54,7 +66,7 @@ func TestAgentEndToEndFlow(t *testing.T) {
 	cookie := env.login()
 	_, nodeID, userID := env.seedScenario(cookie)
 
-	_, out := env.do("POST", fmt.Sprintf("/api/servers/1/register-token"), nil, cookie)
+	_, out := env.do("POST", "/api/servers/1/register-token", nil, cookie)
 	registerToken, _ := out["register_token"].(string)
 	if registerToken == "" {
 		t.Fatal("expected register_token")
@@ -70,26 +82,17 @@ func TestAgentEndToEndFlow(t *testing.T) {
 		t.Fatalf("new agent client: %v", err)
 	}
 
-	fakeBin := installFakeSingBox(t)
-	workDir := t.TempDir()
-	activeConfig := filepath.Join(workDir, "sing-box", "config.json")
-	applier := agentruntime.NewApplier(activeConfig, agentruntime.NewSingBoxChecker(fakeBin), nil, nil)
-
+	kernel := &stubKernel{}
 	loop := agentruntime.NewLoop(agentruntime.LoopOptions{
 		Config: &config.Agent{
 			PanelURL:      env.ts.URL,
-			Token:         "",
 			RegisterToken: registerToken,
 			ServerID:      1,
 			StatePath:     statePath,
-			SingBox: config.SingBox{
-				ConfigPath: activeConfig,
-				CheckBin:   fakeBin,
-			},
-			Collection: config.Collection{Traffic: true, Sessions: true, ConnectionLogs: true},
+			Collection:    config.Collection{Traffic: true, Visits: true},
 		},
 		Client: client, State: state, StatePath: statePath,
-		Applier: applier, Metrics: nil, Version: "0.1.0-test",
+		Kernel: kernel, Metrics: nil, Version: "0.1.0-test",
 	})
 	if err := loop.EnsureIdentity(context.Background()); err != nil {
 		t.Fatalf("register: %v", err)
@@ -118,23 +121,13 @@ func TestAgentEndToEndFlow(t *testing.T) {
 		t.Fatalf("unexpected config response status=%s users=%d", cfgResp.Status, len(cfgResp.Users))
 	}
 	revision := cfgResp.Revision
-	rendered := cfgResp.Config.Singbox
 
-	if err := applier.Apply(context.Background(), rendered); err != nil {
-		t.Fatalf("apply rendered config: %v", err)
+	loop.SyncOnce(context.Background())
+	if kernel.started != 1 {
+		t.Fatalf("expected the kernel to start once, got %d", kernel.started)
 	}
-	stored, err := os.ReadFile(activeConfig)
-	if err != nil {
-		t.Fatalf("read applied config: %v", err)
-	}
-	var appliedCfg map[string]any
-	if err := json.Unmarshal(stored, &appliedCfg); err != nil {
-		t.Fatalf("applied config is not JSON: %v", err)
-	}
-
-	state.AppliedRevision = revision
-	if err := agentstate.Save(statePath, state); err != nil {
-		t.Fatalf("save state: %v", err)
+	if state.AppliedRevision != revision {
+		t.Fatalf("applied revision = %d, want %d", state.AppliedRevision, revision)
 	}
 
 	current, err := client.Config(context.Background(), revision)
@@ -145,149 +138,68 @@ func TestAgentEndToEndFlow(t *testing.T) {
 		t.Fatalf("expected status current at revision %d, got %+v", revision, current.Status)
 	}
 
-	baseURL, secret, err := agentruntime.EndpointFromConfig(rendered)
-	if err != nil {
-		t.Fatalf("endpoint from config: %v", err)
-	}
-	if !strings.HasPrefix(baseURL, "http://127.0.0.1:") {
-		t.Fatalf("unexpected clash endpoint %q", baseURL)
-	}
-	clash := &fakeClash{secret: secret}
-	clashTS := httptest.NewServer(clash.handler())
-	t.Cleanup(clashTS.Close)
-	clashClient, err := agentruntime.NewClashClient(clashTS.URL, secret)
-	if err != nil {
-		t.Fatalf("new clash client: %v", err)
-	}
-	collector := agentruntime.NewCollector(clashClient, agentruntime.BuildTable(cfgResp.Users))
-
-	start := time.Now().Add(-2 * time.Minute).UTC().Format(time.RFC3339Nano)
-	clash.setSnapshot([]map[string]any{{
-		"id": "conn-1", "upload": 100, "download": 200, "start": start,
-		"metadata": map[string]any{
-			"network": "tcp", "type": "Vless", "sourceIP": "203.0.113.9",
-			"inbound":     fmt.Sprintf("vless-%d", nodeID),
-			"inboundPort": "443",
-			"inboundUser": fmt.Sprintf("u-%d", userID),
+	pair := kernelsingbox.Pair{UserID: userID, NodeID: nodeID}
+	kernel.setSnapshot(kernelsingbox.Snapshot{
+		Traffic: map[kernelsingbox.Pair]kernelsingbox.Traffic{
+			pair: {Upload: 100, Download: 200},
 		},
-	}})
-
-	poll1, err := collector.Poll(context.Background(), time.Now().UTC())
-	if err != nil {
-		t.Fatalf("poll 1: %v", err)
-	}
-	if len(poll1.Traffic) != 1 || poll1.Traffic[0].Upload != 100 || poll1.Traffic[0].Download != 200 {
-		t.Fatalf("unexpected poll1 traffic %+v", poll1.Traffic)
-	}
-	if len(poll1.Sessions) != 1 || poll1.Sessions[0].IP != "203.0.113.9" {
-		t.Fatalf("unexpected poll1 sessions %+v", poll1.Sessions)
-	}
-
-	clash.setSnapshot([]map[string]any{{
-		"id": "conn-1", "upload": 150, "download": 260, "start": start,
-		"metadata": map[string]any{
-			"network": "tcp", "type": "Vless", "sourceIP": "203.0.113.9",
-			"inbound":     fmt.Sprintf("vless-%d", nodeID),
-			"inboundUser": fmt.Sprintf("u-%d", userID),
-		},
-	}})
-	poll2, err := collector.Poll(context.Background(), time.Now().UTC())
-	if err != nil {
-		t.Fatalf("poll 2: %v", err)
-	}
-	if len(poll2.Traffic) != 1 || poll2.Traffic[0].Upload != 50 || poll2.Traffic[0].Download != 60 {
-		t.Fatalf("expected deltas 50/60, got %+v", poll2.Traffic)
-	}
-
-	now := time.Now().UTC()
-	trafficBatch := agentclient.TrafficBatch{BatchSeq: state.TrafficBatchSeq + 1}
-	for _, d := range poll1.Traffic {
-		trafficBatch.Records = append(trafficBatch.Records, agentclient.TrafficRecord{
-			UserID: d.UserID, NodeID: d.NodeID, UploadBytes: d.Upload, DownloadBytes: d.Download,
-			RecordedAt: now.Format(time.RFC3339),
-		})
-	}
-	ack1, err := client.Traffic(context.Background(), trafficBatch)
-	if err != nil {
-		t.Fatalf("traffic report: %v", err)
-	}
-	if !ack1.Accepted || ack1.Records != 1 {
-		t.Fatalf("unexpected traffic ack %+v", ack1)
-	}
-	state.TrafficBatchSeq = trafficBatch.BatchSeq
-
-	ackDup, err := client.Traffic(context.Background(), trafficBatch)
-	if err != nil {
-		t.Fatalf("duplicate traffic report: %v", err)
-	}
-	if !ackDup.Accepted {
-		t.Fatalf("duplicate batch must be accepted idempotently, got %+v", ackDup)
-	}
+		Devices: []kernelsingbox.Device{{
+			UserID: userID, NodeID: nodeID, IPs: []string{"203.0.113.9"}, Online: 1,
+		}},
+	})
+	loop.TelemetryOnce(context.Background())
 
 	_, userOut := env.do("GET", fmt.Sprintf("/api/users/%d", userID), nil, cookie)
 	if used := userOut["used_bytes"].(float64); used != 300 {
-		t.Fatalf("user used_bytes = %v, want 300 (exactly once accounting)", used)
+		t.Fatalf("user used_bytes = %v, want 300", used)
+	}
+	if online := userOut["online_count"].(float64); online != 1 {
+		t.Fatalf("user online_count = %v, want 1", online)
 	}
 
-	sessionBatch := agentclient.SessionBatch{ReportedAt: now.Format(time.RFC3339)}
-	for _, s := range poll2.Sessions {
-		sessionBatch.Sessions = append(sessionBatch.Sessions, agentclient.SessionReport{
-			UserID: s.UserID, NodeID: s.NodeID, IP: s.IP,
-			UploadBytes: s.Upload, DownloadBytes: s.Download,
-			ConnectedAt: s.ConnectedAt.Format(time.RFC3339),
-			LastSeenAt:  s.LastSeenAt.Format(time.RFC3339),
-		})
-	}
-	if _, err := client.Sessions(context.Background(), sessionBatch); err != nil {
-		t.Fatalf("session report: %v", err)
-	}
-	_, sessionsOut := env.do("GET", fmt.Sprintf("/api/users/%d/sessions", userID), nil, cookie)
-	items, _ := sessionsOut["items"].([]any)
+	_, devicesOut := env.do("GET", fmt.Sprintf("/api/users/%d/devices", userID), nil, cookie)
+	items, _ := devicesOut["items"].([]any)
 	if len(items) != 1 {
-		t.Fatalf("expected 1 session, got %v", sessionsOut)
+		t.Fatalf("expected 1 device, got %v", devicesOut)
 	}
 	if items[0].(map[string]any)["ip"] != "203.0.113.9" {
-		t.Fatalf("unexpected session item %v", items[0])
+		t.Fatalf("unexpected device item %v", items[0])
 	}
 
-	clash.setSnapshot(nil)
-	poll3, err := collector.Poll(context.Background(), time.Now().UTC())
-	if err != nil {
-		t.Fatalf("poll 3: %v", err)
+	kernel.setVisits([]kernelsingbox.Visit{{
+		UserID: userID, NodeID: nodeID, DestHost: "Example.COM", DestPort: 443,
+		Network: "tcp", ClientIP: "203.0.113.9", At: time.Now().UTC(),
+	}})
+	loop.TelemetryOnce(context.Background())
+
+	_, visitsOut := env.do("GET", fmt.Sprintf("/api/visits?user_id=%d", userID), nil, cookie)
+	visitItems, _ := visitsOut["items"].([]any)
+	if len(visitItems) != 1 {
+		t.Fatalf("expected 1 visit, got %v", visitsOut)
 	}
-	if len(poll3.Closed) != 1 || poll3.Closed[0].Upload != 150 || poll3.Closed[0].Download != 260 {
-		t.Fatalf("closed log must carry connection lifetime totals, got %+v", poll3.Closed)
+	visit := visitItems[0].(map[string]any)
+	if visit["dest_host"] != "example.com" || visit["dest_port"].(float64) != 443 || visit["network"] != "tcp" {
+		t.Fatalf("unexpected visit item %v", visit)
+	}
+	if visit["username"] == "" || visit["node_name"] == "" || visit["server_name"] == "" {
+		t.Fatalf("visit must include display names, got %v", visit)
 	}
 
-	logBatch := agentclient.LogBatch{BatchSeq: state.LogBatchSeq + 1}
-	for _, c := range poll3.Closed {
-		closedAt := c.ClosedAt.Format(time.RFC3339)
-		logBatch.Logs = append(logBatch.Logs, agentclient.ConnectionLog{
-			UserID: c.UserID, NodeID: c.NodeID, IP: c.IP, Protocol: c.Protocol,
-			UploadBytes: c.Upload, DownloadBytes: c.Download,
-			ConnectedAt: c.ConnectedAt.Format(time.RFC3339),
-			ClosedAt:    &closedAt, Status: "closed",
-		})
-	}
-	logAck, err := client.ConnectionLogs(context.Background(), logBatch)
-	if err != nil {
-		t.Fatalf("log report: %v", err)
-	}
-	if !logAck.Accepted || logAck.Logs != 1 {
-		t.Fatalf("unexpected log ack %+v", logAck)
-	}
-	if _, err := client.ConnectionLogs(context.Background(), logBatch); err != nil {
-		t.Fatalf("duplicate log report: %v", err)
+	loop.TelemetryOnce(context.Background())
+	_, userOut = env.do("GET", fmt.Sprintf("/api/users/%d", userID), nil, cookie)
+	if used := userOut["used_bytes"].(float64); used != 300 {
+		t.Fatalf("unchanged counters must not double count, used_bytes = %v", used)
 	}
 
-	_, logsOut := env.do("GET", fmt.Sprintf("/api/users/%d/connection-logs?page_size=50", userID), nil, cookie)
-	logItems, _ := logsOut["items"].([]any)
-	if len(logItems) != 1 {
-		t.Fatalf("expected exactly 1 connection log after duplicate batch, got %v", logsOut)
-	}
-	entry := logItems[0].(map[string]any)
-	if entry["status"] != "closed" || entry["protocol"] != "vless" || entry["ip"] != "203.0.113.9" {
-		t.Fatalf("unexpected log entry %v", entry)
+	kernel.setSnapshot(kernelsingbox.Snapshot{
+		Traffic: map[kernelsingbox.Pair]kernelsingbox.Traffic{
+			pair: {Upload: 150, Download: 260},
+		},
+	})
+	loop.TelemetryOnce(context.Background())
+	_, userOut = env.do("GET", fmt.Sprintf("/api/users/%d", userID), nil, cookie)
+	if used := userOut["used_bytes"].(float64); used != 410 {
+		t.Fatalf("user used_bytes = %v, want 410 (100+200+50+60)", used)
 	}
 
 	env.do("PUT", fmt.Sprintf("/api/users/%d", userID), map[string]any{"status": "disabled"}, cookie)

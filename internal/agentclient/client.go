@@ -108,13 +108,16 @@ type UserNode struct {
 }
 
 type User struct {
-	ID         int64      `json:"id"`
-	UUID       string     `json:"uuid"`
-	Status     string     `json:"status"`
-	QuotaBytes int64      `json:"quota_bytes"`
-	UsedBytes  int64      `json:"used_bytes"`
-	ExpiresAt  *string    `json:"expires_at"`
-	Nodes      []UserNode `json:"nodes"`
+	ID             int64      `json:"id"`
+	UUID           string     `json:"uuid"`
+	Status         string     `json:"status"`
+	TransferEnable int64      `json:"transfer_enable"`
+	U              int64      `json:"u"`
+	D              int64      `json:"d"`
+	SpeedLimit     int64      `json:"speed_limit"`
+	DeviceLimit    int64      `json:"device_limit"`
+	ExpiresAt      *string    `json:"expires_at"`
+	Nodes          []UserNode `json:"nodes"`
 }
 
 type ConfigResponse struct {
@@ -128,11 +131,11 @@ type ConfigResponse struct {
 }
 
 type TrafficRecord struct {
-	UserID        int64  `json:"user_id"`
-	NodeID        int64  `json:"node_id"`
-	UploadBytes   int64  `json:"upload_bytes"`
-	DownloadBytes int64  `json:"download_bytes"`
-	RecordedAt    string `json:"recorded_at"`
+	UserID     int64  `json:"user_id"`
+	NodeID     int64  `json:"node_id"`
+	U          int64  `json:"u"`
+	D          int64  `json:"d"`
+	RecordedAt string `json:"recorded_at"`
 }
 
 type TrafficBatch struct {
@@ -146,47 +149,44 @@ type TrafficAck struct {
 	Records  int64 `json:"records"`
 }
 
-type SessionReport struct {
-	UserID        int64  `json:"user_id"`
-	NodeID        int64  `json:"node_id"`
-	IP            string `json:"ip"`
-	UploadBytes   int64  `json:"upload_bytes"`
-	DownloadBytes int64  `json:"download_bytes"`
-	ConnectedAt   string `json:"connected_at"`
-	LastSeenAt    string `json:"last_seen_at"`
+type DeviceReport struct {
+	UserID int64    `json:"user_id"`
+	NodeID int64    `json:"node_id"`
+	IPs    []string `json:"ips"`
+	Online int      `json:"online"`
 }
 
-type SessionBatch struct {
-	ReportedAt string          `json:"reported_at"`
-	Sessions   []SessionReport `json:"sessions"`
+type DeviceBatch struct {
+	BatchSeq   int64          `json:"batch_seq"`
+	RecordedAt string         `json:"recorded_at"`
+	Devices    []DeviceReport `json:"devices"`
 }
 
-type SessionAck struct {
-	Accepted bool  `json:"accepted"`
-	Sessions int64 `json:"sessions"`
-}
-
-type ConnectionLog struct {
-	UserID        int64   `json:"user_id"`
-	NodeID        int64   `json:"node_id"`
-	IP            string  `json:"ip"`
-	Protocol      string  `json:"protocol"`
-	UploadBytes   int64   `json:"upload_bytes"`
-	DownloadBytes int64   `json:"download_bytes"`
-	ConnectedAt   string  `json:"connected_at"`
-	ClosedAt      *string `json:"closed_at,omitempty"`
-	Status        string  `json:"status"`
-}
-
-type LogBatch struct {
-	BatchSeq int64           `json:"batch_seq"`
-	Logs     []ConnectionLog `json:"logs"`
-}
-
-type LogAck struct {
+type DeviceAck struct {
 	Accepted bool  `json:"accepted"`
 	BatchSeq int64 `json:"batch_seq"`
-	Logs     int64 `json:"logs"`
+	Devices  int64 `json:"devices"`
+}
+
+type VisitRecord struct {
+	UserID     int64  `json:"user_id"`
+	NodeID     int64  `json:"node_id"`
+	DestHost   string `json:"dest_host"`
+	DestPort   int    `json:"dest_port"`
+	Network    string `json:"network"`
+	ClientIP   string `json:"client_ip,omitempty"`
+	RecordedAt string `json:"recorded_at"`
+}
+
+type VisitBatch struct {
+	BatchSeq int64         `json:"batch_seq"`
+	Records  []VisitRecord `json:"records"`
+}
+
+type VisitAck struct {
+	Accepted bool  `json:"accepted"`
+	BatchSeq int64 `json:"batch_seq"`
+	Records  int64 `json:"records"`
 }
 
 func (c *Client) Register(ctx context.Context, req RegisterRequest) (*RegisterResponse, error) {
@@ -225,17 +225,17 @@ func (c *Client) Traffic(ctx context.Context, batch TrafficBatch) (*TrafficAck, 
 	return &out, nil
 }
 
-func (c *Client) Sessions(ctx context.Context, batch SessionBatch) (*SessionAck, error) {
-	var out SessionAck
-	if err := c.do(ctx, http.MethodPost, "/api/agent/sessions", nil, batch, &out); err != nil {
+func (c *Client) Devices(ctx context.Context, batch DeviceBatch) (*DeviceAck, error) {
+	var out DeviceAck
+	if err := c.do(ctx, http.MethodPost, "/api/agent/devices", nil, batch, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
 }
 
-func (c *Client) ConnectionLogs(ctx context.Context, batch LogBatch) (*LogAck, error) {
-	var out LogAck
-	if err := c.do(ctx, http.MethodPost, "/api/agent/connection-logs", nil, batch, &out); err != nil {
+func (c *Client) Visits(ctx context.Context, batch VisitBatch) (*VisitAck, error) {
+	var out VisitAck
+	if err := c.do(ctx, http.MethodPost, "/api/agent/visits", nil, batch, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -270,7 +270,7 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 			return nil
 		}
 		lastErr = err
-		if !retryable(err) {
+		if !Retryable(err) {
 			return err
 		}
 		if ctx.Err() != nil {
@@ -341,7 +341,10 @@ func (c *Client) backoffDelay(failedAttempts int) time.Duration {
 	return delay + time.Duration(jitter)
 }
 
-func retryable(err error) bool {
+// Retryable reports whether err is worth retrying. Permanent client errors
+// (4xx other than 408/429) return false, so callers must not freeze a batch
+// on them forever.
+func Retryable(err error) bool {
 	var apiErr *APIError
 	if errors.As(err, &apiErr) {
 		return apiErr.Retryable()

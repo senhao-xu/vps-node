@@ -24,21 +24,22 @@ func TestAnyTLSCreateValidation(t *testing.T) {
 	_, otherKey := testTLSMaterial(t, "anytls.example.com", now.Add(-time.Hour), now.Add(time.Hour))
 	expiredCert, expiredKey := testTLSMaterial(t, "anytls.example.com", now.Add(-2*time.Hour), now.Add(-time.Hour))
 
+	tlsSettings := func(name string) map[string]any { return map[string]any{"server_name": name} }
 	cases := []struct {
 		name     string
 		settings map[string]any
 	}{
 		{"missing all", map[string]any{}},
-		{"missing certificate", map[string]any{"server_name": "anytls.example.com", "private_key": key}},
-		{"missing private key", map[string]any{"server_name": "anytls.example.com", "certificate": cert}},
+		{"missing certificate", map[string]any{"tls": tlsSettings("anytls.example.com"), "private_key": key}},
+		{"missing private key", map[string]any{"tls": tlsSettings("anytls.example.com"), "certificate": cert}},
 		{"missing server name", map[string]any{"certificate": cert, "private_key": key}},
-		{"bad pem", map[string]any{"server_name": "anytls.example.com", "certificate": "bad", "private_key": "bad"}},
-		{"mismatched pair", map[string]any{"server_name": "anytls.example.com", "certificate": cert, "private_key": otherKey}},
-		{"cert does not cover sni", map[string]any{"server_name": "wrong.example.com", "certificate": cert, "private_key": key}},
-		{"expired cert", map[string]any{"server_name": "anytls.example.com", "certificate": expiredCert, "private_key": expiredKey}},
-		{"unknown field", map[string]any{"server_name": "anytls.example.com", "certificate": cert, "private_key": key, "up_mbps": 100}},
-		{"no obfs", map[string]any{"server_name": "anytls.example.com", "certificate": cert, "private_key": key, "obfs_password": "x"}},
-		{"no hop ports", map[string]any{"server_name": "anytls.example.com", "certificate": cert, "private_key": key, "hop_ports": "30000-40000"}},
+		{"bad pem", map[string]any{"tls": tlsSettings("anytls.example.com"), "certificate": "bad", "private_key": "bad"}},
+		{"mismatched pair", map[string]any{"tls": tlsSettings("anytls.example.com"), "certificate": cert, "private_key": otherKey}},
+		{"cert does not cover sni", map[string]any{"tls": tlsSettings("wrong.example.com"), "certificate": cert, "private_key": key}},
+		{"expired cert", map[string]any{"tls": tlsSettings("anytls.example.com"), "certificate": expiredCert, "private_key": expiredKey}},
+		{"unknown field", map[string]any{"tls": tlsSettings("anytls.example.com"), "certificate": cert, "private_key": key, "up_mbps": 100}},
+		{"no obfs", map[string]any{"tls": tlsSettings("anytls.example.com"), "certificate": cert, "private_key": key, "obfs_password": "x"}},
+		{"no hop ports", map[string]any{"tls": tlsSettings("anytls.example.com"), "certificate": cert, "private_key": key, "hop_ports": "30000-40000"}},
 	}
 	for i, tc := range cases {
 		resp, body := e.do(t, "POST", "/api/nodes", map[string]any{
@@ -52,7 +53,7 @@ func TestAnyTLSCreateValidation(t *testing.T) {
 
 	resp, body := e.do(t, "POST", "/api/nodes", map[string]any{
 		"server_id": serverID, "name": "good", "protocol": "anytls", "port": 30100,
-		"settings": map[string]any{"server_name": "anytls.example.com", "certificate": cert, "private_key": key},
+		"settings": map[string]any{"tls": map[string]any{"server_name": "anytls.example.com"}, "certificate": cert, "private_key": key},
 	}, cookie)
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("create: %d %s", resp.StatusCode, body)
@@ -74,7 +75,7 @@ func TestAnyTLSUpdatePreservesSecretAndAgentConfig(t *testing.T) {
 
 	resp, body := e.do(t, "POST", "/api/nodes", map[string]any{
 		"server_id": serverID, "name": "anytls", "protocol": "anytls", "port": 9443,
-		"settings": map[string]any{"server_name": "anytls.example.com", "certificate": cert, "private_key": key},
+		"settings": map[string]any{"tls": map[string]any{"server_name": "anytls.example.com"}, "certificate": cert, "private_key": key},
 	}, cookie)
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("create: %d %s", resp.StatusCode, body)
@@ -101,8 +102,8 @@ func TestAnyTLSUpdatePreservesSecretAndAgentConfig(t *testing.T) {
 	if storedSecret["certificate"] != cert || storedSecret["private_key"] != key {
 		t.Fatal("partial update must preserve the encrypted TLS material")
 	}
-	if !strings.Contains(node.Settings, `"server_name":"anytls.example.com"`) {
-		t.Fatalf("partial update must preserve public settings, got %s", node.Settings)
+	if !strings.Contains(node.ProtocolSettings, `"server_name":"anytls.example.com"`) {
+		t.Fatalf("partial update must preserve public settings, got %s", node.ProtocolSettings)
 	}
 
 	// Certificate and private key must be replaced as a pair.
@@ -169,7 +170,7 @@ func TestAnyTLSSubscriptionOutput(t *testing.T) {
 
 	resp, body := e.do(t, "POST", "/api/nodes", map[string]any{
 		"server_id": serverID, "name": "anytls", "protocol": "anytls", "port": 9443,
-		"settings": map[string]any{"server_name": "anytls.example.com", "certificate": cert, "private_key": key},
+		"settings": map[string]any{"tls": map[string]any{"server_name": "anytls.example.com"}, "certificate": cert, "private_key": key},
 	}, cookie)
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("create: %d %s", resp.StatusCode, body)

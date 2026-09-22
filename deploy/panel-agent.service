@@ -1,6 +1,6 @@
 [Unit]
 Description=vps-node Panel Agent
-After=network-online.target sing-box.service
+After=network-online.target
 Wants=network-online.target
 
 [Service]
@@ -19,17 +19,14 @@ PrivateDevices=true
 ProtectKernelTunables=true
 ProtectControlGroups=true
 RestrictSUIDSGID=true
-ReadWritePaths=/etc/sing-box
 Restart=on-failure
 RestartSec=5
 LimitNOFILE=65535
 
-# The agent only writes the sing-box config file and (optionally) invokes the
-# configured reload_command. Privileged reloads (e.g. systemctl restart
-# sing-box) need a polkit rule or a sudo allowlist for the panel-agent user;
-# prefer a privilege-free reload (watchdog / signal-based) when possible.
-CapabilityBoundingSet=
-AmbientCapabilities=
+# The agent embeds sing-box and binds node listen ports directly, so it needs
+# CAP_NET_BIND_SERVICE to serve nodes on ports <=1024 (e.g. VLESS on 443).
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_BIND_SERVICE
 
 [Install]
 WantedBy=multi-user.target

@@ -14,30 +14,12 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"testing"
 	"time"
 
 	"vps-node/internal/agentclient"
-	"vps-node/internal/agentruntime"
-	"vps-node/internal/agentstate"
+	kernelsingbox "vps-node/internal/kernel/singbox"
 )
-
-func requireSingBox(t *testing.T) string {
-	t.Helper()
-	bin, err := exec.LookPath("sing-box")
-	if err != nil {
-		t.Skip("sing-box binary not found in PATH; integration test skipped")
-	}
-	out, err := exec.Command(bin, "version").CombinedOutput()
-	if err != nil {
-		t.Skipf("sing-box binary not runnable: %v: %s", err, out)
-	}
-	t.Logf("pinned sing-box: %s", string(out))
-	return bin
-}
 
 func seedProtocols(t *testing.T) (env *panelEnv, cookie *http.Cookie, registerToken string) {
 	t.Helper()
@@ -60,16 +42,15 @@ func seedProtocols(t *testing.T) (env *panelEnv, cookie *http.Cookie, registerTo
 
 	_, out = env.do("POST", "/api/nodes", map[string]any{
 		"server_id": serverID, "name": "SS", "protocol": "shadowsocks", "port": 8388,
-		"settings": map[string]any{"method": "2022-blake3-aes-128-gcm"},
+		"settings": map[string]any{"cipher": "2022-blake3-aes-128-gcm"},
 	}, cookie)
 	ssID := int64(out["id"].(float64))
 
 	_, out = env.do("POST", "/api/nodes", map[string]any{
 		"server_id": serverID, "name": "VLESS", "protocol": "vless", "port": 443,
 		"settings": map[string]any{
-			"private_key":  privateKey,
-			"server_names": []string{"example.com"},
-			"short_id":     "0123abcd",
+			"private_key":      privateKey,
+			"reality_settings": map[string]any{"server_name": "example.com", "short_id": "0123abcd"},
 		},
 	}, cookie)
 	vlessID := int64(out["id"].(float64))
@@ -77,8 +58,9 @@ func seedProtocols(t *testing.T) (env *panelEnv, cookie *http.Cookie, registerTo
 	_, out = env.do("POST", "/api/nodes", map[string]any{
 		"server_id": serverID, "name": "HY2", "protocol": "hysteria2", "port": 8443,
 		"settings": map[string]any{
-			"server_name": "full01.example.com", "certificate": cert, "private_key": tlsKey,
-			"up_mbps": 100, "down_mbps": 200,
+			"tls":         map[string]any{"server_name": "full01.example.com"},
+			"certificate": cert, "private_key": tlsKey,
+			"bandwidth": map[string]any{"up": 100, "down": 200},
 		},
 	}, cookie)
 	hy2ID := int64(out["id"].(float64))
@@ -86,18 +68,20 @@ func seedProtocols(t *testing.T) (env *panelEnv, cookie *http.Cookie, registerTo
 	_, out = env.do("POST", "/api/nodes", map[string]any{
 		"server_id": serverID, "name": "ANYTLS", "protocol": "anytls", "port": 8444,
 		"settings": map[string]any{
-			"server_name": "full01.example.com", "certificate": cert, "private_key": tlsKey,
+			"tls":         map[string]any{"server_name": "full01.example.com"},
+			"certificate": cert, "private_key": tlsKey,
 		},
 	}, cookie)
 	anytlsID := int64(out["id"].(float64))
 
 	expires := time.Now().AddDate(0, 0, 30).UTC().Format(time.RFC3339)
-	for _, nodeIDs := range [][]int64{{ssID, vlessID, hy2ID, anytlsID}, {vlessID}} {
+	for i, nodeIDs := range [][]int64{{ssID, vlessID, hy2ID, anytlsID}, {vlessID}} {
 		_, out = env.do("POST", "/api/users", map[string]any{
-			"quota_bytes": 1 << 30,
-			"started_at":  time.Now().Add(-time.Hour).UTC().Format(time.RFC3339),
-			"expires_at":  expires,
-			"node_ids":    nodeIDs,
+			"username":        fmt.Sprintf("e2euser%d", i+1),
+			"transfer_enable": 1 << 30,
+			"started_at":      time.Now().Add(-time.Hour).UTC().Format(time.RFC3339),
+			"expires_at":      expires,
+			"node_ids":        nodeIDs,
 		}, cookie)
 	}
 
@@ -125,27 +109,25 @@ func e2eTLSMaterial(t *testing.T, host string, notBefore, notAfter time.Time) (s
 	return string(cert), string(private)
 }
 
-func TestSingBoxCheckOnRenderedPanelPayload(t *testing.T) {
-	bin := requireSingBox(t)
-	env, _, registerToken := seedProtocols(t)
-
-	state, err := agentstate.Load(filepath.Join(t.TempDir(), "state.json"))
+func registerAgent(t *testing.T, env *panelEnv, registerToken string) *agentclient.Client {
+	t.Helper()
+	client, err := agentclient.New(env.ts.URL)
 	if err != nil {
-		t.Fatalf("load state: %v", err)
+		t.Fatalf("new agent client: %v", err)
 	}
-	client, _ := agentclient.New(env.ts.URL)
-
-	loop := agentruntime.NewLoop(agentruntime.LoopOptions{
-		Config: agentConfigForTest(env.ts.URL, registerToken),
-		Client: client, State: state, StatePath: "unused",
-		Applier: agentruntime.NewApplier(filepath.Join(t.TempDir(), "config.json"),
-			agentruntime.NewSingBoxChecker(bin), nil, nil),
-		Metrics: nil, Version: "0.1.0-test",
+	resp, err := client.Register(context.Background(), agentclient.RegisterRequest{
+		RegisterToken: registerToken, Version: "0.1.0-test",
 	})
-	if err := loop.EnsureIdentity(context.Background()); err != nil {
+	if err != nil {
 		t.Fatalf("register: %v", err)
 	}
+	client.SetToken(resp.AgentToken)
+	return client
+}
 
+func fetchRenderedConfig(t *testing.T, env *panelEnv, registerToken string) (*agentclient.Client, *agentclient.ConfigResponse) {
+	t.Helper()
+	client := registerAgent(t, env, registerToken)
 	cfgResp, err := client.Config(context.Background(), 0)
 	if err != nil {
 		t.Fatalf("config poll: %v", err)
@@ -153,43 +135,23 @@ func TestSingBoxCheckOnRenderedPanelPayload(t *testing.T) {
 	if cfgResp.Status != "updated" || cfgResp.Config == nil {
 		t.Fatalf("unexpected config response %+v", cfgResp.Status)
 	}
-	t.Logf("renderer_version=%s users=%d revision=%d", cfgResp.RendererVersion, len(cfgResp.Users), cfgResp.Revision)
 	if len(cfgResp.Users) != 2 {
 		t.Fatalf("expected 2 eligible users, got %d", len(cfgResp.Users))
 	}
-
-	tmp := filepath.Join(t.TempDir(), "rendered.json")
-	if err := os.WriteFile(tmp, cfgResp.Config.Singbox, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	checker := agentruntime.NewSingBoxChecker(bin)
-	if err := checker.Check(tmp); err != nil {
-		t.Fatalf("real sing-box check rejected panel-rendered config: %v", err)
-	}
-	t.Log("sing-box check accepted the rendered configuration")
+	return client, cfgResp
 }
 
-func TestAgentApplyFlowWithRealSingBox(t *testing.T) {
-	bin := requireSingBox(t)
-	dir := t.TempDir()
-	active := filepath.Join(dir, "config.json")
-	applier := agentruntime.NewApplier(active, agentruntime.NewSingBoxChecker(bin), nil, nil)
-	ctx := context.Background()
+func TestEmbeddedSingBoxValidatesRenderedPanelPayload(t *testing.T) {
+	env, _, registerToken := seedProtocols(t)
+	_, cfgResp := fetchRenderedConfig(t, env, registerToken)
 
-	valid := []byte(`{"log":{"level":"info"},"outbounds":[{"type":"direct","tag":"direct"}]}`)
-	if err := applier.Apply(ctx, valid); err != nil {
-		t.Fatalf("apply valid config: %v", err)
+	t.Logf("renderer_version=%s users=%d revision=%d", cfgResp.RendererVersion, len(cfgResp.Users), cfgResp.Revision)
+	if err := kernelsingbox.Validate(cfgResp.Config.Singbox); err != nil {
+		t.Fatalf("embedded sing-box rejected panel-rendered config: %v", err)
 	}
+	t.Log("embedded sing-box parsed the rendered configuration")
 
-	invalid := []byte(`{"this is not valid json"`)
-	if err := applier.Apply(ctx, invalid); err == nil {
-		t.Fatal("expected check failure for invalid config")
-	}
-	stored, err := os.ReadFile(active)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(stored) != string(valid) {
-		t.Fatalf("previous config must survive failed apply, got %q", stored)
+	if err := kernelsingbox.Validate([]byte(`{"this is not valid json"`)); err == nil {
+		t.Fatal("expected malformed config to be rejected")
 	}
 }

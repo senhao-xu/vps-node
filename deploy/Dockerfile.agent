@@ -1,10 +1,6 @@
 # syntax=docker/dockerfile:1
 
 ARG GO_VERSION=1.25
-ARG SINGBOX_VERSION=1.14.1
-ARG SINGBOX_DOWNLOAD_URL=https://github.com/SagerNet/sing-box/releases/download
-ARG SINGBOX_SHA256_AMD64=b907365b154e4a7e3e40be15c2cd83433c0fa65c7dc736bdb1b5face2afe4501
-ARG SINGBOX_SHA256_ARM64=d94fc9704372ca2fa2854e54c20b406e4b8779b5ccdd0c557da90ea9344e9631
 
 FROM golang:${GO_VERSION} AS build
 ARG TARGETOS
@@ -18,44 +14,11 @@ COPY internal ./internal
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     GOOS=$TARGETOS GOARCH=$TARGETARCH \
-    go build -trimpath -ldflags "-s -w" -o /out/panel-agent ./cmd/agent
-RUN --mount=type=cache,target=/go/pkg/mod \
-    --mount=type=cache,target=/root/.cache/go-build \
-    GOOS=$TARGETOS GOARCH=$TARGETARCH \
-    go build -trimpath -ldflags "-s -w" -o /out/singbox-reload ./cmd/singbox-reload
-
-FROM alpine:3.22 AS singbox
-ARG SINGBOX_VERSION
-ARG SINGBOX_DOWNLOAD_URL
-ARG SINGBOX_SHA256_AMD64
-ARG SINGBOX_SHA256_ARM64
-ARG TARGETARCH
-RUN apk add --no-cache curl tar \
- && case "${TARGETARCH}" in \
-      amd64) expected="${SINGBOX_SHA256_AMD64}" ;; \
-      arm64) expected="${SINGBOX_SHA256_ARM64}" ;; \
-      *) expected="" ;; \
-    esac \
- && curl -fsSL "${SINGBOX_DOWNLOAD_URL}/v${SINGBOX_VERSION}/sing-box-${SINGBOX_VERSION}-linux-${TARGETARCH}-musl.tar.gz" -o /tmp/sing-box.tar.gz \
- && if [ -n "${expected}" ]; then \
-      echo "${expected}  /tmp/sing-box.tar.gz" | sha256sum -c -; \
-    fi \
- && tar -xzf /tmp/sing-box.tar.gz -C /tmp \
- && mv "/tmp/sing-box-${SINGBOX_VERSION}-linux-${TARGETARCH}-musl/sing-box" /usr/local/bin/sing-box \
- && rm -rf /tmp/sing-box.tar.gz "/tmp/sing-box-${SINGBOX_VERSION}-linux-${TARGETARCH}-musl" \
- && /usr/local/bin/sing-box version
+    go build -tags with_quic,with_utls -trimpath -ldflags "-s -w" -o /out/panel-agent ./cmd/agent
 
 FROM scratch
 COPY --from=build /out/panel-agent /usr/local/bin/panel-agent
-COPY --from=build /out/singbox-reload /usr/local/bin/singbox-reload
-COPY --from=singbox /usr/local/bin/sing-box /usr/local/bin/sing-box
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
-ENV AGENT_STATE_PATH=/var/lib/panel-agent/state.json \
-    AGENT_SINGBOX_CONFIG_PATH=/etc/sing-box/config.json \
-    AGENT_SINGBOX_CHECK_BIN=/usr/local/bin/sing-box \
-    AGENT_SINGBOX_RELOAD_COMMAND=/usr/local/bin/singbox-reload \
-    SINGBOX_PIDFILE=/run/singbox/singbox.pid \
-    SINGBOX_BIN=/usr/local/bin/sing-box \
-    SINGBOX_CONFIG=/etc/sing-box/config.json
-VOLUME /var/lib/panel-agent /etc/sing-box
+ENV AGENT_STATE_PATH=/var/lib/panel-agent/state.json
+VOLUME /var/lib/panel-agent
 ENTRYPOINT ["/usr/local/bin/panel-agent"]

@@ -1,11 +1,4 @@
-import type {
-  ConnectionLogStatus,
-  NodeStatus,
-  Protocol,
-  ServerStatus,
-  User,
-  UserStatus,
-} from '@/api/types'
+import type { NodeStatus, Protocol, ServerStatus, User, UserStatus } from '@/api/types'
 
 export type Tone = 'success' | 'warning' | 'danger' | 'muted' | 'primary'
 
@@ -53,12 +46,6 @@ export function nodeStatusInfo(status: NodeStatus): StatusInfo {
   return status === 'active'
     ? { label: '启用', tone: 'success' }
     : { label: '停用', tone: 'warning' }
-}
-
-export function logStatusInfo(status: ConnectionLogStatus): StatusInfo {
-  return status === 'active'
-    ? { label: '进行中', tone: 'success' }
-    : { label: '已结束', tone: 'muted' }
 }
 
 export function protocolLabel(protocol: Protocol): string {

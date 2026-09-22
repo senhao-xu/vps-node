@@ -10,13 +10,14 @@ import ErrorBanner from '@/components/ErrorBanner.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import LoadingSpinner from '@/components/ui/LoadingSpinner.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
-import UserConnectionLogs from '@/components/user/UserConnectionLogs.vue'
 import UserDetailBasic from '@/components/user/UserDetailBasic.vue'
 import UserDetailExpiry from '@/components/user/UserDetailExpiry.vue'
+import UserDetailLimits from '@/components/user/UserDetailLimits.vue'
 import UserDetailTraffic from '@/components/user/UserDetailTraffic.vue'
+import UserDevices from '@/components/user/UserDevices.vue'
 import UserNodeAuth from '@/components/user/UserNodeAuth.vue'
-import UserSessions from '@/components/user/UserSessions.vue'
 import UserTrafficStats from '@/components/user/UserTrafficStats.vue'
+import UserVisits from '@/components/user/UserVisits.vue'
 import { displayUserStatus } from '@/utils/labels'
 
 const route = useRoute()
@@ -87,6 +88,8 @@ onMounted(() => {
     <PageHeader
       :title="user ? user.username : '用户详情'"
       :subtitle="user ? `ID ${user.id} · 授权节点 ${authorizedNodeIds.length} 个` : undefined"
+      back-to="/users"
+      back-title="用户"
     >
       <template #actions>
         <StatusBadge
@@ -121,6 +124,17 @@ onMounted(() => {
           @updated="onUserUpdated"
         />
       </div>
+      <div class="two-col">
+        <UserDetailLimits
+          :user="user"
+          @updated="onUserUpdated"
+        />
+        <UserDevices
+          :user-id="user.id"
+          :nodes="nodes"
+          :servers="servers"
+        />
+      </div>
       <UserNodeAuth
         :user-id="user.id"
         :nodes="nodes"
@@ -129,16 +143,7 @@ onMounted(() => {
         @saved="onNodesSaved"
       />
       <UserTrafficStats :user-id="user.id" />
-      <UserSessions
-        :user-id="user.id"
-        :nodes="nodes"
-        :servers="servers"
-      />
-      <UserConnectionLogs
-        :user-id="user.id"
-        :nodes="nodes"
-        :servers="servers"
-      />
+      <UserVisits :user-id="user.id" />
     </template>
   </section>
 </template>

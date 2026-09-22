@@ -5,21 +5,9 @@ import (
 	"time"
 )
 
-func (r *Repo) DeleteConnectionLogsBatch(ctx context.Context, cutoff time.Time, limit int64) (int64, error) {
-	return r.execDeleteBatch(ctx,
-		`DELETE FROM connection_logs WHERE id IN (SELECT id FROM connection_logs WHERE created_at < ? LIMIT ?)`,
-		cutoff.Unix(), limit)
-}
-
 func (r *Repo) DeleteTrafficRecordsBatch(ctx context.Context, cutoff time.Time, limit int64) (int64, error) {
 	return r.execDeleteBatch(ctx,
 		`DELETE FROM traffic_records WHERE id IN (SELECT id FROM traffic_records WHERE created_at < ? LIMIT ?)`,
-		cutoff.Unix(), limit)
-}
-
-func (r *Repo) DeleteSessionsLastSeenBeforeBatch(ctx context.Context, cutoff time.Time, limit int64) (int64, error) {
-	return r.execDeleteBatch(ctx,
-		`DELETE FROM sessions WHERE id IN (SELECT id FROM sessions WHERE last_seen_at < ? LIMIT ?)`,
 		cutoff.Unix(), limit)
 }
 
@@ -35,24 +23,32 @@ func (r *Repo) DeleteTrafficBatchesBatch(ctx context.Context, cutoff time.Time, 
 		cutoff.Unix(), limit)
 }
 
-func (r *Repo) DeleteLogBatchesBatch(ctx context.Context, cutoff time.Time, limit int64) (int64, error) {
+func (r *Repo) DeleteDeviceBatchesBatch(ctx context.Context, cutoff time.Time, limit int64) (int64, error) {
 	return r.execDeleteBatch(ctx,
-		`DELETE FROM connection_log_batches WHERE rowid IN (SELECT rowid FROM connection_log_batches WHERE received_at < ? LIMIT ?)`,
+		`DELETE FROM device_batches WHERE rowid IN (SELECT rowid FROM device_batches WHERE received_at < ? LIMIT ?)`,
 		cutoff.Unix(), limit)
 }
 
-func (r *Repo) CountConnectionLogs(ctx context.Context) (int64, error) {
-	return r.execCount(ctx, `SELECT COUNT(*) FROM connection_logs`)
+func (r *Repo) DeleteVisitRecordsBatch(ctx context.Context, cutoff time.Time, limit int64) (int64, error) {
+	return r.execDeleteBatch(ctx,
+		`DELETE FROM visit_records WHERE id IN (SELECT id FROM visit_records WHERE created_at < ? LIMIT ?)`,
+		cutoff.Unix(), limit)
+}
+
+func (r *Repo) DeleteVisitDailyDomainsBatch(ctx context.Context, cutoff time.Time, limit int64) (int64, error) {
+	return r.execDeleteBatch(ctx,
+		`DELETE FROM visit_daily_domains WHERE rowid IN (SELECT rowid FROM visit_daily_domains WHERE day < ? LIMIT ?)`,
+		cutoff.Unix(), limit)
+}
+
+func (r *Repo) DeleteVisitBatchesBatch(ctx context.Context, cutoff time.Time, limit int64) (int64, error) {
+	return r.execDeleteBatch(ctx,
+		`DELETE FROM visit_batches WHERE rowid IN (SELECT rowid FROM visit_batches WHERE received_at < ? LIMIT ?)`,
+		cutoff.Unix(), limit)
 }
 
 func (r *Repo) CountTrafficRecords(ctx context.Context) (int64, error) {
 	return r.execCount(ctx, `SELECT COUNT(*) FROM traffic_records`)
-}
-
-func (r *Repo) DeleteConnectionLogsBeyondCap(ctx context.Context, keep, limit int64) (int64, error) {
-	return r.execDeleteBatch(ctx,
-		`DELETE FROM connection_logs WHERE id IN (SELECT id FROM connection_logs ORDER BY id DESC LIMIT ? OFFSET ?)`,
-		limit, keep)
 }
 
 func (r *Repo) DeleteTrafficRecordsBeyondCap(ctx context.Context, keep, limit int64) (int64, error) {

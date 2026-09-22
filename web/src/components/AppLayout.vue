@@ -2,8 +2,8 @@
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
-  ArrowLeft,
   ChevronsLeft,
+  Globe,
   LayoutDashboard,
   Monitor,
   Moon,
@@ -38,16 +38,17 @@ const collapseTitle = computed(() => (collapsed.value ? '展开侧边栏' : '收
 interface NavItem {
   to: string
   label: string
-  exact: boolean
   icon: LucideIcon
+  exact?: boolean
 }
 
 const navItems: NavItem[] = [
-  { to: '/', label: '仪表盘', exact: true, icon: LayoutDashboard },
-  { to: '/users', label: '用户', exact: false, icon: Users },
-  { to: '/servers', label: '服务器', exact: false, icon: Server },
-  { to: '/nodes', label: '节点', exact: false, icon: Waypoints },
-  { to: '/settings', label: '设置', exact: false, icon: Settings },
+  { to: '/', label: '仪表盘', icon: LayoutDashboard, exact: true },
+  { to: '/users', label: '用户', icon: Users },
+  { to: '/servers', label: '服务器', icon: Server },
+  { to: '/nodes', label: '节点', icon: Waypoints },
+  { to: '/visits', label: '访问记录', icon: Globe },
+  { to: '/settings', label: '设置', icon: Settings },
 ]
 
 const activePath = computed(() => route.path)
@@ -56,10 +57,6 @@ function isActive(item: NavItem): boolean {
   if (item.exact) return activePath.value === item.to
   return activePath.value === item.to || activePath.value.startsWith(`${item.to}/`)
 }
-
-const pageTitle = computed(() => route.meta.title ?? '')
-const parentTitle = computed(() => route.meta.parentTitle ?? '')
-const parentPath = computed(() => route.meta.parentPath ?? '')
 
 const searchOpen = ref(false)
 
@@ -142,19 +139,6 @@ async function handleLogout() {
           >
             <span class="brand-mark">V</span>
           </RouterLink>
-          <div class="topbar-heading">
-            <RouterLink
-              v-if="parentPath"
-              class="back-link"
-              :to="parentPath"
-            >
-              <ArrowLeft :size="13" />
-              {{ parentTitle }}
-            </RouterLink>
-            <div class="topbar-title">
-              {{ pageTitle }}
-            </div>
-          </div>
           <div class="topbar-right">
             <button
               type="button"
@@ -190,7 +174,7 @@ async function handleLogout() {
             <span class="admin text-secondary">{{ auth.username || '管理员' }}</span>
             <button
               type="button"
-              class="btn secondary small"
+              class="btn ghost small"
               @click="handleLogout"
             >
               退出登录
@@ -247,7 +231,7 @@ async function handleLogout() {
 }
 
 .brand {
-  padding: 20px var(--spacing-lg);
+  padding: 14px var(--spacing-lg);
   font-size: var(--font-size-lg);
   font-weight: 700;
   border-bottom: 1px solid var(--color-border);
@@ -277,19 +261,25 @@ async function handleLogout() {
 .nav {
   display: flex;
   flex-direction: column;
-  padding: var(--spacing-md) var(--spacing-sm);
-  gap: var(--spacing-xs);
+  padding: var(--spacing-sm) 0;
+  gap: 2px;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  min-height: 48px;
-  padding: 0 var(--spacing-md);
-  border-radius: var(--radius-sm);
+  min-height: 44px;
+  padding: 0 var(--spacing-lg);
+  border: none;
+  border-radius: 0;
+  background: none;
   color: var(--color-shell-muted);
+  font-size: var(--font-size-md);
   font-weight: 500;
+  text-align: left;
+  width: 100%;
+  cursor: pointer;
   transition: color 0.15s ease, background 0.15s ease;
 }
 
@@ -346,7 +336,7 @@ async function handleLogout() {
   background: var(--color-surface);
   color: var(--color-text-secondary);
   cursor: pointer;
-  z-index: 3;
+  z-index: 30;
   transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
 }
 
@@ -366,7 +356,7 @@ async function handleLogout() {
   }
 
   .sidebar.collapsed .brand {
-    padding: 20px 0;
+    padding: 14px 0;
     text-align: center;
   }
 
@@ -414,42 +404,13 @@ async function handleLogout() {
   min-height: 64px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: var(--spacing-md);
-  padding: 0 var(--spacing-lg);
+  padding: 0 var(--spacing-xl);
 }
 
 .mobile-brand {
   display: none;
-}
-
-.topbar-heading {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.back-link {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
-}
-
-.back-link:hover {
-  color: var(--color-text);
-}
-
-.topbar-title {
-  color: var(--color-text);
-  font-size: var(--font-size-lg);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .topbar-right {
@@ -463,8 +424,8 @@ async function handleLogout() {
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-sm);
-  min-height: 32px;
-  padding: 0 10px;
+  min-height: var(--control-height);
+  padding: 0 12px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-surface);
@@ -477,40 +438,6 @@ async function handleLogout() {
 .search-trigger:hover {
   border-color: var(--color-border-strong);
   color: var(--color-text);
-}
-
-.theme-switch {
-  display: inline-flex;
-  padding: 2px;
-  gap: 2px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-muted-soft);
-}
-
-.theme-option {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 26px;
-  padding: 0;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-
-.theme-option:hover {
-  color: var(--color-text);
-}
-
-.theme-option.active {
-  background: var(--color-surface);
-  color: var(--color-text);
-  box-shadow: var(--shadow-card);
 }
 
 .mobile-nav {
@@ -530,6 +457,7 @@ async function handleLogout() {
   .topbar-row {
     min-height: 56px;
     padding: 0 var(--spacing-md);
+    justify-content: space-between;
   }
 
   .mobile-brand {
@@ -556,7 +484,7 @@ async function handleLogout() {
     flex: none;
     min-height: 34px;
     padding: 0 12px;
-    border-radius: 999px;
+    border-radius: var(--radius-full);
     color: var(--color-shell-muted);
     font-size: var(--font-size-sm);
     font-weight: 500;
@@ -580,10 +508,6 @@ async function handleLogout() {
   .search-trigger .kbd,
   .admin {
     display: none;
-  }
-
-  .topbar-title {
-    font-size: var(--font-size-md);
   }
 }
 </style>

@@ -1,0 +1,6 @@
+{"file": ".trellis/tasks/09-22-xboard-visual-parity-v2/prd.md", "reason": "AC1–AC8 是本任务视觉与构建的通过标准，逐条核对"}
+{"file": ".trellis/tasks/09-22-xboard-visual-parity-v2/design.md", "reason": "token 取值表与外壳/组件/页面方案是校验一致性的基准"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "核对新增/改动组件是否符合前端组件实现规范"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端质量门禁（typecheck/lint/build 与一致性）"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "核对组件 props/类型改动无回归"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "核对分段控件/卡片等未重复造轮子、基类复用情况"}

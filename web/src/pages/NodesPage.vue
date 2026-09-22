@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Plus } from 'lucide-vue-next'
+import { Plus, X } from 'lucide-vue-next'
 import { deleteNode, listNodes, updateNode } from '@/api/nodes'
 import { listServers } from '@/api/servers'
 import { errorMessage } from '@/api/http'
@@ -15,6 +15,7 @@ import TablePaginator from '@/components/TablePaginator.vue'
 import FilterChip from '@/components/ui/FilterChip.vue'
 import OverflowMenu, { type OverflowMenuItem } from '@/components/ui/OverflowMenu.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
+import SearchInput from '@/components/ui/SearchInput.vue'
 import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
 import { formatDateTime } from '@/utils/format'
 import { nodeStatusInfo, protocolLabel } from '@/utils/labels'
@@ -47,14 +48,13 @@ const editTarget = ref<NodeBrief | null>(null)
 const deleteTarget = ref<NodeBrief | null>(null)
 const deleting = ref(false)
 
-let searchTimer: ReturnType<typeof setTimeout> | null = null
-let suppressNextSearch = false
-
 const columns: Column[] = [
-  { key: 'name', label: '名称', width: '200px', sortable: true },
+  { key: 'name', label: '名称', width: '180px', sortable: true },
   { key: 'protocol', label: '协议', width: '90px' },
   { key: 'port', label: '端口', align: 'right', width: '72px', sortable: true },
-  { key: 'server', label: '所属服务器', width: '150px' },
+  { key: 'rate', label: '倍率', align: 'right', width: '70px' },
+  { key: 'tags', label: '标签', width: '150px' },
+  { key: 'server', label: '所属服务器', width: '140px' },
   { key: 'status', label: '状态', width: '80px' },
   { key: 'enabled', label: '启用', width: '64px' },
   { key: 'created_at', label: '创建时间', width: '140px', sortable: true },
@@ -245,24 +245,12 @@ function restoreFromQuery() {
   }
   const status = raw['status']
   if (status === 'active' || status === 'disabled') statusFilter.value = status
-  if (typeof raw['q'] === 'string' && raw['q'] !== query.value) {
-    suppressNextSearch = true
+  if (typeof raw['q'] === 'string') {
     query.value = raw['q']
   }
   const rawPage = typeof raw['page'] === 'string' ? Number(raw['page']) : NaN
   if (Number.isInteger(rawPage) && rawPage > 0) page.value = rawPage
 }
-
-watch(query, () => {
-  if (suppressNextSearch) {
-    suppressNextSearch = false
-    return
-  }
-  if (searchTimer) clearTimeout(searchTimer)
-  searchTimer = setTimeout(() => {
-    applyFilters()
-  }, 300)
-})
 
 onMounted(() => {
   restoreFromQuery()
@@ -293,7 +281,89 @@ onMounted(() => {
       @dismiss="error = ''"
     />
 
-    <div class="card">
+    <div class="table-toolbar">
+      <SearchInput
+        v-model="query"
+        placeholder="按名称搜索"
+        @search="applyFilters"
+      />
+      <FilterChip
+        :label="serverChipLabel"
+        :active="serverFilter !== ''"
+      >
+        <template #default="{ close }">
+          <div class="menu-list">
+            <button
+              type="button"
+              class="menu-list-item"
+              :class="{ selected: serverFilter === '' }"
+              @click="serverFilter = ''; applyFilters(); close()"
+            >
+              全部服务器
+            </button>
+            <button
+              v-for="server in servers"
+              :key="server.id"
+              type="button"
+              class="menu-list-item"
+              :class="{ selected: serverFilter === String(server.id) }"
+              @click="serverFilter = String(server.id); applyFilters(); close()"
+            >
+              {{ server.name }}
+            </button>
+          </div>
+        </template>
+      </FilterChip>
+      <FilterChip
+        :label="protocolChipLabel"
+        :active="protocolFilter !== ''"
+      >
+        <template #default="{ close }">
+          <div class="menu-list">
+            <button
+              v-for="option in protocolOptions"
+              :key="option.value"
+              type="button"
+              class="menu-list-item"
+              :class="{ selected: protocolFilter === option.value }"
+              @click="protocolFilter = option.value; applyFilters(); close()"
+            >
+              {{ option.label }}
+            </button>
+          </div>
+        </template>
+      </FilterChip>
+      <FilterChip
+        :label="statusChipLabel"
+        :active="statusFilter !== ''"
+      >
+        <template #default="{ close }">
+          <div class="menu-list">
+            <button
+              v-for="option in statusOptions"
+              :key="option.value"
+              type="button"
+              class="menu-list-item"
+              :class="{ selected: statusFilter === option.value }"
+              @click="statusFilter = option.value; applyFilters(); close()"
+            >
+              {{ option.label }}
+            </button>
+          </div>
+        </template>
+      </FilterChip>
+      <button
+        v-if="serverFilter || protocolFilter || statusFilter || query"
+        type="button"
+        class="btn ghost small"
+        @click="resetFilters"
+      >
+        <X :size="13" />
+        重置
+      </button>
+    </div>
+
+    <div class="table-card">
       <DataTable
         :columns="columns"
         :rows="sortedItems"
@@ -307,88 +377,6 @@ onMounted(() => {
         @update:selected="selectedIds = $event.map(Number)"
         @sort="onSort"
       >
-        <template #toolbar>
-          <input
-            v-model="query"
-            class="search-input"
-            type="text"
-            placeholder="按名称搜索"
-          >
-          <FilterChip
-            :label="serverChipLabel"
-            :active="serverFilter !== ''"
-          >
-            <template #default="{ close }">
-              <div class="menu-list">
-                <button
-                  type="button"
-                  class="menu-list-item"
-                  :class="{ selected: serverFilter === '' }"
-                  @click="serverFilter = ''; applyFilters(); close()"
-                >
-                  全部服务器
-                </button>
-                <button
-                  v-for="server in servers"
-                  :key="server.id"
-                  type="button"
-                  class="menu-list-item"
-                  :class="{ selected: serverFilter === String(server.id) }"
-                  @click="serverFilter = String(server.id); applyFilters(); close()"
-                >
-                  {{ server.name }}
-                </button>
-              </div>
-            </template>
-          </FilterChip>
-          <FilterChip
-            :label="protocolChipLabel"
-            :active="protocolFilter !== ''"
-          >
-            <template #default="{ close }">
-              <div class="menu-list">
-                <button
-                  v-for="option in protocolOptions"
-                  :key="option.value"
-                  type="button"
-                  class="menu-list-item"
-                  :class="{ selected: protocolFilter === option.value }"
-                  @click="protocolFilter = option.value; applyFilters(); close()"
-                >
-                  {{ option.label }}
-                </button>
-              </div>
-            </template>
-          </FilterChip>
-          <FilterChip
-            :label="statusChipLabel"
-            :active="statusFilter !== ''"
-          >
-            <template #default="{ close }">
-              <div class="menu-list">
-                <button
-                  v-for="option in statusOptions"
-                  :key="option.value"
-                  type="button"
-                  class="menu-list-item"
-                  :class="{ selected: statusFilter === option.value }"
-                  @click="statusFilter = option.value; applyFilters(); close()"
-                >
-                  {{ option.label }}
-                </button>
-              </div>
-            </template>
-          </FilterChip>
-          <button
-            v-if="serverFilter || protocolFilter || statusFilter || query"
-            type="button"
-            class="btn link small"
-            @click="resetFilters"
-          >
-            重置
-          </button>
-        </template>
-
         <template #cell-name="{ row }">
           <span class="name-cell">
             <i
@@ -400,6 +388,25 @@ onMounted(() => {
         </template>
         <template #cell-protocol="{ row }">
           {{ protocolLabel(row.protocol) }}
+        </template>
+        <template #cell-rate="{ row }">
+          {{ row.rate }}×
+        </template>
+        <template #cell-tags="{ row }">
+          <span
+            v-if="row.tags.length === 0"
+            class="text-secondary"
+          >—</span>
+          <span
+            v-else
+            class="tag-list"
+          >
+            <span
+              v-for="tag in row.tags"
+              :key="tag"
+              class="chip"
+            >{{ tag }}</span>
+          </span>
         </template>
         <template #cell-server="{ row }">
           <RouterLink :to="`/servers/${row.server.id}`">
@@ -522,13 +529,11 @@ onMounted(() => {
   padding-top: var(--spacing-md);
 }
 
-.search-input {
-  width: min(240px, 100%);
+.tag-list {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
-@media (max-width: 700px) {
-  .search-input {
-    width: 100%;
-  }
-}
+
 </style>

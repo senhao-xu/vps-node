@@ -2,11 +2,8 @@ package singbox
 
 import (
 	"crypto/hmac"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/binary"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"strconv"
@@ -39,6 +36,10 @@ var ErrUnrenderable = errors.New("node configuration cannot be rendered")
 func SSMethodSupported(method string) bool {
 	_, ok := ssKeyLens[method]
 	return ok
+}
+
+func IsSS2022(method string) bool {
+	return strings.HasPrefix(method, "2022-blake3-")
 }
 
 func hmacSum(appKey []byte, message string) []byte {
@@ -79,12 +80,7 @@ type Node struct {
 	Users    []User
 }
 
-type ClashAPI struct {
-	Port   int
-	Secret string
-}
-
-func Render(appKey []byte, nodes []Node, clash ClashAPI) (map[string]any, error) {
+func Render(appKey []byte, nodes []Node) (map[string]any, error) {
 	inbounds := make([]map[string]any, 0, len(nodes))
 	for _, n := range nodes {
 		inbound, err := renderInbound(appKey, n)
@@ -94,13 +90,7 @@ func Render(appKey []byte, nodes []Node, clash ClashAPI) (map[string]any, error)
 		inbounds = append(inbounds, inbound)
 	}
 	return map[string]any{
-		"log": map[string]any{"level": "info", "timestamp": true},
-		"experimental": map[string]any{
-			"clash_api": map[string]any{
-				"external_controller": fmt.Sprintf("127.0.0.1:%d", clash.Port),
-				"secret":              clash.Secret,
-			},
-		},
+		"log":       map[string]any{"level": "info", "timestamp": true},
 		"inbounds":  inbounds,
 		"outbounds": []map[string]any{{"type": "direct", "tag": "direct"}},
 		"route":     map[string]any{"final": "direct"},
@@ -127,13 +117,13 @@ func inboundTag(n Node) string {
 }
 
 func renderShadowsocks(appKey []byte, n Node) (map[string]any, error) {
-	method := SettingString(n.Settings, "method")
-	if !SSMethodSupported(method) {
-		return nil, fmt.Errorf("%w: node %d: unsupported shadowsocks method %q", ErrUnrenderable, n.ID, method)
+	cipher := SettingString(n.Settings, "cipher")
+	if !SSMethodSupported(cipher) {
+		return nil, fmt.Errorf("%w: node %d: unsupported shadowsocks cipher %q", ErrUnrenderable, n.ID, cipher)
 	}
 	serverPassword := SettingString(n.Secret, "password")
 	if serverPassword == "" {
-		derived, err := DeriveSSServerPassword(appKey, n.ID, method)
+		derived, err := DeriveSSServerPassword(appKey, n.ID, cipher)
 		if err != nil {
 			return nil, err
 		}
@@ -141,7 +131,7 @@ func renderShadowsocks(appKey []byte, n Node) (map[string]any, error) {
 	}
 	users := make([]map[string]any, 0, len(n.Users))
 	for _, u := range n.Users {
-		password, err := DeriveSSPassword(appKey, n.ID, u.UUID, method)
+		password, err := DeriveSSPassword(appKey, n.ID, u.UUID, cipher)
 		if err != nil {
 			return nil, err
 		}
@@ -155,7 +145,7 @@ func renderShadowsocks(appKey []byte, n Node) (map[string]any, error) {
 		"tag":         inboundTag(n),
 		"listen":      "::",
 		"listen_port": n.Port,
-		"method":      method,
+		"method":      cipher,
 		"password":    serverPassword,
 		"users":       users,
 	}, nil
@@ -166,13 +156,17 @@ func renderVLESS(n Node) (map[string]any, error) {
 	if privateKey == "" {
 		return nil, fmt.Errorf("%w: node %d: missing vless private_key", ErrUnrenderable, n.ID)
 	}
-	serverNames := settingStrings(n.Settings, "server_names")
-	if len(serverNames) == 0 || serverNames[0] == "" {
-		return nil, fmt.Errorf("%w: node %d: missing vless server_names", ErrUnrenderable, n.ID)
+	reality := SettingMap(n.Settings, "reality_settings")
+	serverName := SettingString(reality, "server_name")
+	if serverName == "" {
+		return nil, fmt.Errorf("%w: node %d: missing vless reality server_name", ErrUnrenderable, n.ID)
 	}
-	serverName := serverNames[0]
+	handshakePort := int64(443)
+	if v, ok := settingInt(reality, "server_port"); ok {
+		handshakePort = v
+	}
 	shortIDs := []string{}
-	if shortID := SettingString(n.Settings, "short_id"); shortID != "" {
+	if shortID := SettingString(reality, "short_id"); shortID != "" {
 		shortIDs = append(shortIDs, shortID)
 	}
 	users := make([]map[string]any, 0, len(n.Users))
@@ -194,7 +188,7 @@ func renderVLESS(n Node) (map[string]any, error) {
 			"server_name": serverName,
 			"reality": map[string]any{
 				"enabled":     true,
-				"handshake":   map[string]any{"server": serverName, "server_port": 443},
+				"handshake":   map[string]any{"server": serverName, "server_port": handshakePort},
 				"private_key": privateKey,
 				"short_id":    shortIDs,
 			},
@@ -203,7 +197,7 @@ func renderVLESS(n Node) (map[string]any, error) {
 }
 
 func renderHysteria2(n Node) (map[string]any, error) {
-	serverName := SettingString(n.Settings, "server_name")
+	serverName := SettingString(SettingMap(n.Settings, "tls"), "server_name")
 	certificate := SettingString(n.Secret, "certificate")
 	privateKey := SettingString(n.Secret, "private_key")
 	users := make([]map[string]any, 0, len(n.Users))
@@ -227,20 +221,27 @@ func renderHysteria2(n Node) (map[string]any, error) {
 		"users":       users,
 		"tls":         tls,
 	}
-	if v, ok := settingInt(n.Settings, "up_mbps"); ok {
+	bandwidth := SettingMap(n.Settings, "bandwidth")
+	if v, ok := settingInt(bandwidth, "up"); ok {
 		inbound["up_mbps"] = v
 	}
-	if v, ok := settingInt(n.Settings, "down_mbps"); ok {
+	if v, ok := settingInt(bandwidth, "down"); ok {
 		inbound["down_mbps"] = v
 	}
-	if obfsPassword := SettingString(n.Settings, "obfs_password"); obfsPassword != "" {
+	obfs := SettingMap(n.Settings, "obfs")
+	obfsPassword := SettingString(obfs, "password")
+	obfsOpen := true
+	if v, ok := obfs["open"].(bool); ok {
+		obfsOpen = v
+	}
+	if obfsOpen && obfsPassword != "" {
 		inbound["obfs"] = map[string]any{"type": "salamander", "password": obfsPassword}
 	}
 	return inbound, nil
 }
 
 func renderAnyTLS(n Node) (map[string]any, error) {
-	serverName := SettingString(n.Settings, "server_name")
+	serverName := SettingString(SettingMap(n.Settings, "tls"), "server_name")
 	certificate := SettingString(n.Secret, "certificate")
 	privateKey := SettingString(n.Secret, "private_key")
 	users := make([]map[string]any, 0, len(n.Users))
@@ -274,26 +275,12 @@ func SettingString(m map[string]any, key string) string {
 	return s
 }
 
-func settingStrings(m map[string]any, key string) []string {
+func SettingMap(m map[string]any, key string) map[string]any {
 	if m == nil {
 		return nil
 	}
-	switch v := m[key].(type) {
-	case []string:
-		return v
-	case []any:
-		out := make([]string, 0, len(v))
-		for _, item := range v {
-			s, ok := item.(string)
-			if !ok {
-				return nil
-			}
-			out = append(out, s)
-		}
-		return out
-	default:
-		return nil
-	}
+	v, _ := m[key].(map[string]any)
+	return v
 }
 
 func settingInt(m map[string]any, key string) (int64, bool) {
@@ -313,30 +300,4 @@ func settingInt(m map[string]any, key string) (int64, bool) {
 	default:
 		return 0, false
 	}
-}
-
-func NewClashAPI(reservedPorts map[int]bool) (ClashAPI, error) {
-	for i := 0; i < 16; i++ {
-		port, err := randomPort()
-		if err != nil {
-			return ClashAPI{}, err
-		}
-		if reservedPorts[port] {
-			continue
-		}
-		secret := make([]byte, 16)
-		if _, err := rand.Read(secret); err != nil {
-			return ClashAPI{}, err
-		}
-		return ClashAPI{Port: port, Secret: hex.EncodeToString(secret)}, nil
-	}
-	return ClashAPI{}, errors.New("no free clash api port available")
-}
-
-func randomPort() (int, error) {
-	var buf [4]byte
-	if _, err := rand.Read(buf[:]); err != nil {
-		return 0, err
-	}
-	return 20000 + int(binary.BigEndian.Uint32(buf[:])%20000), nil
 }

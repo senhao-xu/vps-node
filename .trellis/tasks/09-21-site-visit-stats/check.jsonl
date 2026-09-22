@@ -1,1 +1,11 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/tasks/09-21-site-visit-stats/prd.md", "reason": "Verify acceptance criteria: ingestion, idempotency, validation rejections, UI displays, retention"}
+{"file": ".trellis/tasks/09-21-site-visit-stats/design.md", "reason": "Verify implementation matches the binding design: schema, DTO mirrors, contracts, tradeoffs, privacy"}
+{"file": ".trellis/tasks/09-21-site-visit-stats/implement.md", "reason": "Verify all phase checkboxes and validation commands were completed"}
+{"file": ".trellis/tasks/09-21-site-visit-stats/research/telemetry-data-path.md", "reason": "Cross-check implemented patterns against the documented existing telemetry path (no drift)"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Check migration count/table-list test update, single-tx batch idempotency, janitor retention wiring"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Check envelope codes (413/422/404), scope validation, no trust of body server_id"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Run the mandated validation commands; check forbidden patterns"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Check handler/repo separation, contract-first sync of agentclient/panel/TS/contract"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Check all new types live in api/types.ts and no any/raw fetch"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Check DataTable rowKey, empty/loading/error states, design tokens"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Check data format consistency across kernel -> agent -> panel -> DB -> API -> UI"}

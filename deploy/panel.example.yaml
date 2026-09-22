@@ -5,9 +5,7 @@ log_level: info
 # persisted in the database (settings table).
 # app_key: 0000000000000000000000000000000000000000000000000000000000000000
 retention:
-  raw_log_days: 7
   aggregate_days: 90
   # Hard row-count caps enforced by the janitor regardless of the retention
   # window; 0 disables a cap.
-  max_connection_logs: 1000000
   max_traffic_records: 5000000

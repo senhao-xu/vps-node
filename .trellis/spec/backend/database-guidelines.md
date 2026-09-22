@@ -18,8 +18,8 @@
 - INTEGER unix-second timestamps everywhere; byte counters as INTEGER.
 - Ownership FKs: `nodes.server_id`, `agents.server_id` UNIQUE (Server 1:1 Agent), `user_nodes(user_id,node_id)` PK.
 - `agents.token_hash` UNIQUE; `servers.register_token_hash` single-use (cleared after use).
-- History tables (`connection_logs`, `traffic_records`) intentionally have NO FKs to users/nodes/servers — history survives parent deletion until retention cleanup. `sessions` cascades on all three parents.
-- Idempotency markers: `traffic_batches` / `connection_log_batches` PK `(agent_id, seq)`.
+- `traffic_records` intentionally has NO FKs to users/nodes/servers — history survives parent deletion until retention cleanup. `online_devices` (current state, not history) cascades on user/node/server deletion.
+- Idempotency markers: `traffic_batches` / `device_batches` PK `(agent_id, seq)`.
 - `server_revisions`: per-server monotonic counter, the ONLY config-change signal for agents.
 
 ### 4. Validation & Error Matrix
@@ -29,8 +29,8 @@
 
 ### 5. Good/Base/Bad Cases
 - Good: mutation + revision bump + batch marker in ONE tx; crash leaves either all or nothing.
-- Base: read paths compute aggregates from `traffic_records` (no denormalized totals except `users.used_bytes`).
-- Bad: writing `users.used_bytes` outside the tx that inserts the batch marker → double counting on retry. Forbidden.
+- Base: read paths compute aggregates from `traffic_records` (no denormalized totals except `users.u`/`users.d`).
+- Bad: writing `users.u`/`users.d` outside the tx that inserts the batch marker → double counting on retry. Forbidden.
 
 ### 6. Tests Required
 - Migration idempotency (`db_test.go`), unique/FK enforcement, batch duplicate-once (`janitor`/`web` tests), revision monotonic bump per mutation type.
@@ -38,24 +38,25 @@
 ### 7. Wrong vs Correct
 #### Wrong
 ```go
-repo.IncrementUserTraffic(ctx, ...) // separate tx from batch marker insert
-repo.InsertBatchMarker(ctx, ...)
+repo.InsertTrafficRecords(ctx, records)   // separate tx from users.u/d + batch marker
+repo.AddUserUsedBytes(ctx, userID, u, d)
+repo.RecordTrafficBatch(ctx, agentID, seq)
 ```
+
 #### Correct
 ```go
-repo.Tx(ctx, func(tx repo.DBTX) error {
-    if err := repo.InsertTrafficRecords(tx, ...); err != nil { return err }
-    if err := repo.IncrementUserTraffic(tx, ...); err != nil { return err }
-    return repo.InsertTrafficBatchMarker(tx, agentID, seq)
-})
+// ONE tx: traffic_records (scaled by nodes.rate) + users.u/d + traffic_batches marker
+repo.IngestTrafficBatch(ctx, agentID, seq, records)
 ```
+
+`IngestTrafficBatch` / `IngestDeviceBatch` are the only production writers for these paths; they scale each record by the owning node's `rate`, accumulate `users.u`/`users.d`, upsert/prune `online_devices`, refresh `online_count`, and insert the batch marker in the same transaction. `InsertTrafficRecords` / `AddUserUsedBytes` / `RecordTrafficBatch` exist for test fixtures only — never call them from handlers.
 
 ---
 
 ## Retention & Caps
 
-- `internal/janitor` deletes: `connection_logs` (raw retention days), `traffic_records` (aggregate retention days), stale `sessions`, expired `admin_sessions`, old batch markers — bounded 500-row batches per loop.
-- Storage caps: `retention.max_connection_logs` (default 1,000,000) and `retention.max_traffic_records` (default 5,000,000; `0` = off) delete oldest-beyond-cap. Any new history table needs both a retention-days path AND a cap path in the janitor sweep.
+- `internal/janitor` deletes: `traffic_records` (aggregate retention days), `online_devices` stale for >24h, expired `admin_sessions`, and old `traffic_batches`/`device_batches` markers — bounded 500-row batches per loop. Deleting devices recomputes each affected user's `online_count` in the same tx.
+- Storage cap: `retention.max_traffic_records` (default 5,000,000; `0` = off) deletes oldest-beyond-cap. `online_devices` is bounded by the stale-device sweep, not a row cap.
 
 ---
 

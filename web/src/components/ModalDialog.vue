@@ -132,7 +132,7 @@ onBeforeUnmount(() => {
   max-width: 100%;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-dialog);
   box-shadow: var(--shadow-dialog);
   overflow: hidden;
   outline: none;
@@ -143,8 +143,7 @@ onBeforeUnmount(() => {
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--spacing-md);
-  padding: 20px var(--spacing-lg);
-  border-bottom: 1px solid var(--color-border);
+  padding: 24px 24px 12px;
 }
 
 .dialog-title {
@@ -181,16 +180,14 @@ onBeforeUnmount(() => {
 }
 
 .dialog-body {
-  padding: var(--spacing-lg);
+  padding: 12px 24px;
 }
 
 .dialog-footer {
   display: flex;
   justify-content: flex-end;
   gap: var(--spacing-sm);
-  padding: var(--spacing-md) var(--spacing-lg);
-  border-top: 1px solid var(--color-border);
-  background: var(--color-surface-muted);
+  padding: 12px 24px 24px;
 }
 
 @media (max-width: 560px) {

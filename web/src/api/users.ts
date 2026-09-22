@@ -1,9 +1,9 @@
 import { request } from './http'
 import type {
-  ConnectionLog,
   CreateUserInput,
+  OnlineDevices,
   Paged,
-  Session,
+  Subscription,
   TrafficBucket,
   TrafficSeries,
   UpdateUserInput,
@@ -13,7 +13,6 @@ import type {
   UserExpiryFilter,
   UserNodes,
   UserStatus,
-  Subscription,
 } from './types'
 
 export interface UserListParams {
@@ -34,13 +33,6 @@ export function createUserSubscription(userId: number): Promise<Subscription> {
 
 export function rotateUserSubscription(userId: number): Promise<Subscription> {
   return request<Subscription>(`/api/users/${userId}/subscription/rotate`, { method: 'POST' })
-}
-
-export interface ConnectionLogParams {
-  from?: string | null
-  to?: string | null
-  page?: number
-  pageSize?: number
 }
 
 export interface UserTrafficParams {
@@ -100,24 +92,8 @@ export function putUserNodes(userId: number, nodeIds: number[]): Promise<UserNod
   })
 }
 
-export function getUserSessions(userId: number, includeStale = false): Promise<{ items: Session[] }> {
-  return request<{ items: Session[] }>(`/api/users/${userId}/sessions`, {
-    query: { include_stale: includeStale ? 'true' : undefined },
-  })
-}
-
-export function getUserConnectionLogs(
-  userId: number,
-  params: ConnectionLogParams = {},
-): Promise<Paged<ConnectionLog>> {
-  return request<Paged<ConnectionLog>>(`/api/users/${userId}/connection-logs`, {
-    query: {
-      from: params.from,
-      to: params.to,
-      page: params.page,
-      page_size: params.pageSize,
-    },
-  })
+export function getUserDevices(userId: number): Promise<OnlineDevices> {
+  return request<OnlineDevices>(`/api/users/${userId}/devices`)
 }
 
 export function getUserTraffic(

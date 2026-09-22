@@ -8,17 +8,19 @@ import (
 )
 
 type Node struct {
-	ID         int64
-	ServerID   int64
-	Name       string
-	Protocol   string
-	Port       int
-	Settings   string
-	SecretEnc  []byte
-	Status     string
-	ServerName string
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	ID               int64
+	ServerID         int64
+	Name             string
+	Protocol         string
+	Port             int
+	ProtocolSettings string
+	Rate             float64
+	Tags             string
+	SecretEnc        []byte
+	Status           string
+	ServerName       string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
 }
 
 type NodeFilter struct {
@@ -31,13 +33,15 @@ type NodeFilter struct {
 }
 
 type NewNode struct {
-	ServerID  int64
-	Name      string
-	Protocol  string
-	Port      int
-	Settings  string
-	SecretEnc []byte
-	Status    string
+	ServerID         int64
+	Name             string
+	Protocol         string
+	Port             int
+	ProtocolSettings string
+	Rate             float64
+	Tags             string
+	SecretEnc        []byte
+	Status           string
 }
 
 const (
@@ -50,23 +54,29 @@ const (
 	ProtocolAnyTLS      = "anytls"
 )
 
-const nodeSelect = `SELECT id, server_id, name, protocol, port, settings, secret_enc, status, created_at, updated_at FROM nodes`
+const nodeSelect = `SELECT id, server_id, name, protocol, port, protocol_settings, rate, tags, secret_enc, status, created_at, updated_at FROM nodes`
 
-const nodeSelectWithServer = `SELECT n.id, n.server_id, n.name, n.protocol, n.port, n.settings, n.secret_enc, n.status, n.created_at, n.updated_at, s.name
+const nodeSelectWithServer = `SELECT n.id, n.server_id, n.name, n.protocol, n.port, n.protocol_settings, n.rate, n.tags, n.secret_enc, n.status, n.created_at, n.updated_at, s.name
 	FROM nodes n JOIN servers s ON s.id = n.server_id`
 
 func insertNodeExec(ctx context.Context, q execer, n NewNode) (int64, error) {
 	if n.Status == "" {
 		n.Status = NodeStatusActive
 	}
-	if n.Settings == "" {
-		n.Settings = "{}"
+	if n.ProtocolSettings == "" {
+		n.ProtocolSettings = "{}"
+	}
+	if n.Rate == 0 {
+		n.Rate = 1
+	}
+	if n.Tags == "" {
+		n.Tags = "[]"
 	}
 	now := nowUnix()
 	res, err := q.ExecContext(ctx,
-		`INSERT INTO nodes (server_id, name, protocol, port, settings, secret_enc, status, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		n.ServerID, n.Name, n.Protocol, n.Port, n.Settings, n.SecretEnc, n.Status, now, now)
+		`INSERT INTO nodes (server_id, name, protocol, port, protocol_settings, rate, tags, secret_enc, status, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		n.ServerID, n.Name, n.Protocol, n.Port, n.ProtocolSettings, n.Rate, n.Tags, n.SecretEnc, n.Status, now, now)
 	if err != nil {
 		return 0, mapErr(err)
 	}
@@ -160,10 +170,10 @@ func (r *Repo) ListNodesByIDs(ctx context.Context, ids []int64) ([]Node, error) 
 	return collectNodesWithServerName(rows)
 }
 
-func (r *Repo) UpdateNodeSpec(ctx context.Context, id int64, name string, port int, settings string, secretEnc []byte) error {
+func (r *Repo) UpdateNodeSpec(ctx context.Context, id int64, name string, port int, settings string, secretEnc []byte, rate float64, tags string) error {
 	_, err := r.DB.ExecContext(ctx,
-		`UPDATE nodes SET name = ?, port = ?, settings = ?, secret_enc = ?, updated_at = ? WHERE id = ?`,
-		name, port, settings, secretEnc, nowUnix(), id)
+		`UPDATE nodes SET name = ?, port = ?, protocol_settings = ?, secret_enc = ?, rate = ?, tags = ?, updated_at = ? WHERE id = ?`,
+		name, port, settings, secretEnc, rate, tags, nowUnix(), id)
 	return mapErr(err)
 }
 
@@ -207,7 +217,7 @@ func scanNode(scan func(dest ...any) error) (Node, error) {
 	var n Node
 	var secretEnc []byte
 	var createdAt, updatedAt int64
-	err := scan(&n.ID, &n.ServerID, &n.Name, &n.Protocol, &n.Port, &n.Settings, &secretEnc, &n.Status, &createdAt, &updatedAt)
+	err := scan(&n.ID, &n.ServerID, &n.Name, &n.Protocol, &n.Port, &n.ProtocolSettings, &n.Rate, &n.Tags, &secretEnc, &n.Status, &createdAt, &updatedAt)
 	if err != nil {
 		return Node{}, mapErr(err)
 	}
@@ -221,7 +231,7 @@ func scanNodeWithServerName(scan func(dest ...any) error) (Node, error) {
 	var n Node
 	var secretEnc []byte
 	var createdAt, updatedAt int64
-	err := scan(&n.ID, &n.ServerID, &n.Name, &n.Protocol, &n.Port, &n.Settings, &secretEnc, &n.Status, &createdAt, &updatedAt, &n.ServerName)
+	err := scan(&n.ID, &n.ServerID, &n.Name, &n.Protocol, &n.Port, &n.ProtocolSettings, &n.Rate, &n.Tags, &secretEnc, &n.Status, &createdAt, &updatedAt, &n.ServerName)
 	if err != nil {
 		return Node{}, mapErr(err)
 	}

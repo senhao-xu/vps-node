@@ -77,13 +77,16 @@ type agentUserNodeDTO struct {
 }
 
 type agentUserDTO struct {
-	ID         int64              `json:"id"`
-	UUID       string             `json:"uuid"`
-	Status     string             `json:"status"`
-	QuotaBytes int64              `json:"quota_bytes"`
-	UsedBytes  int64              `json:"used_bytes"`
-	ExpiresAt  *string            `json:"expires_at"`
-	Nodes      []agentUserNodeDTO `json:"nodes"`
+	ID             int64              `json:"id"`
+	UUID           string             `json:"uuid"`
+	Status         string             `json:"status"`
+	TransferEnable int64              `json:"transfer_enable"`
+	U              int64              `json:"u"`
+	D              int64              `json:"d"`
+	SpeedLimit     int64              `json:"speed_limit"`
+	DeviceLimit    int64              `json:"device_limit"`
+	ExpiresAt      *string            `json:"expires_at"`
+	Nodes          []agentUserNodeDTO `json:"nodes"`
 }
 
 type agentConfigPayload struct {
@@ -98,14 +101,12 @@ func (h *Handler) buildAgentConfigPayload(ctx context.Context, server repo.Serve
 	}
 	active := make([]repo.Node, 0, len(nodes))
 	nodeByID := make(map[int64]repo.Node, len(nodes))
-	ports := make(map[int]bool, len(nodes))
 	for _, n := range nodes {
 		if n.Status != repo.NodeStatusActive {
 			continue
 		}
 		active = append(active, n)
 		nodeByID[n.ID] = n
-		ports[n.Port] = true
 	}
 
 	users, err := h.repo.ListEligibleUsersByServer(ctx, server.ID, time.Now())
@@ -140,11 +141,7 @@ func (h *Handler) buildAgentConfigPayload(ctx context.Context, server repo.Serve
 		renderByID[n.ID] = sbNode
 	}
 
-	clash, err := singbox.NewClashAPI(ports)
-	if err != nil {
-		return agentConfigPayload{}, err
-	}
-	config, err := singbox.Render(h.appKey, renderNodes, clash)
+	config, err := singbox.Render(h.appKey, renderNodes)
 	if err != nil {
 		return agentConfigPayload{}, err
 	}
@@ -167,13 +164,16 @@ func (h *Handler) buildAgentConfigPayload(ctx context.Context, server repo.Serve
 			})
 		}
 		out = append(out, agentUserDTO{
-			ID:         u.ID,
-			UUID:       u.UUID,
-			Status:     u.Status,
-			QuotaBytes: u.QuotaBytes,
-			UsedBytes:  u.UsedBytes,
-			ExpiresAt:  rfc3339Ptr(u.ExpiresAt),
-			Nodes:      nodeDTOs,
+			ID:             u.ID,
+			UUID:           u.UUID,
+			Status:         u.Status,
+			TransferEnable: u.TransferEnable,
+			U:              u.U,
+			D:              u.D,
+			SpeedLimit:     u.SpeedLimit,
+			DeviceLimit:    u.DeviceLimit,
+			ExpiresAt:      rfc3339Ptr(u.ExpiresAt),
+			Nodes:          nodeDTOs,
 		})
 	}
 
@@ -182,7 +182,7 @@ func (h *Handler) buildAgentConfigPayload(ctx context.Context, server repo.Serve
 
 func (h *Handler) singboxNode(n repo.Node, users []singbox.User) (singbox.Node, error) {
 	settings := map[string]any{}
-	if err := json.Unmarshal([]byte(n.Settings), &settings); err != nil {
+	if err := json.Unmarshal([]byte(n.ProtocolSettings), &settings); err != nil {
 		return singbox.Node{}, err
 	}
 	secret := map[string]any{}
@@ -210,12 +210,12 @@ func (h *Handler) singboxNode(n repo.Node, users []singbox.User) (singbox.Node, 
 func agentCredential(appKey []byte, n singbox.Node, userUUID string) (map[string]any, error) {
 	switch n.Protocol {
 	case singbox.ProtocolShadowsocks:
-		method := singbox.SettingString(n.Settings, "method")
-		password, err := singbox.DeriveSSPassword(appKey, n.ID, userUUID, method)
+		cipher := singbox.SettingString(n.Settings, "cipher")
+		password, err := singbox.DeriveSSPassword(appKey, n.ID, userUUID, cipher)
 		if err != nil {
 			return nil, err
 		}
-		return map[string]any{"contract": "ss-cred-v1", "method": method, "password": password}, nil
+		return map[string]any{"contract": "ss-cred-v1", "method": cipher, "password": password}, nil
 	case singbox.ProtocolVLESS:
 		return map[string]any{"contract": "uuid-v1", "uuid": userUUID, "flow": "xtls-rprx-vision"}, nil
 	case singbox.ProtocolHysteria2, singbox.ProtocolAnyTLS:

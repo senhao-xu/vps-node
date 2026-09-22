@@ -3,7 +3,16 @@ import { computed, ref, watch } from 'vue'
 import { createNode, generateRealityKeypair, updateNode } from '@/api/nodes'
 import { listServers } from '@/api/servers'
 import { errorMessage } from '@/api/http'
-import type { NodeBrief, NodeSettingsInput, Protocol, Server } from '@/api/types'
+import type {
+  Hysteria2BandwidthInput,
+  Hysteria2ObfsInput,
+  NodeBrief,
+  NodeSettingsInput,
+  Protocol,
+  RealitySettingsInput,
+  Server,
+  TLSSettingsInput,
+} from '@/api/types'
 import ErrorBanner from '@/components/ErrorBanner.vue'
 import ModalDialog from '@/components/ModalDialog.vue'
 import CopyText from '@/components/CopyText.vue'
@@ -30,19 +39,32 @@ const name = ref('')
 const port = ref<number | null>(null)
 const protocol = ref<Protocol>('shadowsocks')
 const status = ref<'active' | 'disabled'>('active')
+const rate = ref<number | null>(1)
+const tags = ref('')
 
-const ssMethod = ref<string>(SHADOWSOCKS_METHODS[0])
-const ssMethodTouched = ref(false)
+const ssCipher = ref<string>(SHADOWSOCKS_METHODS[0])
+const ssCipherTouched = ref(false)
 
 const vlessPrivateKey = ref('')
 const vlessPublicKey = ref('')
 const vlessShortId = ref('')
-const vlessServerNames = ref('')
+const vlessServerName = ref('')
+const vlessServerPort = ref<string | number | null>(443)
+const vlessAllowInsecure = ref(false)
+const vlessAllowInsecureTouched = ref(false)
 
 const hy2Up = ref<number | null>(null)
 const hy2Down = ref<number | null>(null)
+const hy2ObfsOpen = ref(false)
+const hy2ObfsOpenTouched = ref(false)
 const hy2ObfsPassword = ref('')
-const hy2HopPorts = ref('')
+const hy2HopInterval = ref('')
+const hy2AllowInsecure = ref(false)
+const hy2AllowInsecureTouched = ref(false)
+
+const anytlsPaddingScheme = ref('')
+const anytlsAllowInsecure = ref(false)
+const anytlsAllowInsecureTouched = ref(false)
 
 const tlsServerName = ref('')
 const tlsCertificate = ref('')
@@ -67,16 +89,28 @@ watch(
     port.value = props.node?.port ?? null
     protocol.value = props.node?.protocol ?? 'shadowsocks'
     status.value = props.node?.status === 'disabled' ? 'disabled' : 'active'
-    ssMethod.value = SHADOWSOCKS_METHODS[0]
-    ssMethodTouched.value = false
+    rate.value = props.node?.rate ?? 1
+    tags.value = props.node?.tags.join(', ') ?? ''
+    ssCipher.value = SHADOWSOCKS_METHODS[0]
+    ssCipherTouched.value = false
     vlessPrivateKey.value = ''
     vlessPublicKey.value = ''
     vlessShortId.value = ''
-    vlessServerNames.value = ''
+    vlessServerName.value = ''
+    vlessServerPort.value = isEdit.value ? null : 443
+    vlessAllowInsecure.value = false
+    vlessAllowInsecureTouched.value = false
     hy2Up.value = null
     hy2Down.value = null
+    hy2ObfsOpen.value = false
+    hy2ObfsOpenTouched.value = false
     hy2ObfsPassword.value = ''
-    hy2HopPorts.value = ''
+    hy2HopInterval.value = ''
+    hy2AllowInsecure.value = false
+    hy2AllowInsecureTouched.value = false
+    anytlsPaddingScheme.value = ''
+    anytlsAllowInsecure.value = false
+    anytlsAllowInsecureTouched.value = false
     tlsServerName.value = ''
     tlsCertificate.value = ''
     tlsPrivateKey.value = ''
@@ -108,32 +142,76 @@ const protocolOptions: Array<{ value: Protocol; label: string; dot: string }> = 
   { value: 'anytls', label: protocolLabel('anytls'), dot: 'danger' },
 ]
 
+function parseList(raw: string): string[] {
+  return raw
+    .split(/[,，\s]+/)
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0)
+}
+
+/**
+ * Reality handshake port. `present: false` means the field was left blank, so an
+ * edit keeps the stored value (node DTOs never echo settings) and a create falls
+ * back to the panel default. `value: null` with `present: true` is malformed input.
+ */
+function normaliseServerPort(raw: string | number | null): { present: boolean; value: number | null } {
+  if (raw === null || raw === '') return { present: false, value: null }
+  const value = typeof raw === 'number' ? raw : Number(raw)
+  return { present: true, value: Number.isInteger(value) ? value : null }
+}
+
+const tagsPayload = computed(() => parseList(tags.value))
+
 const settingsPayload = computed<NodeSettingsInput | undefined>(() => {
   const payload: NodeSettingsInput = {}
   if (protocol.value === 'shadowsocks') {
-    if (!isEdit.value || ssMethodTouched.value) payload['method'] = ssMethod.value
+    if (!isEdit.value || ssCipherTouched.value) payload.cipher = ssCipher.value
   } else if (protocol.value === 'vless') {
-    if (vlessPrivateKey.value) payload['private_key'] = vlessPrivateKey.value
-    if (vlessShortId.value) payload['short_id'] = vlessShortId.value
-    const names = vlessServerNames.value
-      .split(/[,，\s]+/)
-      .map((item) => item.trim())
-      .filter((item) => item.length > 0)
-    if (names.length > 0) payload['server_names'] = names
-  } else if (protocol.value === 'hysteria2' || protocol.value === 'anytls') {
-    if (protocol.value === 'hysteria2') {
-      if (hy2Up.value !== null && !Number.isNaN(hy2Up.value) && hy2Up.value >= 0) {
-        payload['up_mbps'] = hy2Up.value
-      }
-      if (hy2Down.value !== null && !Number.isNaN(hy2Down.value) && hy2Down.value >= 0) {
-        payload['down_mbps'] = hy2Down.value
-      }
-      if (hy2ObfsPassword.value) payload['obfs_password'] = hy2ObfsPassword.value
-      if (hy2HopPorts.value.trim()) payload['hop_ports'] = hy2HopPorts.value.trim()
+    payload.tls = 2
+    const reality: RealitySettingsInput = {}
+    if (vlessServerName.value.trim()) reality.server_name = vlessServerName.value.trim()
+    const serverPort = normaliseServerPort(vlessServerPort.value)
+    if (serverPort.value !== null) reality.server_port = serverPort.value
+    if (vlessShortId.value.trim()) reality.short_id = vlessShortId.value.trim()
+    if (!isEdit.value) {
+      if (vlessPublicKey.value) reality.public_key = vlessPublicKey.value
+      reality.allow_insecure = vlessAllowInsecure.value
+    } else if (vlessAllowInsecureTouched.value) {
+      reality.allow_insecure = vlessAllowInsecure.value
     }
-    if (tlsServerName.value) payload['server_name'] = tlsServerName.value.trim()
-    if (tlsCertificate.value) payload['certificate'] = tlsCertificate.value
-    if (tlsPrivateKey.value) payload['private_key'] = tlsPrivateKey.value
+    if (Object.keys(reality).length > 0) payload.reality_settings = reality
+    if (vlessPrivateKey.value) payload.private_key = vlessPrivateKey.value
+  } else if (protocol.value === 'hysteria2') {
+    payload.version = 2
+    const tls: TLSSettingsInput = {}
+    if (tlsServerName.value.trim()) tls.server_name = tlsServerName.value.trim()
+    if (!isEdit.value || hy2AllowInsecureTouched.value) tls.allow_insecure = hy2AllowInsecure.value
+    if (Object.keys(tls).length > 0) payload.tls = tls
+
+    const bandwidth: Hysteria2BandwidthInput = {}
+    if (hy2Up.value !== null && !Number.isNaN(hy2Up.value)) bandwidth.up = hy2Up.value
+    if (hy2Down.value !== null && !Number.isNaN(hy2Down.value)) bandwidth.down = hy2Down.value
+    if (Object.keys(bandwidth).length > 0) payload.bandwidth = bandwidth
+
+    const obfs: Hysteria2ObfsInput = {}
+    if (!isEdit.value || hy2ObfsOpenTouched.value) obfs.open = hy2ObfsOpen.value
+    if (hy2ObfsOpen.value) obfs.type = 'salamander'
+    if (hy2ObfsPassword.value) obfs.password = hy2ObfsPassword.value
+    if (Object.keys(obfs).length > 0) payload.obfs = obfs
+
+    if (hy2HopInterval.value.trim()) payload.hop_interval = hy2HopInterval.value.trim()
+    if (tlsCertificate.value) payload.certificate = tlsCertificate.value
+    if (tlsPrivateKey.value) payload.private_key = tlsPrivateKey.value
+  } else if (protocol.value === 'anytls') {
+    const tls: TLSSettingsInput = {}
+    if (tlsServerName.value.trim()) tls.server_name = tlsServerName.value.trim()
+    if (!isEdit.value || anytlsAllowInsecureTouched.value) tls.allow_insecure = anytlsAllowInsecure.value
+    if (Object.keys(tls).length > 0) payload.tls = tls
+
+    const scheme = parseList(anytlsPaddingScheme.value)
+    if (scheme.length > 0) payload.padding_scheme = scheme
+    if (tlsCertificate.value) payload.certificate = tlsCertificate.value
+    if (tlsPrivateKey.value) payload.private_key = tlsPrivateKey.value
   }
   if (Object.keys(payload).length === 0) return undefined
   return payload
@@ -148,54 +226,97 @@ const validationMessage = computed(() => {
   if (portValue === null || !Number.isInteger(portValue) || portValue < 1 || portValue > 65535) {
     return '端口必须是 1-65535 的整数'
   }
-  if (protocol.value === 'vless') {
+  const rateValue = rate.value
+  if (rateValue === null || Number.isNaN(rateValue) || rateValue <= 0) {
+    return '流量倍率必须是大于 0 的数字'
+  }
+  const tagList = tagsPayload.value
+  if (tagList.length > 20) return '标签最多 20 个'
+  if (tagList.some((tag) => tag.length > 32)) return '每个标签最长 32 个字符'
+
+  if (protocol.value === 'shadowsocks') {
+    if (!SHADOWSOCKS_METHODS.some((method) => method === ssCipher.value)) {
+      return '请选择受支持的加密方式'
+    }
+  } else if (protocol.value === 'vless') {
     if (!isEdit.value && !vlessPrivateKey.value) return '请生成或填写 Reality 私钥'
-    if (!isEdit.value && !vlessServerNames.value.trim()) return '请填写至少一个 Server Name'
+    if (!isEdit.value && !vlessServerName.value.trim()) return '请填写 Reality Server Name'
     if (vlessPrivateKey.value && !/^[A-Za-z0-9_-]{43}$/.test(vlessPrivateKey.value)) {
       return 'Reality 私钥格式不正确'
     }
-    if (vlessShortId.value && !/^(?:[0-9a-fA-F]{2}){1,8}$/.test(vlessShortId.value)) {
-      return 'Short ID 必须是 2-16 位偶数长度十六进制字符'
+    const serverPort = normaliseServerPort(vlessServerPort.value)
+    if (
+      serverPort.present &&
+      (serverPort.value === null || serverPort.value < 1 || serverPort.value > 65535)
+    ) {
+      return 'Reality 端口必须是 1-65535 的整数'
     }
-  } else if (protocol.value === 'hysteria2' || protocol.value === 'anytls') {
-    if (protocol.value === 'hysteria2') {
-      for (const value of [hy2Up.value, hy2Down.value]) {
-        if (value !== null && (!Number.isInteger(value) || value < 0)) {
-          return '带宽必须是非负整数'
-        }
-      }
-      if (hy2ObfsPassword.value.length > 64) return 'obfs 混淆密码最长 64 个字符'
-      const hop = hy2HopPorts.value.trim()
-      if (hop) {
-        const match = /^(\d+)-(\d+)$/.exec(hop)
-        if (!match) return '端口跳跃格式应为 start-end，例如 30000-40000'
-        const start = Number(match[1])
-        const end = Number(match[2])
-        if (start < 1 || end > 65535 || start > end) {
-          return '端口跳跃范围必须在 1-65535 之间且起始端口不大于结束端口'
-        }
+    if (vlessShortId.value && !/^(?:[0-9a-fA-F]{2}){0,8}$/.test(vlessShortId.value)) {
+      return 'Short ID 必须是偶数长度且不超过 16 位的十六进制字符'
+    }
+  } else if (protocol.value === 'hysteria2') {
+    for (const value of [hy2Up.value, hy2Down.value]) {
+      if (value !== null && (!Number.isInteger(value) || value < 0)) {
+        return '带宽必须是非负整数'
       }
     }
-    const tlsLabel = protocolLabel(protocol.value)
-    if (!isEdit.value && !tlsServerName.value.trim()) return `请填写 ${tlsLabel} Server Name`
-    if (!isEdit.value && (!tlsCertificate.value || !tlsPrivateKey.value)) return `请填写 ${tlsLabel} PEM 证书链和私钥`
-    if ((tlsCertificate.value && !tlsPrivateKey.value) || (!tlsCertificate.value && tlsPrivateKey.value)) return '证书链和私钥必须成对提交'
-    if (tlsServerName.value && !/^[A-Za-z0-9.-]+$/.test(tlsServerName.value.trim())) return 'Server Name 格式不正确'
+    if (hy2ObfsPassword.value.length > 64) return 'obfs 混淆密码最长 64 个字符'
+    const hop = hy2HopInterval.value.trim()
+    if (hop) {
+      const match = /^(\d+)-(\d+)$/.exec(hop)
+      if (!match) return '端口跳跃格式应为 start-end，例如 30000-40000'
+      const start = Number(match[1])
+      const end = Number(match[2])
+      if (start < 1 || end > 65535 || start > end) {
+        return '端口跳跃范围必须在 1-65535 之间且起始端口不大于结束端口'
+      }
+    }
+    if (!isEdit.value && !tlsServerName.value.trim()) return '请填写 Hysteria2 Server Name'
+    if (!isEdit.value && (!tlsCertificate.value || !tlsPrivateKey.value)) {
+      return '请填写 Hysteria2 PEM 证书链和私钥'
+    }
+    if ((tlsCertificate.value && !tlsPrivateKey.value) || (!tlsCertificate.value && tlsPrivateKey.value)) {
+      return '证书链和私钥必须成对提交'
+    }
+    if (tlsServerName.value.trim() && !/^[A-Za-z0-9.-]+$/.test(tlsServerName.value.trim())) {
+      return 'Server Name 格式不正确'
+    }
+  } else if (protocol.value === 'anytls') {
+    if (!isEdit.value && !tlsServerName.value.trim()) return '请填写 AnyTLS Server Name'
+    if (!isEdit.value && (!tlsCertificate.value || !tlsPrivateKey.value)) {
+      return '请填写 AnyTLS PEM 证书链和私钥'
+    }
+    if ((tlsCertificate.value && !tlsPrivateKey.value) || (!tlsCertificate.value && tlsPrivateKey.value)) {
+      return '证书链和私钥必须成对提交'
+    }
+    if (tlsServerName.value.trim() && !/^[A-Za-z0-9.-]+$/.test(tlsServerName.value.trim())) {
+      return 'Server Name 格式不正确'
+    }
   }
   return ''
 })
 
 function changeProtocol() {
-  ssMethod.value = SHADOWSOCKS_METHODS[0]
-  ssMethodTouched.value = false
+  ssCipher.value = SHADOWSOCKS_METHODS[0]
+  ssCipherTouched.value = false
   vlessPrivateKey.value = ''
   vlessPublicKey.value = ''
   vlessShortId.value = ''
-  vlessServerNames.value = ''
+  vlessServerName.value = ''
+  vlessServerPort.value = 443
+  vlessAllowInsecure.value = false
+  vlessAllowInsecureTouched.value = false
   hy2Up.value = null
   hy2Down.value = null
+  hy2ObfsOpen.value = false
+  hy2ObfsOpenTouched.value = false
   hy2ObfsPassword.value = ''
-  hy2HopPorts.value = ''
+  hy2HopInterval.value = ''
+  hy2AllowInsecure.value = false
+  hy2AllowInsecureTouched.value = false
+  anytlsPaddingScheme.value = ''
+  anytlsAllowInsecure.value = false
+  anytlsAllowInsecureTouched.value = false
   tlsServerName.value = ''
   tlsCertificate.value = ''
   tlsPrivateKey.value = ''
@@ -230,6 +351,8 @@ async function submit() {
       await updateNode(props.node.id, {
         name: name.value.trim(),
         port: port.value ?? undefined,
+        rate: rate.value ?? undefined,
+        tags: tagsPayload.value,
         settings: settingsPayload.value,
         status: status.value,
       })
@@ -239,6 +362,8 @@ async function submit() {
         name: name.value.trim(),
         protocol: protocol.value,
         port: port.value ?? 0,
+        rate: rate.value ?? undefined,
+        tags: tagsPayload.value,
         settings: settingsPayload.value,
       })
     }
@@ -257,7 +382,7 @@ async function submit() {
     :open="props.open"
     :title="title"
     :subtitle="isEdit ? '修改节点配置，协议不可变更' : '创建入站节点并配置协议参数'"
-    :width="620"
+    :width="640"
     @close="emit('close')"
   >
     <ErrorBanner
@@ -270,7 +395,7 @@ async function submit() {
           <span class="section-index">1</span>
           <div>
             <strong>基础信息</strong>
-            <span>定义节点名称、监听端口和协议类型</span>
+            <span>定义节点名称、监听端口、流量倍率和标签</span>
           </div>
           <small>基本设置</small>
         </div>
@@ -311,9 +436,7 @@ async function submit() {
               placeholder="例如 HK-SS"
             >
           </div>
-          <div
-            class="field port-field"
-          >
+          <div class="field port-field">
             <label for="node-port">端口</label>
             <input
               id="node-port"
@@ -335,6 +458,16 @@ async function submit() {
               @update:model-value="changeProtocol"
             />
           </div>
+          <div class="field rate-field">
+            <label for="node-rate">流量倍率</label>
+            <input
+              id="node-rate"
+              v-model.number="rate"
+              type="number"
+              min="0.01"
+              step="0.1"
+            >
+          </div>
           <div
             v-if="isEdit"
             class="field status-field"
@@ -352,11 +485,21 @@ async function submit() {
             </div>
           </div>
         </div>
+        <div class="field">
+          <label for="node-tags">标签（可选）</label>
+          <input
+            id="node-tags"
+            v-model="tags"
+            type="text"
+            placeholder="逗号分隔，最多 20 个，例如 hk, premium"
+          >
+          <p class="field-hint">
+            用于订阅分组与筛选；单个标签最长 32 个字符。
+          </p>
+        </div>
       </section>
 
-      <section
-        class="form-section"
-      >
+      <section class="form-section">
         <div class="section-heading">
           <span class="section-index">2</span>
           <div>
@@ -365,16 +508,20 @@ async function submit() {
           </div>
           <span class="protocol-badge">{{ protocolLabel(protocol) }}</span>
         </div>
+
         <div
           v-if="protocol === 'shadowsocks'"
           class="settings-box"
         >
+          <div class="section-label">
+            Shadowsocks
+          </div>
           <div class="field method-field">
-            <label for="ss-method">加密方式{{ isEdit ? '（更改后才会提交）' : '' }}</label>
+            <label for="ss-cipher">加密方式{{ isEdit ? '（更改后才会提交）' : '' }}</label>
             <select
-              id="ss-method"
-              v-model="ssMethod"
-              @change="ssMethodTouched = true"
+              id="ss-cipher"
+              v-model="ssCipher"
+              @change="ssCipherTouched = true"
             >
               <option
                 v-for="method in SHADOWSOCKS_METHODS"
@@ -394,6 +541,9 @@ async function submit() {
           v-else-if="protocol === 'vless'"
           class="settings-box"
         >
+          <div class="section-label">
+            Reality
+          </div>
           <div class="reality-actions">
             <div>
               <strong>Reality 密钥</strong>
@@ -428,42 +578,106 @@ async function submit() {
               :placeholder="isEdit ? '留空保持不变' : '点击一键生成或手工填写'"
             >
           </div>
-          <div class="form-row vless-fields">
+          <div class="form-row">
             <div class="field">
-              <label for="vless-short-id">Short ID</label>
+              <label for="vless-server-name">Server Name{{ isEdit ? '（留空保持不变）' : '' }}</label>
               <input
-                id="vless-short-id"
-                v-model="vlessShortId"
+                id="vless-server-name"
+                v-model="vlessServerName"
                 type="text"
-                placeholder="例如 0123456789abcdef"
+                placeholder="例如 www.example.com"
               >
             </div>
-            <div class="field">
-              <label for="vless-names">Server Names{{ isEdit ? '（留空保持不变）' : '' }}</label>
+            <div class="field port-field">
+              <label for="vless-server-port">握手端口{{ isEdit ? '（留空保持不变）' : '' }}</label>
               <input
-                id="vless-names"
-                v-model="vlessServerNames"
-                type="text"
-                placeholder="例如 example.com,www.example.com"
+                id="vless-server-port"
+                v-model.number="vlessServerPort"
+                type="number"
+                min="1"
+                max="65535"
+                :placeholder="isEdit ? '留空保持不变（默认 443）' : '443'"
               >
             </div>
           </div>
-          <p class="field-hint vless-hint">
-            Server Name 用逗号分隔；Short ID 为可选的 2–16 位偶数长度十六进制字符。
+          <div class="field">
+            <label for="vless-short-id">Short ID</label>
+            <input
+              id="vless-short-id"
+              v-model="vlessShortId"
+              type="text"
+              placeholder="例如 0123456789abcdef（≤16 位偶数长度十六进制）"
+            >
+          </div>
+          <div class="toggle-row">
+            <div class="toggle-row-text">
+              <span class="toggle-row-label">允许不安全（allow_insecure）</span>
+              <span class="toggle-row-desc">仅测试环境使用，生产环境请保持关闭</span>
+            </div>
+            <ToggleSwitch
+              v-model="vlessAllowInsecure"
+              label="允许不安全"
+              @update:model-value="vlessAllowInsecureTouched = true"
+            />
+          </div>
+          <p class="field-hint">
+            Server Name 为 Reality 伪装目标；公钥由私钥自动派生，无需填写。
           </p>
         </div>
 
         <div
-          v-else-if="protocol === 'hysteria2' || protocol === 'anytls'"
+          v-else-if="protocol === 'hysteria2'"
           class="settings-box"
         >
-          <p class="protocol-note">
-            用户 UUID 直接作为认证凭据{{ protocol === 'hysteria2' ? '；带宽留空表示不限制' : '' }}。
+          <div class="section-label">
+            Hysteria2 · TLS
+          </div>
+          <div class="form-row">
+            <div class="field">
+              <label for="hy2-server-name">TLS Server Name{{ isEdit ? '（留空保持不变）' : '' }}</label>
+              <input
+                id="hy2-server-name"
+                v-model="tlsServerName"
+                type="text"
+                placeholder="例如 tls.example.com"
+              >
+            </div>
+            <div class="field port-field">
+              <label for="hy2-version">协议版本</label>
+              <input
+                id="hy2-version"
+                :value="2"
+                type="text"
+                disabled
+              >
+            </div>
+          </div>
+          <div class="field">
+            <label for="hy2-certificate">PEM 证书链{{ isEdit ? '（留空保持不变）' : '' }}</label>
+            <textarea
+              id="hy2-certificate"
+              v-model="tlsCertificate"
+              rows="5"
+              :placeholder="isEdit ? '留空保持不变' : '-----BEGIN CERTIFICATE-----'"
+            />
+          </div>
+          <div class="field">
+            <label for="hy2-private-key">PEM 私钥{{ isEdit ? '（留空保持不变）' : '' }}</label>
+            <textarea
+              id="hy2-private-key"
+              v-model="tlsPrivateKey"
+              rows="5"
+              :placeholder="isEdit ? '留空保持不变' : '-----BEGIN PRIVATE KEY-----'"
+            />
+          </div>
+          <p class="field-hint">
+            证书和私钥会加密保存，并由 Panel 以内联 TLS 配置下发 Agent；编辑时两个字段必须一起替换。
           </p>
-          <div
-            v-if="protocol === 'hysteria2'"
-            class="form-row"
-          >
+
+          <div class="section-label">
+            Hysteria2 · 带宽与混淆
+          </div>
+          <div class="form-row">
             <div class="field">
               <label for="hy2-up">上行带宽（Mbps）</label>
               <input
@@ -471,7 +685,7 @@ async function submit() {
                 v-model.number="hy2Up"
                 type="number"
                 min="0"
-                placeholder="选填"
+                placeholder="选填，留空表示不限制"
               >
             </div>
             <div class="field">
@@ -481,73 +695,123 @@ async function submit() {
                 v-model.number="hy2Down"
                 type="number"
                 min="0"
-                placeholder="选填"
+                placeholder="选填，留空表示不限制"
               >
             </div>
           </div>
+          <div class="toggle-row">
+            <div class="toggle-row-text">
+              <span class="toggle-row-label">启用 Salamander 混淆</span>
+              <span class="toggle-row-desc">客户端需同步填写相同的混淆密码</span>
+            </div>
+            <ToggleSwitch
+              v-model="hy2ObfsOpen"
+              label="启用混淆"
+              @update:model-value="hy2ObfsOpenTouched = true"
+            />
+          </div>
           <div class="form-row">
             <div class="field">
-              <label for="tls-server-name">TLS Server Name{{ isEdit ? '（留空保持不变）' : '' }}</label>
+              <label for="hy2-obfs-type">混淆类型</label>
               <input
-                id="tls-server-name"
-                v-model="tlsServerName"
+                id="hy2-obfs-type"
+                :value="'salamander'"
                 type="text"
-                placeholder="例如 tls.example.com"
+                disabled
+              >
+            </div>
+            <div class="field">
+              <label for="hy2-obfs-password">obfs 混淆密码{{ isEdit ? '（留空保持不变）' : '' }}</label>
+              <input
+                id="hy2-obfs-password"
+                v-model="hy2ObfsPassword"
+                type="text"
+                placeholder="选填，最长 64 字符"
               >
             </div>
           </div>
           <div class="field">
-            <label for="tls-certificate">PEM 证书链{{ isEdit ? '（留空保持不变）' : '' }}</label>
+            <label for="hy2-hop-interval">端口跳跃 hop_interval{{ isEdit ? '（留空保持不变）' : '' }}</label>
+            <input
+              id="hy2-hop-interval"
+              v-model="hy2HopInterval"
+              type="text"
+              placeholder="选填，如 30000-40000"
+            >
+          </div>
+          <p class="field-hint hop-warning">
+            端口跳跃仅影响订阅客户端，需在服务器上自行配置 NAT 端口转发，否则客户端无法连通。
+          </p>
+          <div class="toggle-row">
+            <div class="toggle-row-text">
+              <span class="toggle-row-label">允许不安全（allow_insecure）</span>
+              <span class="toggle-row-desc">仅测试环境使用，生产环境请保持关闭</span>
+            </div>
+            <ToggleSwitch
+              v-model="hy2AllowInsecure"
+              label="允许不安全"
+              @update:model-value="hy2AllowInsecureTouched = true"
+            />
+          </div>
+        </div>
+
+        <div
+          v-else-if="protocol === 'anytls'"
+          class="settings-box"
+        >
+          <div class="section-label">
+            AnyTLS · TLS
+          </div>
+          <div class="field">
+            <label for="anytls-server-name">TLS Server Name{{ isEdit ? '（留空保持不变）' : '' }}</label>
+            <input
+              id="anytls-server-name"
+              v-model="tlsServerName"
+              type="text"
+              placeholder="例如 tls.example.com"
+            >
+          </div>
+          <div class="field">
+            <label for="anytls-certificate">PEM 证书链{{ isEdit ? '（留空保持不变）' : '' }}</label>
             <textarea
-              id="tls-certificate"
+              id="anytls-certificate"
               v-model="tlsCertificate"
               rows="5"
               :placeholder="isEdit ? '留空保持不变' : '-----BEGIN CERTIFICATE-----'"
             />
           </div>
           <div class="field">
-            <label for="tls-private-key">PEM 私钥{{ isEdit ? '（留空保持不变）' : '' }}</label>
+            <label for="anytls-private-key">PEM 私钥{{ isEdit ? '（留空保持不变）' : '' }}</label>
             <textarea
-              id="tls-private-key"
+              id="anytls-private-key"
               v-model="tlsPrivateKey"
               rows="5"
               :placeholder="isEdit ? '留空保持不变' : '-----BEGIN PRIVATE KEY-----'"
             />
           </div>
-          <p class="field-hint">
-            证书和私钥会加密保存，并由 Panel 以内联 TLS 配置下发 Agent；编辑时两个字段必须一起替换。
-          </p>
-          <template v-if="protocol === 'hysteria2'">
-            <div class="form-row">
-              <div class="field">
-                <label for="hy2-obfs-password">obfs 混淆密码{{ isEdit ? '（留空保持不变）' : '' }}</label>
-                <input
-                  id="hy2-obfs-password"
-                  v-model="hy2ObfsPassword"
-                  type="text"
-                  placeholder="选填，最长 64 字符"
-                >
-              </div>
-              <div class="field">
-                <label for="hy2-hop-ports">端口跳跃{{ isEdit ? '（留空保持不变）' : '' }}</label>
-                <input
-                  id="hy2-hop-ports"
-                  v-model="hy2HopPorts"
-                  type="text"
-                  placeholder="选填，如 30000-40000"
-                >
-              </div>
+          <div class="toggle-row">
+            <div class="toggle-row-text">
+              <span class="toggle-row-label">允许不安全（allow_insecure）</span>
+              <span class="toggle-row-desc">仅测试环境使用，生产环境请保持关闭</span>
             </div>
-            <p class="field-hint">
-              启用 obfs 后使用 Salamander 混淆，客户端需同步填写相同密码。
-            </p>
-            <p class="field-hint hop-warning">
-              端口跳跃仅影响订阅客户端，需在服务器上自行配置 NAT 端口转发，否则客户端无法连通。
-            </p>
-            <p class="field-hint">
-              留空表示不限制带宽，单位为 Mbps。
-            </p>
-          </template>
+            <ToggleSwitch
+              v-model="anytlsAllowInsecure"
+              label="允许不安全"
+              @update:model-value="anytlsAllowInsecureTouched = true"
+            />
+          </div>
+          <div class="field">
+            <label for="anytls-padding">padding_scheme（可选）</label>
+            <textarea
+              id="anytls-padding"
+              v-model="anytlsPaddingScheme"
+              rows="1"
+              placeholder="每行或逗号分隔一个填充方案，留空使用默认"
+            />
+          </div>
+          <p class="field-hint">
+            用户 UUID 直接作为认证凭据；证书和私钥必须成对替换。
+          </p>
         </div>
       </section>
 
@@ -638,6 +902,14 @@ async function submit() {
   font-size: var(--font-size-sm);
 }
 
+.section-label {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .protocol-badge {
   flex: none;
   padding: 3px 8px;
@@ -697,7 +969,8 @@ async function submit() {
 }
 
 .port-field,
-.status-field {
+.status-field,
+.rate-field {
   flex: 0 1 140px !important;
 }
 
@@ -722,10 +995,6 @@ async function submit() {
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
   line-height: 1.5;
-}
-
-.vless-hint {
-  margin-top: calc(var(--spacing-xs) * -1);
 }
 
 .hop-warning {
@@ -755,6 +1024,7 @@ async function submit() {
 
   .port-field,
   .status-field,
+  .rate-field,
   .method-field {
     flex-basis: auto !important;
     max-width: none;

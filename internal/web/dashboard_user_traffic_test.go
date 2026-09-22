@@ -24,10 +24,10 @@ func seedUserTraffic(t *testing.T, e *testEnv) (user1, user2, user3 int64) {
 
 	todayStart := time.Now().UTC().Truncate(24 * time.Hour)
 	if err := e.repo.InsertTrafficRecords(ctx, []repo.NewTrafficRecord{
-		{UserID: user1, NodeID: node1, ServerID: server1, UploadBytes: 100, DownloadBytes: 200, CreatedAt: todayStart.Add(time.Hour)},
-		{UserID: user1, NodeID: node2, ServerID: server1, UploadBytes: 7, DownloadBytes: 8, CreatedAt: todayStart.Add(2 * time.Hour)},
-		{UserID: user1, NodeID: node1, ServerID: server1, UploadBytes: 50, DownloadBytes: 50, CreatedAt: todayStart.Add(-time.Hour)},
-		{UserID: user2, NodeID: node2, ServerID: server1, UploadBytes: 10, DownloadBytes: 20, CreatedAt: todayStart.Add(3 * time.Hour)},
+		{UserID: user1, NodeID: node1, ServerID: server1, U: 100, D: 200, CreatedAt: todayStart.Add(time.Hour)},
+		{UserID: user1, NodeID: node2, ServerID: server1, U: 7, D: 8, CreatedAt: todayStart.Add(2 * time.Hour)},
+		{UserID: user1, NodeID: node1, ServerID: server1, U: 50, D: 50, CreatedAt: todayStart.Add(-time.Hour)},
+		{UserID: user2, NodeID: node2, ServerID: server1, U: 10, D: 20, CreatedAt: todayStart.Add(3 * time.Hour)},
 	}); err != nil {
 		t.Fatalf("insert traffic: %v", err)
 	}
@@ -82,8 +82,8 @@ func TestDashboardUserTrafficToday(t *testing.T) {
 		first["upload_bytes"].(float64) != 107 || first["download_bytes"].(float64) != 208 {
 		t.Fatalf("today must only count today's records and sort by total desc: %s", body)
 	}
-	if first["quota_bytes"].(float64) != 1000 {
-		t.Fatalf("quota_bytes must always be returned: %s", body)
+	if first["transfer_enable"].(float64) != 1000 {
+		t.Fatalf("transfer_enable must always be returned: %s", body)
 	}
 	nodes := first["nodes"].([]any)
 	if len(nodes) != 2 {

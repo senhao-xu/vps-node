@@ -2,7 +2,6 @@ export type UserStatus = 'active' | 'disabled' | 'expired'
 export type ServerStatus = 'active' | 'disabled' | 'offline'
 export type NodeStatus = 'active' | 'disabled'
 export type Protocol = 'shadowsocks' | 'vless' | 'hysteria2' | 'anytls'
-export type ConnectionLogStatus = 'active' | 'closed'
 export type TrafficBucket = 'hour' | 'day'
 export type UserExpiryFilter = 'valid' | 'expired'
 
@@ -23,12 +22,17 @@ export type User = {
   uuid: string
   username: string
   status: UserStatus
-  quota_bytes: number
+  transfer_enable: number
+  u: number
+  d: number
   used_bytes: number
+  speed_limit: number
+  device_limit: number
+  online_count: number
+  last_online_at: string | null
   started_at: string | null
   expires_at: string | null
   node_count: number
-  session_count: number
   created_at: string
 }
 
@@ -48,6 +52,8 @@ export type NodeBrief = {
   name: string
   protocol: Protocol
   port: number
+  rate: number
+  tags: string[]
   status: NodeStatus
   created_at: string
   server: NodeRef
@@ -69,28 +75,36 @@ export type UserNodes = {
   nodes: NodeBrief[]
 }
 
-export type Session = {
+export type OnlineDevice = {
   node_id: number
   server_id: number
   ip: string
-  upload_bytes: number
-  download_bytes: number
-  connected_at: string
+  online: number
   last_seen_at: string
 }
 
-export type ConnectionLog = {
+export type OnlineDevices = {
+  items: OnlineDevice[]
+}
+
+export type Visit = {
   id: number
   user_id: number
+  username: string
   node_id: number
+  node_name: string
   server_id: number
-  ip: string
-  protocol: Protocol
-  upload_bytes: number
-  download_bytes: number
-  connected_at: string
-  closed_at: string | null
-  status: ConnectionLogStatus
+  server_name: string
+  dest_host: string
+  dest_port: number
+  network: string
+  client_ip: string
+  created_at: string
+}
+
+export type TopHost = {
+  dest_host: string
+  hits: number
 }
 
 export type TrafficPoint = {
@@ -140,7 +154,7 @@ export type Dashboard = {
   servers_total: number
   servers_online: number
   traffic_today_bytes: number
-  sessions_current: number
+  devices_current: number
 }
 
 export type DashboardUserTrafficRange = 'today' | 'total'
@@ -159,7 +173,7 @@ export type DashboardUserTrafficItem = {
   user_id: number
   username: string
   status: UserStatus
-  quota_bytes: number
+  transfer_enable: number
   upload_bytes: number
   download_bytes: number
   total_bytes: number
@@ -172,10 +186,10 @@ export type DashboardUserTraffic = {
 }
 
 export type Settings = {
-  retention_raw_log_days: number
   retention_aggregate_days: number
-  collection_connection_logs: boolean
-  session_freshness_seconds: number
+  retention_visit_days: number
+  retention_visit_aggregate_days: number
+  collection_visits: boolean
   server_offline_after_seconds: number
   subscribe_urls: string
   subscribe_path: string
@@ -195,17 +209,74 @@ export type AgentTokenResult = {
   expires_hint: null
 }
 
-export type NodeSettingsInput = Record<string, unknown>
-
 export type RealityKeypair = {
   private_key: string
   public_key: string
   short_id: string
 }
 
+export type RealitySettingsInput = {
+  server_name?: string
+  server_port?: number
+  public_key?: string
+  short_id?: string
+  allow_insecure?: boolean
+}
+
+export type TLSSettingsInput = {
+  server_name?: string
+  allow_insecure?: boolean
+}
+
+export type Hysteria2BandwidthInput = {
+  up?: number
+  down?: number
+}
+
+export type Hysteria2ObfsInput = {
+  open?: boolean
+  type?: string
+  password?: string
+}
+
+/**
+ * Xboard-style nested `protocol_settings` payload. The shape is a superset of the
+ * per-protocol sections so the form can build one typed object; the panel validates
+ * the resulting object against the protocol-specific allowlist.
+ */
+export type NodeSettingsInput = {
+  // shadowsocks
+  cipher?: string
+  obfs?: string | Hysteria2ObfsInput
+  obfs_settings?: Record<string, unknown>
+  plugin?: string
+  plugin_opts?: string
+  // vless
+  tls?: number | TLSSettingsInput
+  tls_settings?: Record<string, unknown>
+  reality_settings?: RealitySettingsInput
+  flow?: string
+  network?: string
+  network_settings?: Record<string, unknown>
+  multiplex?: Record<string, unknown>
+  utls?: Record<string, unknown>
+  // hysteria2
+  version?: number
+  bandwidth?: Hysteria2BandwidthInput
+  hop_interval?: string
+  // anytls
+  padding_scheme?: string | string[]
+  // shared encrypted material / optional password
+  password?: string
+  certificate?: string
+  private_key?: string
+}
+
 export type CreateUserInput = {
   username: string
-  quota_bytes?: number
+  transfer_enable?: number
+  speed_limit?: number
+  device_limit?: number
   started_at?: string | null
   expires_at?: string | null
   node_ids?: number[]
@@ -214,7 +285,9 @@ export type CreateUserInput = {
 export type UpdateUserInput = {
   status?: UserStatus
   username?: string
-  quota_bytes?: number
+  transfer_enable?: number
+  speed_limit?: number
+  device_limit?: number
   started_at?: string | null
   expires_at?: string | null
 }
@@ -235,12 +308,16 @@ export type CreateNodeInput = {
   name: string
   protocol: Protocol
   port: number
+  rate?: number
+  tags?: string[]
   settings?: NodeSettingsInput
 }
 
 export type UpdateNodeInput = {
   name?: string
   port?: number
+  rate?: number
+  tags?: string[]
   settings?: NodeSettingsInput
   status?: NodeStatus
 }

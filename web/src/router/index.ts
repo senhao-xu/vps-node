@@ -56,6 +56,12 @@ export const router = createRouter({
       meta: { title: '服务器详情', parentTitle: '服务器', parentPath: '/servers' },
     },
     {
+      path: '/visits',
+      name: 'visits',
+      component: () => import('@/pages/VisitsPage.vue'),
+      meta: { title: '访问记录' },
+    },
+    {
       path: '/settings',
       name: 'settings',
       component: () => import('@/pages/SettingsPage.vue'),

@@ -12,6 +12,7 @@ import (
 	"vps-node/internal/agentruntime"
 	"vps-node/internal/agentstate"
 	"vps-node/internal/config"
+	kernelsingbox "vps-node/internal/kernel/singbox"
 	"vps-node/internal/logx"
 )
 
@@ -61,15 +62,12 @@ func run() error {
 		return err
 	}
 
-	reload, err := agentruntime.ParseReloadCommand(cfg.SingBox.ReloadCommand)
-	if err != nil {
-		return err
-	}
-	if cfg.SingBox.ReloadCommand == "" {
-		logger.Warn("no singbox.reload_command configured; applied configs will not restart sing-box automatically")
-	}
-
-	applier := agentruntime.NewApplier(cfg.SingBox.ConfigPath, agentruntime.NewSingBoxChecker(cfg.SingBox.CheckBin), reload, logger)
+	kernel := kernelsingbox.NewRuntime()
+	defer func() {
+		if err := kernel.Stop(); err != nil {
+			logger.Warn("stopping embedded sing-box failed", "error", err)
+		}
+	}()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -77,14 +75,11 @@ func run() error {
 	logger.Info("agent starting",
 		"panel_url", cfg.PanelURL,
 		"state_path", cfg.StatePath,
-		"singbox_config", cfg.SingBox.ConfigPath,
 		"heartbeat_interval", cfg.HeartbeatInterval.String(),
 		"sync_interval", cfg.SyncInterval.String(),
 		"traffic_interval", cfg.TrafficInterval.String(),
 		"collection", map[string]bool{
-			"traffic":         cfg.Collection.Traffic,
-			"sessions":        cfg.Collection.Sessions,
-			"connection_logs": cfg.Collection.ConnectionLogs,
+			"traffic": cfg.Collection.Traffic,
 		})
 
 	loop := agentruntime.NewLoop(agentruntime.LoopOptions{
@@ -92,7 +87,7 @@ func run() error {
 		Client:    client,
 		State:     state,
 		StatePath: cfg.StatePath,
-		Applier:   applier,
+		Kernel:    kernel,
 		Metrics:   agentruntime.NewMetricsCollector(),
 		Logger:    logger,
 		Version:   agentVersion,

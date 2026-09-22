@@ -102,47 +102,53 @@ func renderURI(appKey []byte, userUUID string, n Node) (string, error) {
 	name := url.PathEscape(n.Name)
 	switch n.Protocol {
 	case singbox.ProtocolShadowsocks:
-		method := singbox.SettingString(n.Settings, "method")
-		password, err := singbox.DeriveSSPassword(appKey, n.ID, userUUID, method)
+		cipher := singbox.SettingString(n.Settings, "cipher")
+		password, err := ssClientPassword(appKey, n, userUUID, cipher)
 		if err != nil {
 			return "", err
 		}
-		credential := base64.RawURLEncoding.EncodeToString([]byte(method + ":" + password))
+		credential := base64.RawURLEncoding.EncodeToString([]byte(cipher + ":" + password))
 		return "ss://" + credential + "@" + host + "#" + name, nil
 	case singbox.ProtocolVLESS:
-		privateRaw, err := base64.RawURLEncoding.DecodeString(singbox.SettingString(n.Secret, "private_key"))
-		if err != nil {
-			return "", fmt.Errorf("derive reality key: %w", err)
-		}
-		privateKey, err := ecdh.X25519().NewPrivateKey(privateRaw)
-		if err != nil {
-			return "", fmt.Errorf("derive reality key: %w", err)
-		}
-		names := settingStrings(n.Settings, "server_names")
-		if len(names) == 0 {
+		reality := singbox.SettingMap(n.Settings, "reality_settings")
+		serverName := singbox.SettingString(reality, "server_name")
+		if serverName == "" {
 			return "", fmt.Errorf("vless node %d has no server name", n.ID)
 		}
-		q := url.Values{"security": {"reality"}, "encryption": {"none"}, "flow": {"xtls-rprx-vision"}, "sni": {names[0]}, "pbk": {base64.RawURLEncoding.EncodeToString(privateKey.PublicKey().Bytes())}, "type": {"tcp"}}
-		if sid := singbox.SettingString(n.Settings, "short_id"); sid != "" {
+		publicKey := singbox.SettingString(reality, "public_key")
+		if publicKey == "" {
+			privateRaw, err := base64.RawURLEncoding.DecodeString(singbox.SettingString(n.Secret, "private_key"))
+			if err != nil {
+				return "", fmt.Errorf("derive reality key: %w", err)
+			}
+			privateKey, err := ecdh.X25519().NewPrivateKey(privateRaw)
+			if err != nil {
+				return "", fmt.Errorf("derive reality key: %w", err)
+			}
+			publicKey = base64.RawURLEncoding.EncodeToString(privateKey.PublicKey().Bytes())
+		}
+		q := url.Values{"security": {"reality"}, "encryption": {"none"}, "flow": {"xtls-rprx-vision"}, "sni": {serverName}, "pbk": {publicKey}, "type": {"tcp"}}
+		if sid := singbox.SettingString(reality, "short_id"); sid != "" {
 			q.Set("sid", sid)
 		}
 		return "vless://" + url.PathEscape(userUUID) + "@" + host + "?" + q.Encode() + "#" + name, nil
 	case singbox.ProtocolHysteria2:
-		serverName := singbox.SettingString(n.Settings, "server_name")
+		serverName := singbox.SettingString(singbox.SettingMap(n.Settings, "tls"), "server_name")
 		if serverName == "" {
 			return "", fmt.Errorf("hysteria2 node %d has no server name", n.ID)
 		}
 		q := url.Values{"sni": {serverName}}
-		if obfsPassword := singbox.SettingString(n.Settings, "obfs_password"); obfsPassword != "" {
+		obfs := singbox.SettingMap(n.Settings, "obfs")
+		if obfsPassword := singbox.SettingString(obfs, "password"); obfsPassword != "" && obfsEnabled(obfs) {
 			q.Set("obfs", "salamander")
 			q.Set("obfs-password", obfsPassword)
 		}
-		if hopPorts := singbox.SettingString(n.Settings, "hop_ports"); hopPorts != "" {
+		if hopPorts := singbox.SettingString(n.Settings, "hop_interval"); hopPorts != "" {
 			q.Set("mport", hopPorts)
 		}
 		return "hysteria2://" + url.PathEscape(userUUID) + "@" + host + "?" + q.Encode() + "#" + name, nil
 	case singbox.ProtocolAnyTLS:
-		serverName := singbox.SettingString(n.Settings, "server_name")
+		serverName := singbox.SettingString(singbox.SettingMap(n.Settings, "tls"), "server_name")
 		if serverName == "" {
 			return "", fmt.Errorf("anytls node %d has no server name", n.ID)
 		}
@@ -239,40 +245,46 @@ func renderProxy(appKey []byte, userUUID string, n Node) (map[string]any, error)
 	p := map[string]any{"name": n.Name, "server": n.Address, "port": n.Port, "type": n.Protocol}
 	switch n.Protocol {
 	case singbox.ProtocolShadowsocks:
-		method := singbox.SettingString(n.Settings, "method")
-		password, err := singbox.DeriveSSPassword(appKey, n.ID, userUUID, method)
+		cipher := singbox.SettingString(n.Settings, "cipher")
+		password, err := ssClientPassword(appKey, n, userUUID, cipher)
 		if err != nil {
 			return nil, err
 		}
-		p["cipher"], p["password"], p["udp"] = method, password, true
+		p["cipher"], p["password"], p["udp"] = cipher, password, true
 	case singbox.ProtocolVLESS:
-		raw, err := base64.RawURLEncoding.DecodeString(singbox.SettingString(n.Secret, "private_key"))
-		if err != nil {
-			return nil, err
-		}
-		key, err := ecdh.X25519().NewPrivateKey(raw)
-		if err != nil {
-			return nil, err
-		}
-		names := settingStrings(n.Settings, "server_names")
-		if len(names) == 0 {
+		reality := singbox.SettingMap(n.Settings, "reality_settings")
+		serverName := singbox.SettingString(reality, "server_name")
+		if serverName == "" {
 			return nil, fmt.Errorf("vless node %d has no server name", n.ID)
 		}
+		publicKey := singbox.SettingString(reality, "public_key")
+		if publicKey == "" {
+			raw, err := base64.RawURLEncoding.DecodeString(singbox.SettingString(n.Secret, "private_key"))
+			if err != nil {
+				return nil, err
+			}
+			key, err := ecdh.X25519().NewPrivateKey(raw)
+			if err != nil {
+				return nil, err
+			}
+			publicKey = base64.RawURLEncoding.EncodeToString(key.PublicKey().Bytes())
+		}
 		p["uuid"], p["flow"], p["network"], p["tls"] = userUUID, "xtls-rprx-vision", "tcp", true
-		p["servername"], p["client-fingerprint"] = names[0], "chrome"
-		p["reality-opts"] = map[string]any{"public-key": base64.RawURLEncoding.EncodeToString(key.PublicKey().Bytes()), "short-id": singbox.SettingString(n.Settings, "short_id")}
+		p["servername"], p["client-fingerprint"] = serverName, "chrome"
+		p["reality-opts"] = map[string]any{"public-key": publicKey, "short-id": singbox.SettingString(reality, "short_id")}
 	case singbox.ProtocolHysteria2:
-		p["password"], p["sni"] = userUUID, singbox.SettingString(n.Settings, "server_name")
+		p["password"], p["sni"] = userUUID, singbox.SettingString(singbox.SettingMap(n.Settings, "tls"), "server_name")
 		p["skip-cert-verify"] = false
-		if obfsPassword := singbox.SettingString(n.Settings, "obfs_password"); obfsPassword != "" {
+		obfs := singbox.SettingMap(n.Settings, "obfs")
+		if obfsPassword := singbox.SettingString(obfs, "password"); obfsPassword != "" && obfsEnabled(obfs) {
 			p["obfs"] = "salamander"
 			p["obfs-password"] = obfsPassword
 		}
-		if hopPorts := singbox.SettingString(n.Settings, "hop_ports"); hopPorts != "" {
+		if hopPorts := singbox.SettingString(n.Settings, "hop_interval"); hopPorts != "" {
 			p["ports"] = hopPorts
 		}
 	case singbox.ProtocolAnyTLS:
-		serverName := singbox.SettingString(n.Settings, "server_name")
+		serverName := singbox.SettingString(singbox.SettingMap(n.Settings, "tls"), "server_name")
 		if serverName == "" {
 			return nil, fmt.Errorf("anytls node %d has no server name", n.ID)
 		}
@@ -283,6 +295,37 @@ func renderProxy(appKey []byte, userUUID string, n Node) (map[string]any, error)
 		return nil, fmt.Errorf("unsupported protocol %q", n.Protocol)
 	}
 	return p, nil
+}
+
+func ssClientPassword(appKey []byte, n Node, userUUID, cipher string) (string, error) {
+	userKey, err := singbox.DeriveSSPassword(appKey, n.ID, userUUID, cipher)
+	if err != nil {
+		return "", err
+	}
+	if !singbox.IsSS2022(cipher) {
+		return combineSSClientPassword(cipher, "", userKey), nil
+	}
+	serverKey := singbox.SettingString(n.Secret, "password")
+	if serverKey == "" {
+		if serverKey, err = singbox.DeriveSSServerPassword(appKey, n.ID, cipher); err != nil {
+			return "", err
+		}
+	}
+	return combineSSClientPassword(cipher, serverKey, userKey), nil
+}
+
+func combineSSClientPassword(cipher, serverKey, userKey string) string {
+	if !singbox.IsSS2022(cipher) {
+		return userKey
+	}
+	return serverKey + ":" + userKey
+}
+
+func obfsEnabled(obfs map[string]any) bool {
+	if v, ok := obfs["open"].(bool); ok {
+		return v
+	}
+	return true
 }
 
 func expandGroups(config map[string]any, names map[string][]string, validating bool) ([]any, error) {
@@ -343,21 +386,4 @@ func expandGroups(config map[string]any, names map[string][]string, validating b
 		group["proxies"] = expanded
 	}
 	return groups, nil
-}
-
-func settingStrings(m map[string]any, key string) []string {
-	switch value := m[key].(type) {
-	case []string:
-		return value
-	case []any:
-		out := []string{}
-		for _, item := range value {
-			s, ok := item.(string)
-			if ok {
-				out = append(out, s)
-			}
-		}
-		return out
-	}
-	return nil
 }

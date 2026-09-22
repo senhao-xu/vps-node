@@ -23,6 +23,7 @@ const props = withDefaults(
     sortDir?: 'asc' | 'desc'
     skeletonRows?: number
     totalCount?: number
+    bordered?: boolean
   }>(),
   {
     loading: false,
@@ -32,6 +33,7 @@ const props = withDefaults(
     sortDir: undefined,
     skeletonRows: 5,
     totalCount: undefined,
+    bordered: true,
   },
 )
 
@@ -45,7 +47,6 @@ defineSlots<{
   [K in `cell-${string}`]?: (props: { row: T; index: number }) => unknown
 } & {
   empty?: () => unknown
-  toolbar?: () => unknown
   'row-extra'?: (props: { row: T; index: number; colspan: number }) => unknown
 }>()
 
@@ -61,9 +62,7 @@ const someSelected = computed(
 )
 
 const total = computed(() => props.totalCount ?? props.rows.length)
-const showFooter = computed(
-  () => props.selectable || (props.totalCount !== undefined && props.totalCount > 0),
-)
+const showFooter = computed(() => props.selectable)
 
 function toggleAll(checked: boolean) {
   const next = new Set(props.selected)
@@ -98,12 +97,9 @@ function display(value: unknown): string {
 
 <template>
   <div
-    v-if="$slots.toolbar"
-    class="table-toolbar"
+    class="table-box"
+    :class="{ plain: !props.bordered }"
   >
-    <slot name="toolbar" />
-  </div>
-  <div class="table-wrap">
     <table class="data-table">
       <thead>
         <tr>
@@ -237,24 +233,21 @@ function display(value: unknown): string {
     v-if="showFooter"
     class="table-footer"
   >
-    <span v-if="props.selectable">已选择 {{ props.selected.length }} 项，共 {{ total }} 项</span>
-    <span v-else>共 {{ total }} 项</span>
+    已选择 {{ props.selected.length }} 项，共 {{ total }} 项
   </div>
 </template>
 
 <style scoped>
-.table-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--spacing-sm);
-  margin-bottom: var(--spacing-md);
+.table-box {
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  scrollbar-color: var(--color-border-strong) transparent;
 }
 
-.table-wrap {
-  overflow-x: auto;
-  margin-inline: calc(-1 * var(--card-padding, var(--spacing-lg)));
-  scrollbar-color: var(--color-border-strong) transparent;
+.table-box.plain {
+  border: none;
+  border-radius: 0;
 }
 
 .data-table {
@@ -266,40 +259,31 @@ function display(value: unknown): string {
 
 .data-table th,
 .data-table td {
-  padding: 14px var(--spacing-md);
   text-align: left;
   border-bottom: 1px solid var(--color-border);
   vertical-align: middle;
 }
 
-.data-table th:first-child,
-.data-table td:first-child {
-  padding-left: var(--card-padding, var(--spacing-lg));
-}
-
-.data-table th:last-child,
-.data-table td:last-child {
-  padding-right: var(--card-padding, var(--spacing-lg));
-}
-
 .data-table th {
-  font-weight: 600;
+  height: 40px;
+  padding: 0 12px;
+  font-weight: 500;
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
   white-space: nowrap;
-  background: var(--color-surface-muted);
-  position: sticky;
-  top: 0;
-  z-index: 1;
   letter-spacing: 0.02em;
 }
 
+.data-table td {
+  padding: 8px 12px;
+}
+
 .data-table tbody tr:hover {
-  background: var(--color-table-hover);
+  background: var(--color-muted-soft);
 }
 
 .data-table tbody tr.selected {
-  background: var(--color-primary-soft);
+  background: var(--color-muted-soft);
 }
 
 .data-table tbody tr:last-child td {

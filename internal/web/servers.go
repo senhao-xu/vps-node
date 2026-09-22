@@ -37,7 +37,7 @@ func (h *Handler) handleServerList(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	onlineUsers, err := h.repo.CountFreshUsersByServerIDs(r.Context(), ids, now.Add(-h.sessionFreshness(r.Context())))
+	onlineUsers, err := h.repo.CountOnlineUsersByServerIDs(r.Context(), ids)
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -129,7 +129,7 @@ func (h *Handler) handleServerGet(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	onlineUsers, err := h.repo.CountFreshUsersByServerIDs(r.Context(), []int64{id}, time.Now().Add(-h.sessionFreshness(r.Context())))
+	onlineUsers, err := h.repo.CountOnlineUsersByServerIDs(r.Context(), []int64{id})
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -143,6 +143,38 @@ func (h *Handler) handleServerGet(w http.ResponseWriter, r *http.Request) {
 	}
 	dto.Status = effectiveServerStatus(s, offlineAfter, time.Now())
 	httpx.WriteJSON(w, http.StatusOK, dto)
+}
+
+func (h *Handler) handleServerVisits(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	if _, err := h.repo.GetServer(r.Context(), id); err != nil {
+		writeErr(w, err)
+		return
+	}
+	page, err := parsePageQuery(r)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	filter, err := visitFilterFromQuery(r)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	filter.ServerID = id
+	filter.Page = page.Page
+	filter.PageSize = page.PageSize
+
+	visits, total, err := h.repo.ListVisits(r.Context(), filter)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writePage(w, visitDTOs(visits), total, page)
 }
 
 func (h *Handler) handleServerUpdate(w http.ResponseWriter, r *http.Request) {
@@ -195,7 +227,7 @@ func (h *Handler) handleServerUpdate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	onlineUsers, err := h.repo.CountFreshUsersByServerIDs(r.Context(), []int64{id}, time.Now().Add(-h.sessionFreshness(r.Context())))
+	onlineUsers, err := h.repo.CountOnlineUsersByServerIDs(r.Context(), []int64{id})
 	if err != nil {
 		writeErr(w, err)
 		return

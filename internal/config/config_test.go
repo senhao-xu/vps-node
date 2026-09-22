@@ -35,10 +35,10 @@ func TestLoadPanelFromDefaults(t *testing.T) {
 	if cfg.DBPath != "data/panel.db" {
 		t.Fatalf("expected default db path, got %s", cfg.DBPath)
 	}
-	if cfg.Retention.RawLogDays != 7 || cfg.Retention.AggregateDays != 90 {
+	if cfg.Retention.AggregateDays != 90 {
 		t.Fatalf("unexpected retention defaults: %+v", cfg.Retention)
 	}
-	if cfg.Retention.MaxConnectionLogs != 1_000_000 || cfg.Retention.MaxTrafficRecords != 5_000_000 {
+	if cfg.Retention.MaxTrafficRecords != 5_000_000 {
 		t.Fatalf("unexpected storage cap defaults: %+v", cfg.Retention)
 	}
 	if len(cfg.AppKey()) != 32 {
@@ -53,9 +53,7 @@ db_path: /tmp/panel.db
 log_level: debug
 app_key: `+validAppKey+`
 retention:
-  raw_log_days: 14
   aggregate_days: 180
-  max_connection_logs: 500000
   max_traffic_records: 0
 `)
 
@@ -66,10 +64,10 @@ retention:
 	if cfg.Listen != ":9090" || cfg.DBPath != "/tmp/panel.db" || cfg.LogLevel != "debug" {
 		t.Fatalf("unexpected cfg: %+v", cfg)
 	}
-	if cfg.Retention.RawLogDays != 14 || cfg.Retention.AggregateDays != 180 {
+	if cfg.Retention.AggregateDays != 180 {
 		t.Fatalf("unexpected retention: %+v", cfg.Retention)
 	}
-	if cfg.Retention.MaxConnectionLogs != 500_000 || cfg.Retention.MaxTrafficRecords != 0 {
+	if cfg.Retention.MaxTrafficRecords != 0 {
 		t.Fatalf("unexpected storage caps: %+v", cfg.Retention)
 	}
 }

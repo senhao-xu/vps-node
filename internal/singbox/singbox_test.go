@@ -53,11 +53,11 @@ func TestRenderShadowsocksInbound(t *testing.T) {
 		Name:     "hk-ss",
 		Protocol: singbox.ProtocolShadowsocks,
 		Port:     8388,
-		Settings: map[string]any{"method": singbox.SSMethod2022Aes128Gcm},
+		Settings: map[string]any{"cipher": singbox.SSMethod2022Aes128Gcm},
 		Secret:   map[string]any{"password": "server-secret"},
 		Users:    users,
 	}
-	config, err := singbox.Render(testAppKey, []singbox.Node{node}, singbox.ClashAPI{Port: 29090, Secret: "clash-secret"})
+	config, err := singbox.Render(testAppKey, []singbox.Node{node})
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}
@@ -91,10 +91,10 @@ func TestRenderShadowsocksDerivedServerPassword(t *testing.T) {
 		ID:       12,
 		Protocol: singbox.ProtocolShadowsocks,
 		Port:     8389,
-		Settings: map[string]any{"method": singbox.SSMethod2022Chacha20},
+		Settings: map[string]any{"cipher": singbox.SSMethod2022Chacha20},
 		Users:    []singbox.User{{ID: 1, UUID: "uuid-1"}},
 	}
-	config, err := singbox.Render(testAppKey, []singbox.Node{node}, singbox.ClashAPI{Port: 29090, Secret: "s"})
+	config, err := singbox.Render(testAppKey, []singbox.Node{node})
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}
@@ -112,7 +112,7 @@ func TestRenderShadowsocksUnsupportedMethodFails(t *testing.T) {
 		Port:     8390,
 		Settings: map[string]any{},
 	}
-	if _, err := singbox.Render(testAppKey, []singbox.Node{node}, singbox.ClashAPI{}); err == nil {
+	if _, err := singbox.Render(testAppKey, []singbox.Node{node}); err == nil {
 		t.Fatal("expected error for missing method")
 	}
 }
@@ -122,14 +122,14 @@ func TestRenderVLESSReality(t *testing.T) {
 		ID:       21,
 		Protocol: singbox.ProtocolVLESS,
 		Port:     443,
-		Settings: map[string]any{"short_id": "abcd1234", "server_names": []any{"example.com"}},
+		Settings: map[string]any{"reality_settings": map[string]any{"server_name": "example.com", "short_id": "abcd1234"}},
 		Secret:   map[string]any{"private_key": "privkey-xyz"},
 		Users: []singbox.User{
 			{ID: 1, UUID: "uuid-1"},
 			{ID: 2, UUID: "uuid-2"},
 		},
 	}
-	config, err := singbox.Render(testAppKey, []singbox.Node{node}, singbox.ClashAPI{Port: 29090, Secret: "s"})
+	config, err := singbox.Render(testAppKey, []singbox.Node{node})
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}
@@ -167,10 +167,10 @@ func TestRenderHysteria2Obfs(t *testing.T) {
 		ID:       32,
 		Protocol: singbox.ProtocolHysteria2,
 		Port:     8443,
-		Settings: map[string]any{"obfs_password": "obfs-secret", "hop_ports": "30000-40000"},
+		Settings: map[string]any{"obfs": map[string]any{"open": true, "type": "salamander", "password": "obfs-secret"}, "hop_interval": "30000-40000"},
 		Users:    []singbox.User{{ID: 1, UUID: "uuid-1"}},
 	}
-	config, err := singbox.Render(testAppKey, []singbox.Node{node}, singbox.ClashAPI{})
+	config, err := singbox.Render(testAppKey, []singbox.Node{node})
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}
@@ -187,7 +187,7 @@ func TestRenderHysteria2Obfs(t *testing.T) {
 
 	// Without obfs_password the inbound must not carry the obfs key.
 	node.Settings = map[string]any{}
-	config, err = singbox.Render(testAppKey, []singbox.Node{node}, singbox.ClashAPI{})
+	config, err = singbox.Render(testAppKey, []singbox.Node{node})
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}
@@ -198,13 +198,13 @@ func TestRenderHysteria2Obfs(t *testing.T) {
 
 func TestRenderVLESSMissingMaterialFails(t *testing.T) {
 	noKey := singbox.Node{ID: 1, Protocol: singbox.ProtocolVLESS, Port: 443,
-		Settings: map[string]any{"server_names": []any{"a.com"}}}
-	if _, err := singbox.Render(testAppKey, []singbox.Node{noKey}, singbox.ClashAPI{}); err == nil {
+		Settings: map[string]any{"reality_settings": map[string]any{"server_name": "a.com"}}}
+	if _, err := singbox.Render(testAppKey, []singbox.Node{noKey}); err == nil {
 		t.Fatal("expected error for missing private_key")
 	}
 	noNames := singbox.Node{ID: 1, Protocol: singbox.ProtocolVLESS, Port: 443,
 		Secret: map[string]any{"private_key": "k"}}
-	if _, err := singbox.Render(testAppKey, []singbox.Node{noNames}, singbox.ClashAPI{}); err == nil {
+	if _, err := singbox.Render(testAppKey, []singbox.Node{noNames}); err == nil {
 		t.Fatal("expected error for missing server_names")
 	}
 }
@@ -214,10 +214,10 @@ func TestRenderHysteria2(t *testing.T) {
 		ID:       31,
 		Protocol: singbox.ProtocolHysteria2,
 		Port:     8443,
-		Settings: map[string]any{"up_mbps": float64(100), "down_mbps": float64(200)},
+		Settings: map[string]any{"bandwidth": map[string]any{"up": float64(100), "down": float64(200)}},
 		Users:    []singbox.User{{ID: 1, UUID: "uuid-1"}},
 	}
-	config, err := singbox.Render(testAppKey, []singbox.Node{node}, singbox.ClashAPI{Port: 29090, Secret: "s"})
+	config, err := singbox.Render(testAppKey, []singbox.Node{node})
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}
@@ -244,14 +244,14 @@ func TestRenderAnyTLS(t *testing.T) {
 		Name:     "hk-anytls",
 		Protocol: singbox.ProtocolAnyTLS,
 		Port:     9443,
-		Settings: map[string]any{"server_name": "anytls.example.com"},
+		Settings: map[string]any{"tls": map[string]any{"server_name": "anytls.example.com"}},
 		Secret: map[string]any{
 			"certificate": "-----BEGIN CERTIFICATE-----\nline1\nline2\n-----END CERTIFICATE-----",
 			"private_key": "-----BEGIN PRIVATE KEY-----\nkey1\n-----END PRIVATE KEY-----",
 		},
 		Users: []singbox.User{{ID: 7, UUID: "uuid-7"}},
 	}
-	config, err := singbox.Render(testAppKey, []singbox.Node{node}, singbox.ClashAPI{Port: 29090, Secret: "s"})
+	config, err := singbox.Render(testAppKey, []singbox.Node{node})
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}
@@ -282,15 +282,15 @@ func TestRenderAnyTLS(t *testing.T) {
 	}
 }
 
-func TestRenderMultipleNodesShapeAndClashAPI(t *testing.T) {
+func TestRenderMultipleNodesShape(t *testing.T) {
 	nodes := []singbox.Node{
 		{ID: 41, Protocol: singbox.ProtocolHysteria2, Port: 10001,
 			Users: []singbox.User{{ID: 1, UUID: "uuid-1"}}},
 		{ID: 42, Protocol: singbox.ProtocolShadowsocks, Port: 10002,
-			Settings: map[string]any{"method": singbox.SSMethod2022Aes256Gcm},
+			Settings: map[string]any{"cipher": singbox.SSMethod2022Aes256Gcm},
 			Users:    []singbox.User{{ID: 2, UUID: "uuid-2"}}},
 	}
-	config, err := singbox.Render(testAppKey, nodes, singbox.ClashAPI{Port: 29090, Secret: "clash-secret"})
+	config, err := singbox.Render(testAppKey, nodes)
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}
@@ -304,16 +304,14 @@ func TestRenderMultipleNodesShapeAndClashAPI(t *testing.T) {
 	if inbounds[0]["users"].([]map[string]any)[0]["password"] != "uuid-1" {
 		t.Fatal("cross-node user leakage in inbounds")
 	}
-	experimental := config["experimental"].(map[string]any)
-	clash := experimental["clash_api"].(map[string]any)
-	if clash["external_controller"] != "127.0.0.1:29090" || clash["secret"] != "clash-secret" {
-		t.Fatalf("unexpected clash_api: %+v", clash)
+	if _, has := config["experimental"]; has {
+		t.Fatalf("clash_api experiment must not be rendered: %+v", config["experimental"])
 	}
 	if config["route"].(map[string]any)["final"] != "direct" {
 		t.Fatalf("unexpected route: %+v", config["route"])
 	}
 
-	if _, err := singbox.Render(testAppKey, []singbox.Node{{ID: 1, Protocol: "snell", Port: 1}}, singbox.ClashAPI{}); err == nil {
+	if _, err := singbox.Render(testAppKey, []singbox.Node{{ID: 1, Protocol: "snell", Port: 1}}); err == nil {
 		t.Fatal("unknown protocol must fail")
 	}
 

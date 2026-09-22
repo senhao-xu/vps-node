@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/backend/node-protocol-settings.md", "reason": "节点设置重构为 Xboard 风格 protocol_settings 分节并改写校验时必须遵循的既有契约"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "SQLite schema 重建（nodes/users/online_devices/删除 sessions 等）规范"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "新增嵌入式 sing-box 运行时包与 agent 目录放置约定"}
+{"file": ".trellis/spec/backend/deploy-guidelines.md", "reason": "Dockerfile.agent/镜像与部署方式变更须遵循的部署规范"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "agent/panel 采集与上报错误处理约定"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "节点表单分节、用户字段与在线设备组件的实现规范"}
+{"file": ".trellis/tasks/09-22-xboard-parity/research/current-model.md", "reason": "现状数据模型与 agent 架构基线（改动起点）"}
+{"file": ".trellis/tasks/09-22-xboard-parity/research/xboard-model.md", "reason": "Xboard 实体字段、protocol_settings 与嵌入式节点 tracker 参考"}

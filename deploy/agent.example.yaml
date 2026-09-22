@@ -13,16 +13,7 @@ log_level: info
 heartbeat_interval: 30
 sync_interval: 30
 traffic_interval: 60
-singbox:
-  # Active sing-box configuration; the agent atomically replaces this file.
-  config_path: /etc/sing-box/config.json
-  # Binary used for "check -c <file>" validation before activation.
-  check_bin: /usr/local/bin/sing-box
-  # Optional single command (binary + fixed args) run after activation.
-  # Example: /bin/systemctl restart sing-box
-  # Empty means no automatic reload; sing-box keeps running the previous config.
-  reload_command: ""
 collection:
   traffic: true
-  sessions: true
-  connection_logs: true
+  # Report visited destinations (host/port/network/source IP) to the Panel.
+  visits: true

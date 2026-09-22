@@ -8,22 +8,22 @@ import (
 )
 
 type TrafficRecord struct {
-	ID            int64
-	UserID        int64
-	NodeID        int64
-	ServerID      int64
-	UploadBytes   int64
-	DownloadBytes int64
-	CreatedAt     time.Time
+	ID        int64
+	UserID    int64
+	NodeID    int64
+	ServerID  int64
+	U         int64
+	D         int64
+	CreatedAt time.Time
 }
 
 type NewTrafficRecord struct {
-	UserID        int64
-	NodeID        int64
-	ServerID      int64
-	UploadBytes   int64
-	DownloadBytes int64
-	CreatedAt     time.Time
+	UserID    int64
+	NodeID    int64
+	ServerID  int64
+	U         int64
+	D         int64
+	CreatedAt time.Time
 }
 
 type TrafficFilter struct {
@@ -38,9 +38,9 @@ func (r *Repo) InsertTrafficRecords(ctx context.Context, records []NewTrafficRec
 	return Tx(ctx, r.DB, func(tx *sql.Tx) error {
 		for _, rec := range records {
 			if _, err := tx.ExecContext(ctx,
-				`INSERT INTO traffic_records (user_id, node_id, server_id, upload_bytes, download_bytes, created_at)
+				`INSERT INTO traffic_records (user_id, node_id, server_id, u, d, created_at)
 				 VALUES (?, ?, ?, ?, ?, ?)`,
-				rec.UserID, rec.NodeID, rec.ServerID, rec.UploadBytes, rec.DownloadBytes, rec.CreatedAt.Unix()); err != nil {
+				rec.UserID, rec.NodeID, rec.ServerID, rec.U, rec.D, rec.CreatedAt.Unix()); err != nil {
 				return mapErr(err)
 			}
 		}
@@ -87,15 +87,15 @@ func trafficWherePrefixed(f TrafficFilter, prefix string) (string, []any) {
 func (r *Repo) SumTraffic(ctx context.Context, f TrafficFilter) (upload, download int64, err error) {
 	whereSQL, args := trafficWhere(f)
 	err = r.DB.QueryRowContext(ctx,
-		`SELECT COALESCE(SUM(upload_bytes), 0), COALESCE(SUM(download_bytes), 0)
+		`SELECT COALESCE(SUM(u), 0), COALESCE(SUM(d), 0)
 		 FROM traffic_records WHERE `+whereSQL, args...).Scan(&upload, &download)
 	return upload, download, mapErr(err)
 }
 
 type TrafficBucket struct {
-	BucketStart   time.Time
-	UploadBytes   int64
-	DownloadBytes int64
+	BucketStart time.Time
+	U           int64
+	D           int64
 }
 
 func (r *Repo) SumTrafficBuckets(ctx context.Context, f TrafficFilter, bucketSeconds int64) ([]TrafficBucket, error) {
@@ -104,7 +104,7 @@ func (r *Repo) SumTrafficBuckets(ctx context.Context, f TrafficFilter, bucketSec
 	}
 	whereSQL, args := trafficWhere(f)
 	rows, err := r.DB.QueryContext(ctx,
-		`SELECT (created_at / ?) * ? AS bucket_start, COALESCE(SUM(upload_bytes), 0), COALESCE(SUM(download_bytes), 0)
+		`SELECT (created_at / ?) * ? AS bucket_start, COALESCE(SUM(u), 0), COALESCE(SUM(d), 0)
 		 FROM traffic_records WHERE `+whereSQL+` GROUP BY bucket_start ORDER BY bucket_start`,
 		append([]any{bucketSeconds, bucketSeconds}, args...)...)
 	if err != nil {
@@ -119,7 +119,7 @@ func (r *Repo) SumTrafficBuckets(ctx context.Context, f TrafficFilter, bucketSec
 		if err := rows.Scan(&start, &up, &down); err != nil {
 			return nil, mapErr(err)
 		}
-		buckets = append(buckets, TrafficBucket{BucketStart: toTime(start), UploadBytes: up, DownloadBytes: down})
+		buckets = append(buckets, TrafficBucket{BucketStart: toTime(start), U: up, D: down})
 	}
 	return buckets, rows.Err()
 }

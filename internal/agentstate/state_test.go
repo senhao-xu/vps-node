@@ -26,7 +26,7 @@ func TestStateRoundTrip(t *testing.T) {
 		ServerID:        3,
 		AppliedRevision: 1024,
 		TrafficBatchSeq: 42,
-		LogBatchSeq:     17,
+		DeviceBatchSeq:  17,
 	}
 	if err := agentstate.Save(path, want); err != nil {
 		t.Fatalf("save: %v", err)
@@ -37,7 +37,7 @@ func TestStateRoundTrip(t *testing.T) {
 	}
 	if got.AgentID != want.AgentID || got.AgentToken != want.AgentToken ||
 		got.ServerID != want.ServerID || got.AppliedRevision != want.AppliedRevision ||
-		got.TrafficBatchSeq != want.TrafficBatchSeq || got.LogBatchSeq != want.LogBatchSeq {
+		got.TrafficBatchSeq != want.TrafficBatchSeq || got.DeviceBatchSeq != want.DeviceBatchSeq {
 		t.Fatalf("round trip mismatch: %+v vs %+v", got, want)
 	}
 	if got.UpdatedAt.IsZero() {

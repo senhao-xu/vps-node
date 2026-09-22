@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -28,25 +29,33 @@ func validateSubscribeURLs(raw string) error {
 }
 
 type settingsUpdateRequest struct {
-	RetentionRawLogDays       optInt64 `json:"retention_raw_log_days"`
-	RetentionAggregateDays    optInt64 `json:"retention_aggregate_days"`
-	CollectionConnectionLogs  *bool    `json:"collection_connection_logs"`
-	SessionFreshnessSeconds   optInt64 `json:"session_freshness_seconds"`
-	ServerOfflineAfterSeconds optInt64 `json:"server_offline_after_seconds"`
-	SubscribeURLs             *string  `json:"subscribe_urls"`
-	SubscribePath             *string  `json:"subscribe_path"`
-	SubscribeName             *string  `json:"subscribe_name"`
-	ClashMetaTemplate         *string  `json:"clash_meta_template"`
+	RetentionAggregateDays      optInt64 `json:"retention_aggregate_days"`
+	RetentionVisitDays          optInt64 `json:"retention_visit_days"`
+	RetentionVisitAggregateDays optInt64 `json:"retention_visit_aggregate_days"`
+	CollectionVisits            *bool    `json:"collection_visits"`
+	ServerOfflineAfterSeconds   optInt64 `json:"server_offline_after_seconds"`
+	SubscribeURLs               *string  `json:"subscribe_urls"`
+	SubscribePath               *string  `json:"subscribe_path"`
+	SubscribeName               *string  `json:"subscribe_name"`
+	ClashMetaTemplate           *string  `json:"clash_meta_template"`
 }
 
 var settingsRanges = map[string]struct {
 	Min int
 	Max int
 }{
-	settingRetentionRawLog:    {Min: 1, Max: 3650},
-	settingRetentionAggregate: {Min: 1, Max: 3650},
-	settingSessionFreshness:   {Min: 10, Max: 86400},
-	settingServerOfflineAfter: {Min: 10, Max: 86400},
+	settingRetentionAggregate:      {Min: 1, Max: 3650},
+	settingRetentionVisit:          {Min: 1, Max: 3650},
+	settingRetentionVisitAggregate: {Min: 1, Max: 3650},
+	settingServerOfflineAfter:      {Min: 10, Max: 86400},
+}
+
+func (h *Handler) visitsCollectionEnabled(ctx context.Context) bool {
+	raw, err := h.repo.ListSettings(ctx)
+	if err != nil {
+		return true
+	}
+	return settingBool(raw, settingCollectionVisits, true)
 }
 
 func (h *Handler) handleSettingsGet(w http.ResponseWriter, r *http.Request) {
@@ -77,15 +86,15 @@ func (h *Handler) handleSettingsPut(w http.ResponseWriter, r *http.Request) {
 		updates[key] = strconv.FormatInt(field.Value, 10)
 		return nil
 	}
-	if err := applyInt(req.RetentionRawLogDays, settingRetentionRawLog); err != nil {
-		writeErr(w, err)
-		return
-	}
 	if err := applyInt(req.RetentionAggregateDays, settingRetentionAggregate); err != nil {
 		writeErr(w, err)
 		return
 	}
-	if err := applyInt(req.SessionFreshnessSeconds, settingSessionFreshness); err != nil {
+	if err := applyInt(req.RetentionVisitDays, settingRetentionVisit); err != nil {
+		writeErr(w, err)
+		return
+	}
+	if err := applyInt(req.RetentionVisitAggregateDays, settingRetentionVisitAggregate); err != nil {
 		writeErr(w, err)
 		return
 	}
@@ -93,8 +102,8 @@ func (h *Handler) handleSettingsPut(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	if req.CollectionConnectionLogs != nil {
-		updates[settingCollectionLogs] = strconv.FormatBool(*req.CollectionConnectionLogs)
+	if req.CollectionVisits != nil {
+		updates[settingCollectionVisits] = strconv.FormatBool(*req.CollectionVisits)
 	}
 	if req.SubscribeURLs != nil {
 		if err := validateSubscribeURLs(*req.SubscribeURLs); err != nil {

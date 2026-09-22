@@ -6,9 +6,11 @@ withDefaults(
     label: string
     value: string | number
     icon: Component
+    hint?: string
     tone?: 'default' | 'success' | 'warning' | 'danger'
   }>(),
   {
+    hint: undefined,
     tone: 'default',
   },
 )
@@ -16,40 +18,63 @@ withDefaults(
 
 <template>
   <div class="stat-card card">
-    <div class="stat-text">
+    <div class="stat-head">
       <span class="stat-label">{{ label }}</span>
-      <span class="stat-value">{{ value }}</span>
-    </div>
-    <span
-      class="stat-icon"
-      :class="`tone-${tone}`"
-    >
       <component
         :is="icon"
-        :size="18"
+        :size="16"
+        class="stat-icon"
+        :class="`tone-${tone}`"
       />
-    </span>
+    </div>
+    <div class="stat-value">
+      {{ value }}
+    </div>
+    <div
+      v-if="hint"
+      class="stat-hint"
+    >
+      {{ hint }}
+    </div>
   </div>
 </template>
 
 <style scoped>
 .stat-card {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-md);
-}
-
-.stat-text {
-  display: flex;
   flex-direction: column;
   gap: var(--spacing-xs);
-  min-width: 0;
+  padding: 16px 20px;
+}
+
+.stat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
 }
 
 .stat-label {
   font-size: var(--font-size-sm);
+  font-weight: 500;
   color: var(--color-text-secondary);
+}
+
+.stat-icon {
+  flex: none;
+  color: var(--color-text-secondary);
+}
+
+.stat-icon.tone-success {
+  color: var(--color-success);
+}
+
+.stat-icon.tone-warning {
+  color: var(--color-warning);
+}
+
+.stat-icon.tone-danger {
+  color: var(--color-danger);
 }
 
 .stat-value {
@@ -59,30 +84,8 @@ withDefaults(
   line-height: 1.2;
 }
 
-.stat-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-md);
+.stat-hint {
+  font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
-  background: var(--color-muted-soft);
-}
-
-.stat-icon.tone-success {
-  color: var(--color-success);
-  background: var(--color-success-soft);
-}
-
-.stat-icon.tone-warning {
-  color: var(--color-warning);
-  background: var(--color-warning-soft);
-}
-
-.stat-icon.tone-danger {
-  color: var(--color-danger);
-  background: var(--color-danger-soft);
 }
 </style>

@@ -1,1 +1,14 @@
-{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python3 .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/tasks/09-21-site-visit-stats/prd.md", "reason": "Requirements, scope decisions D1-D8, acceptance criteria for the visited-sites feature"}
+{"file": ".trellis/tasks/09-21-site-visit-stats/design.md", "reason": "Binding technical design: kernel/agent/panel/UI changes, schema, contracts, tradeoffs"}
+{"file": ".trellis/tasks/09-21-site-visit-stats/implement.md", "reason": "Phased execution checklist, validation commands, review gates, rollback points"}
+{"file": ".trellis/tasks/09-21-site-visit-stats/research/telemetry-data-path.md", "reason": "Code-backed map of the existing telemetry path to mirror (agent tracker, loop, ingestion, repo, DTO, migration, UI)"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Handler/repo boundaries, new migration recipe, contract-first endpoint addition, naming"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Migration/runner conventions, batch idempotency invariant, retention/janitor patterns, SQLite tx caveats"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Error envelope, validation/error matrix, agent auth boundary, server_id-from-credential rule"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "stdlib-first code standards, forbidden patterns, required validation commands"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "api/ owns types+decoding, DataTable/toolbar rules, state feedback trio, design-token rules"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "script setup/scoped styles/zh-CN text, PageHeader, StatCard/SegmentedControl, ConfirmDialog, overlay behavior"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "All payload types in api/types.ts, no any/unguarded casts, no fetch outside http.ts"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Feature spans 4+ layers and adds a new agent event kind + wire DTO + JSONL/contract field; use the cross-layer checklist"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Mirror existing traffic/devices patterns instead of new abstractions; search before adding constants/helpers"}
+{"file": "docs/api-contract.md", "reason": "Binding API contract; must be extended first for the agent and admin endpoints/limits"}

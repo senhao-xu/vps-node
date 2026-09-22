@@ -30,6 +30,8 @@ const username = ref('')
 const unlimited = ref(true)
 const quotaValue = ref<number | null>(null)
 const quotaUnit = ref<QuotaUnit>('GB')
+const speedLimit = ref<number | null>(0)
+const deviceLimit = ref<number | null>(0)
 const startedAt = ref('')
 const expiresAt = ref('')
 const selectedNodeIds = ref<number[]>([])
@@ -49,6 +51,8 @@ watch(
     unlimited.value = true
     quotaValue.value = null
     quotaUnit.value = 'GB'
+    speedLimit.value = 0
+    deviceLimit.value = 0
     startedAt.value = ''
     expiresAt.value = ''
     selectedNodeIds.value = []
@@ -76,11 +80,17 @@ const quotaBytes = computed(() => {
   return quotaFromInput(value, quotaUnit.value)
 })
 
+function validLimit(value: number | null): boolean {
+  return value !== null && Number.isInteger(value) && value >= 0
+}
+
 const validationMessage = computed(() => {
   const name = username.value.trim()
   if (!name) return '请输入用户名'
   if (!usernamePattern.test(name)) return '用户名需为 1-64 个字符，仅限字母、数字、下划线、中划线或点'
   if (!unlimited.value && quotaBytes.value === null) return '请输入有效的流量额度'
+  if (!validLimit(speedLimit.value)) return '限速必须是不小于 0 的整数（0 表示不限速）'
+  if (!validLimit(deviceLimit.value)) return '设备数限制必须是不小于 0 的整数（0 表示不限制）'
   const start = localInputToIso(startedAt.value)
   const expire = localInputToIso(expiresAt.value)
   if (start && expire && expire <= start) return '到期时间必须晚于开始时间'
@@ -98,7 +108,9 @@ async function submit() {
   try {
     const user = await createUser({
       username: username.value.trim(),
-      quota_bytes: quotaBytes.value ?? 0,
+      transfer_enable: quotaBytes.value ?? 0,
+      speed_limit: speedLimit.value ?? 0,
+      device_limit: deviceLimit.value ?? 0,
       started_at: localInputToIso(startedAt.value),
       expires_at: localInputToIso(expiresAt.value),
       node_ids: selectedNodeIds.value,
@@ -194,6 +206,26 @@ async function submit() {
                 TB
               </option>
             </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label>限速（Mbps，0 = 不限速）</label>
+            <input
+              v-model.number="speedLimit"
+              type="number"
+              min="0"
+              step="1"
+            >
+          </div>
+          <div class="field">
+            <label>设备数限制（0 = 不限制）</label>
+            <input
+              v-model.number="deviceLimit"
+              type="number"
+              min="0"
+              step="1"
+            >
           </div>
         </div>
         <div class="form-row">

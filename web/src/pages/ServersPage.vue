@@ -206,7 +206,7 @@ onMounted(() => {
       </div>
     </div>
 
-    <div class="card table-card">
+    <div class="table-card">
       <DataTable
         :columns="columns"
         :rows="items"

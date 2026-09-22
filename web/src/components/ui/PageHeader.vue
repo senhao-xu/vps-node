@@ -1,11 +1,18 @@
 <script setup lang="ts">
+import { RouterLink } from 'vue-router'
+import { ArrowLeft } from 'lucide-vue-next'
+
 withDefaults(
   defineProps<{
     title: string
     subtitle?: string
+    backTo?: string
+    backTitle?: string
   }>(),
   {
     subtitle: undefined,
+    backTo: undefined,
+    backTitle: undefined,
   },
 )
 </script>
@@ -13,6 +20,14 @@ withDefaults(
 <template>
   <header class="page-header">
     <div class="heading">
+      <RouterLink
+        v-if="backTo"
+        class="back-link"
+        :to="backTo"
+      >
+        <ArrowLeft :size="13" />
+        {{ backTitle }}
+      </RouterLink>
       <h1 class="title">
         {{ title }}
       </h1>
@@ -41,6 +56,19 @@ withDefaults(
   margin-bottom: var(--spacing-lg);
 }
 
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin-bottom: 2px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.back-link:hover {
+  color: var(--color-text);
+}
+
 .title {
   margin: 0;
   font-size: var(--font-size-xl);
@@ -65,14 +93,6 @@ withDefaults(
 @media (max-width: 900px) {
   .page-header {
     margin-bottom: var(--spacing-md);
-  }
-
-  .heading {
-    display: none;
-  }
-
-  .page-header:not(:has(.header-actions)) {
-    display: none;
   }
 }
 

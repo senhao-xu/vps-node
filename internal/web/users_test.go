@@ -17,10 +17,10 @@ func TestUserCreateListDetailAndSecretExposure(t *testing.T) {
 
 	expires := time.Now().Add(24 * time.Hour).UTC().Truncate(time.Second).Format(time.RFC3339)
 	resp, body := e.do(t, "POST", "/api/users", map[string]any{
-		"username":    "alice",
-		"quota_bytes": 1000,
-		"expires_at":  expires,
-		"node_ids":    []int64{},
+		"username":        "alice",
+		"transfer_enable": 1000,
+		"expires_at":      expires,
+		"node_ids":        []int64{},
 	}, cookie)
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("create user: %d %s", resp.StatusCode, body)
@@ -31,7 +31,7 @@ func TestUserCreateListDetailAndSecretExposure(t *testing.T) {
 		t.Fatalf("expected token returned once on create, got %s", body)
 	}
 	id := int64(created["id"].(float64))
-	if created["uuid"] == "" || created["status"] != "active" || created["quota_bytes"].(float64) != 1000 {
+	if created["uuid"] == "" || created["status"] != "active" || created["transfer_enable"].(float64) != 1000 {
 		t.Fatalf("unexpected create payload: %s", body)
 	}
 
@@ -67,7 +67,7 @@ func TestUserTokenQueryAndReset(t *testing.T) {
 	e := newTestEnv(t)
 	cookie := e.login(t)
 
-	resp, body := e.do(t, "POST", "/api/users", map[string]any{"username": "tokuser", "quota_bytes": 10}, cookie)
+	resp, body := e.do(t, "POST", "/api/users", map[string]any{"username": "tokuser", "transfer_enable": 10}, cookie)
 	created := jsonMap(t, body)
 	id := int64(created["id"].(float64))
 	oldToken, _ := created["token"].(string)
@@ -108,7 +108,7 @@ func TestUserUpdatePartialSemantics(t *testing.T) {
 	started := time.Now().Add(-24 * time.Hour).UTC().Format(time.RFC3339)
 	expires := time.Now().Add(24 * time.Hour).UTC().Format(time.RFC3339)
 	_, body := e.do(t, "POST", "/api/users", map[string]any{
-		"username": "partial", "quota_bytes": 1000, "started_at": started, "expires_at": expires,
+		"username": "partial", "transfer_enable": 1000, "started_at": started, "expires_at": expires,
 	}, cookie)
 	created := jsonMap(t, body)
 	id := int64(created["id"].(float64))
@@ -117,7 +117,7 @@ func TestUserUpdatePartialSemantics(t *testing.T) {
 	if got := jsonMap(t, body)["status"]; got != "disabled" {
 		t.Fatalf("expected disabled, got %s", body)
 	}
-	if got := jsonMap(t, body)["quota_bytes"].(float64); got != 1000 {
+	if got := jsonMap(t, body)["transfer_enable"].(float64); got != 1000 {
 		t.Fatalf("partial update must keep quota, got %s", body)
 	}
 
@@ -141,7 +141,7 @@ func TestUserUpdatePartialSemantics(t *testing.T) {
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("expected 400 for bad status, got %d %s", resp.StatusCode, body)
 	}
-	resp, body = e.do(t, "PUT", fmt.Sprintf("/api/users/%d", id), map[string]any{"quota_bytes": -5}, cookie)
+	resp, body = e.do(t, "PUT", fmt.Sprintf("/api/users/%d", id), map[string]any{"transfer_enable": -5}, cookie)
 	if resp.StatusCode != http.StatusUnprocessableEntity || errorCode(t, body) != "validation" {
 		t.Fatalf("expected 422 for negative quota, got %d %s", resp.StatusCode, body)
 	}
@@ -156,7 +156,7 @@ func TestUserResetTrafficAndExpireNow(t *testing.T) {
 	e := newTestEnv(t)
 	cookie := e.login(t)
 
-	_, body := e.do(t, "POST", "/api/users", map[string]any{"username": "trafficuser", "quota_bytes": 100}, cookie)
+	_, body := e.do(t, "POST", "/api/users", map[string]any{"username": "trafficuser", "transfer_enable": 100}, cookie)
 	id := int64(jsonMap(t, body)["id"].(float64))
 
 	if err := e.repo.AddUserUsedBytes(context.Background(), id, 30, 40); err != nil {
@@ -289,7 +289,7 @@ func TestUserNodesAuthorizationIdempotent(t *testing.T) {
 	}
 }
 
-func TestUserSessionsLogsTrafficEndpoints(t *testing.T) {
+func TestUserDevicesTrafficEndpoints(t *testing.T) {
 	e := newTestEnv(t)
 	cookie := e.login(t)
 	ctx := context.Background()
@@ -297,71 +297,45 @@ func TestUserSessionsLogsTrafficEndpoints(t *testing.T) {
 	serverID := e.seedServer(t, "s1")
 	nodeID := e.seedNode(t, serverID, "n1", 443)
 	userID := e.seedUser(t, "u1")
+	agentID, err := e.repo.CreateAgent(ctx, serverID, "agent-hash", "")
+	if err != nil {
+		t.Fatalf("create agent: %v", err)
+	}
 
 	now := time.Now().UTC().Truncate(time.Second)
-	fresh := []repo.NewSession{
-		{UserID: userID, NodeID: nodeID, ServerID: serverID, IP: "1.1.1.1", ConnectedAt: now, LastSeenAt: now},
-	}
-	if err := e.repo.ReplaceServerSessions(ctx, serverID, fresh); err != nil {
-		t.Fatalf("replace sessions: %v", err)
-	}
-	staleSession := []repo.NewSession{
-		{UserID: userID, NodeID: nodeID, ServerID: serverID, IP: "2.2.2.2", ConnectedAt: now.Add(-2 * time.Hour), LastSeenAt: now.Add(-2 * time.Hour)},
-	}
-	if err := e.repo.ReplaceServerSessions(ctx, serverID, append(append([]repo.NewSession{}, fresh...), staleSession...)); err != nil {
-		t.Fatalf("replace sessions 2: %v", err)
+	if _, _, err := e.repo.IngestDeviceBatch(ctx, agentID, 1, serverID, []repo.NewOnlineDevice{
+		{UserID: userID, NodeID: nodeID, IP: "1.1.1.1", Online: 3},
+		{UserID: userID, NodeID: nodeID, IP: "2.2.2.2", Online: 3},
+	}, map[int64]int{userID: 3}, now.Unix()); err != nil {
+		t.Fatalf("ingest devices: %v", err)
 	}
 
-	resp, body := e.do(t, "GET", fmt.Sprintf("/api/users/%d/sessions", userID), nil, cookie)
+	resp, body := e.do(t, "GET", fmt.Sprintf("/api/users/%d/devices", userID), nil, cookie)
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("sessions: %d %s", resp.StatusCode, body)
+		t.Fatalf("devices: %d %s", resp.StatusCode, body)
 	}
 	items := jsonMap(t, body)["items"].([]any)
-	if len(items) != 1 {
-		t.Fatalf("expected 1 fresh session, got %s", body)
+	if len(items) != 2 {
+		t.Fatalf("expected 2 devices, got %s", body)
 	}
-	session := items[0].(map[string]any)
-	if session["ip"] != "1.1.1.1" || session["node_id"].(float64) != float64(nodeID) || session["server_id"].(float64) != float64(serverID) {
-		t.Fatalf("unexpected session payload: %s", body)
+	device := items[0].(map[string]any)
+	if device["node_id"].(float64) != float64(nodeID) || device["server_id"].(float64) != float64(serverID) {
+		t.Fatalf("unexpected device payload: %s", body)
 	}
-
-	resp, body = e.do(t, "GET", fmt.Sprintf("/api/users/%d/sessions?include_stale=true", userID), nil, cookie)
-	if len(jsonMap(t, body)["items"].([]any)) != 2 {
-		t.Fatalf("expected 2 sessions with include_stale, got %s", body)
-	}
-
-	connected := now.Add(-2 * time.Hour)
-	if _, err := e.repo.InsertConnectionLogs(ctx, []repo.NewConnectionLog{
-		{UserID: userID, NodeID: nodeID, ServerID: serverID, IP: "1.1.1.1", Protocol: "vless",
-			UploadBytes: 1, DownloadBytes: 2, ConnectedAt: connected, Status: repo.UserStatusActive},
-		{UserID: userID, NodeID: nodeID, ServerID: serverID, IP: "1.1.1.1", Protocol: "vless",
-			UploadBytes: 3, DownloadBytes: 4, ConnectedAt: now.Add(-30 * time.Minute),
-			ClosedAt: ptrTime(now.Add(-time.Minute)), Status: "closed"},
-	}); err != nil {
-		t.Fatalf("insert logs: %v", err)
-	}
-
-	resp, body = e.do(t, "GET", fmt.Sprintf("/api/users/%d/connection-logs", userID), nil, cookie)
-	if resp.StatusCode != http.StatusOK || jsonMap(t, body)["total"].(float64) != 2 {
-		t.Fatalf("logs list: %d %s", resp.StatusCode, body)
+	if device["online"].(float64) != 3 {
+		t.Fatalf("expected online connection count in device payload, got %s", body)
 	}
 	assertNoSecrets(t, body)
 
-	from := now.Add(-45 * time.Minute).Format(time.RFC3339)
-	_, body = e.do(t, "GET", fmt.Sprintf("/api/users/%d/connection-logs?from=%s", userID, from), nil, cookie)
-	if jsonMap(t, body)["total"].(float64) != 1 {
-		t.Fatalf("expected time filter to match 1 log, got %s", body)
-	}
-
-	_, body = e.do(t, "GET", fmt.Sprintf("/api/users/%d/connection-logs?page=2&page_size=1", userID), nil, cookie)
-	page := jsonMap(t, body)
-	if page["total"].(float64) != 2 || len(page["items"].([]any)) != 1 || page["page"].(float64) != 2 {
-		t.Fatalf("unexpected pagination: %s", body)
+	_, body = e.do(t, "GET", fmt.Sprintf("/api/users/%d", userID), nil, cookie)
+	detail := jsonMap(t, body)
+	if detail["online_count"].(float64) != 2 {
+		t.Fatalf("online_count must count distinct IPs, got %s", body)
 	}
 
 	if err := e.repo.InsertTrafficRecords(ctx, []repo.NewTrafficRecord{
-		{UserID: userID, NodeID: nodeID, ServerID: serverID, UploadBytes: 10, DownloadBytes: 20, CreatedAt: now.Add(-30 * time.Hour)},
-		{UserID: userID, NodeID: nodeID, ServerID: serverID, UploadBytes: 30, DownloadBytes: 40, CreatedAt: now.Add(-time.Hour)},
+		{UserID: userID, NodeID: nodeID, ServerID: serverID, U: 10, D: 20, CreatedAt: now.Add(-30 * time.Hour)},
+		{UserID: userID, NodeID: nodeID, ServerID: serverID, U: 30, D: 40, CreatedAt: now.Add(-time.Hour)},
 	}); err != nil {
 		t.Fatalf("insert traffic: %v", err)
 	}
@@ -397,8 +371,7 @@ func TestUserEndpointsNotFound(t *testing.T) {
 	for _, path := range []string{
 		"/api/users/99999",
 		"/api/users/99999/nodes",
-		"/api/users/99999/sessions",
-		"/api/users/99999/connection-logs",
+		"/api/users/99999/devices",
 		"/api/users/99999/traffic",
 	} {
 		resp, body := e.do(t, "GET", path, nil, cookie)
@@ -461,7 +434,7 @@ func TestUsernameCreateValidationAndConflict(t *testing.T) {
 	e := newTestEnv(t)
 	cookie := e.login(t)
 
-	resp, body := e.do(t, "POST", "/api/users", map[string]any{"quota_bytes": 10}, cookie)
+	resp, body := e.do(t, "POST", "/api/users", map[string]any{"transfer_enable": 10}, cookie)
 	if resp.StatusCode != http.StatusUnprocessableEntity || errorCode(t, body) != "validation" {
 		t.Fatalf("missing username must be 422 validation, got %d %s", resp.StatusCode, body)
 	}
@@ -551,6 +524,14 @@ func TestUsernameUpdateSemantics(t *testing.T) {
 		t.Fatalf("status change must bump revision, got %d want %d", rev, revBefore+1)
 	}
 
+	resp, body = e.do(t, "PUT", fmt.Sprintf("/api/users/%d", first), map[string]any{"device_limit": 4}, cookie)
+	if resp.StatusCode != http.StatusOK || jsonMap(t, body)["device_limit"].(float64) != 4 {
+		t.Fatalf("device_limit update failed: %d %s", resp.StatusCode, body)
+	}
+	if rev := e.revision(t, serverID); rev != revBefore+2 {
+		t.Fatalf("device_limit change must bump revision, got %d want %d", rev, revBefore+2)
+	}
+
 	_, body = e.do(t, "GET", "/api/users?query=renamed", nil, cookie)
 	if jsonMap(t, body)["total"].(float64) != 1 {
 		t.Fatalf("renamed username must be searchable: %s", body)
@@ -558,8 +539,4 @@ func TestUsernameUpdateSemantics(t *testing.T) {
 	if _, body = e.do(t, "GET", fmt.Sprintf("/api/users/%d", second), nil, cookie); jsonMap(t, body)["username"] != "second" {
 		t.Fatalf("other user must keep its username: %s", body)
 	}
-}
-
-func ptrTime(t time.Time) *time.Time {
-	return &t
 }

@@ -17,15 +17,15 @@ import (
 )
 
 const (
-	settingRetentionRawLog    = "retention.raw_log_days"
-	settingRetentionAggregate = "retention.aggregate_days"
-	settingCollectionLogs     = "collection.connection_logs"
-	settingSessionFreshness   = "session.freshness_seconds"
-	settingServerOfflineAfter = "server.offline_after_seconds"
-	settingSubscribeURLs      = "subscribe_urls"
-	settingSubscribePath      = "subscribe_path"
-	settingSubscribeName      = "subscribe_name"
-	settingClashTemplate      = "clash_meta_template"
+	settingRetentionAggregate      = "retention.aggregate_days"
+	settingServerOfflineAfter      = "server.offline_after_seconds"
+	settingCollectionVisits        = "collection.visits"
+	settingRetentionVisit          = "retention.visit_days"
+	settingRetentionVisitAggregate = "retention.visit_aggregate_days"
+	settingSubscribeURLs           = "subscribe_urls"
+	settingSubscribePath           = "subscribe_path"
+	settingSubscribeName           = "subscribe_name"
+	settingClashTemplate           = "clash_meta_template"
 )
 
 var weakPasswords = map[string]bool{
@@ -128,8 +128,8 @@ func (h *Handler) registerAgentRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/agent/heartbeat", h.requireAgent(h.handleAgentHeartbeat))
 	mux.HandleFunc("GET /api/agent/config", h.requireAgent(h.handleAgentConfig))
 	mux.HandleFunc("POST /api/agent/traffic", h.requireAgent(h.handleAgentTraffic))
-	mux.HandleFunc("POST /api/agent/sessions", h.requireAgent(h.handleAgentSessions))
-	mux.HandleFunc("POST /api/agent/connection-logs", h.requireAgent(h.handleAgentConnectionLogs))
+	mux.HandleFunc("POST /api/agent/devices", h.requireAgent(h.handleAgentDevices))
+	mux.HandleFunc("POST /api/agent/visits", h.requireAgent(h.handleAgentVisits))
 }
 
 func (h *Handler) registerAdminRoutes(mux *http.ServeMux) {
@@ -147,9 +147,9 @@ func (h *Handler) registerAdminRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/users/{id}/expire-now", h.requireAdmin(h.handleUserExpireNow))
 	mux.HandleFunc("GET /api/users/{id}/nodes", h.requireAdmin(h.handleUserNodesGet))
 	mux.HandleFunc("PUT /api/users/{id}/nodes", h.requireAdmin(h.handleUserNodesPut))
-	mux.HandleFunc("GET /api/users/{id}/sessions", h.requireAdmin(h.handleUserSessions))
-	mux.HandleFunc("GET /api/users/{id}/connection-logs", h.requireAdmin(h.handleUserConnectionLogs))
+	mux.HandleFunc("GET /api/users/{id}/devices", h.requireAdmin(h.handleUserDevices))
 	mux.HandleFunc("GET /api/users/{id}/traffic", h.requireAdmin(h.handleUserTraffic))
+	mux.HandleFunc("GET /api/users/{id}/visits", h.requireAdmin(h.handleUserVisits))
 	mux.HandleFunc("GET /api/users/{id}/subscription", h.requireAdmin(h.handleSubscriptionGet))
 	mux.HandleFunc("POST /api/users/{id}/subscription", h.requireAdmin(h.handleSubscriptionCreate))
 	mux.HandleFunc("POST /api/users/{id}/subscription/rotate", h.requireAdmin(h.handleSubscriptionRotate))
@@ -161,6 +161,10 @@ func (h *Handler) registerAdminRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/servers/{id}", h.requireAdmin(h.handleServerDelete))
 	mux.HandleFunc("POST /api/servers/{id}/register-token", h.requireAdmin(h.handleServerRegisterToken))
 	mux.HandleFunc("POST /api/servers/{id}/agent-token", h.requireAdmin(h.handleServerAgentToken))
+	mux.HandleFunc("GET /api/servers/{id}/visits", h.requireAdmin(h.handleServerVisits))
+
+	mux.HandleFunc("GET /api/visits", h.requireAdmin(h.handleVisitList))
+	mux.HandleFunc("GET /api/visits/top", h.requireAdmin(h.handleVisitTop))
 
 	mux.HandleFunc("GET /api/nodes", h.requireAdmin(h.handleNodeList))
 	mux.HandleFunc("POST /api/nodes", h.requireAdmin(h.handleNodeCreate))
@@ -237,15 +241,15 @@ func (h *Handler) settingsDTO(ctx context.Context) (settingsDTO, error) {
 
 func settingsFromMap(raw map[string]string) settingsDTO {
 	return settingsDTO{
-		RetentionRawLogDays:       settingInt(raw, settingRetentionRawLog, 7, 1),
-		RetentionAggregateDays:    settingInt(raw, settingRetentionAggregate, 90, 1),
-		CollectionConnectionLogs:  settingBool(raw, settingCollectionLogs, true),
-		SessionFreshnessSeconds:   settingInt(raw, settingSessionFreshness, 300, 1),
-		ServerOfflineAfterSeconds: settingInt(raw, settingServerOfflineAfter, 60, 1),
-		SubscribeURLs:             raw[settingSubscribeURLs],
-		SubscribePath:             settingString(raw, settingSubscribePath, "s"),
-		SubscribeName:             raw[settingSubscribeName],
-		ClashMetaTemplate:         settingString(raw, settingClashTemplate, subscription.DefaultClashMetaTemplate),
+		RetentionAggregateDays:      settingInt(raw, settingRetentionAggregate, 90, 1),
+		RetentionVisitDays:          settingInt(raw, settingRetentionVisit, 7, 1),
+		RetentionVisitAggregateDays: settingInt(raw, settingRetentionVisitAggregate, 90, 1),
+		CollectionVisits:            settingBool(raw, settingCollectionVisits, true),
+		ServerOfflineAfterSeconds:   settingInt(raw, settingServerOfflineAfter, 60, 1),
+		SubscribeURLs:               raw[settingSubscribeURLs],
+		SubscribePath:               settingString(raw, settingSubscribePath, "s"),
+		SubscribeName:               raw[settingSubscribeName],
+		ClashMetaTemplate:           settingString(raw, settingClashTemplate, subscription.DefaultClashMetaTemplate),
 	}
 }
 
@@ -270,7 +274,7 @@ func settingInt(raw map[string]string, key string, fallback, min int) int {
 
 func settingBool(raw map[string]string, key string, fallback bool) bool {
 	v, ok := raw[key]
-	if !ok {
+	if !ok || v == "" {
 		return fallback
 	}
 	b, err := strconv.ParseBool(v)
@@ -278,14 +282,6 @@ func settingBool(raw map[string]string, key string, fallback bool) bool {
 		return fallback
 	}
 	return b
-}
-
-func (h *Handler) sessionFreshness(ctx context.Context) time.Duration {
-	raw, err := h.repo.ListSettings(ctx)
-	if err != nil {
-		return 300 * time.Second
-	}
-	return time.Duration(settingInt(raw, settingSessionFreshness, 300, 1)) * time.Second
 }
 
 func (h *Handler) offlineAfter(ctx context.Context) time.Duration {

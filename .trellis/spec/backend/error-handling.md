@@ -62,4 +62,4 @@ serverID := AgentServerID(r.Context())
 ## Tests Required
 
 - Auth: login success/failure/lockout, cookie flags, logout invalidation, rotated agent token 401, cross-boundary 401.
-- Envelope: every 4xx path asserts code + shape; strict JSON decode test (unknown fields rejected on connection-logs so `destination_host` can never be stored → 422).
+- Envelope: every 4xx path asserts code + shape; agent payload tests assert unknown JSON fields stay ignored (`decodeJSON`, per the binding `api-contract.md`) and can never influence ownership or telemetry totals.

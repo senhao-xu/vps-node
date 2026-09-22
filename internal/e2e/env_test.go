@@ -11,14 +11,11 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"vps-node/internal/adminauth"
-	"vps-node/internal/config"
 	"vps-node/internal/db"
 	"vps-node/internal/repo"
 	"vps-node/internal/web"
@@ -139,46 +136,20 @@ func (e *panelEnv) seedScenario(cookie *http.Cookie) (serverID, nodeID, userID i
 		"protocol":  "vless",
 		"port":      443,
 		"settings": map[string]any{
-			"private_key":  base64.RawURLEncoding.EncodeToString(privateKey.Bytes()),
-			"server_names": []string{"example.com"},
-			"short_id":     "0123abcd",
+			"private_key":      base64.RawURLEncoding.EncodeToString(privateKey.Bytes()),
+			"reality_settings": map[string]any{"server_name": "example.com", "short_id": "0123abcd"},
 		},
 	}, cookie)
 	nodeID = int64(out["id"].(float64))
 
 	in30Days := time.Now().AddDate(0, 0, 30).UTC().Format(time.RFC3339)
 	_, out = e.do("POST", "/api/users", map[string]any{
-		"username":    "e2euser",
-		"quota_bytes": 1 << 30,
-		"started_at":  time.Now().Add(-time.Hour).UTC().Format(time.RFC3339),
-		"expires_at":  in30Days,
-		"node_ids":    []int64{nodeID},
+		"username":        "e2euser",
+		"transfer_enable": 1 << 30,
+		"started_at":      time.Now().Add(-time.Hour).UTC().Format(time.RFC3339),
+		"expires_at":      in30Days,
+		"node_ids":        []int64{nodeID},
 	}, cookie)
 	userID = int64(out["id"].(float64))
 	return serverID, nodeID, userID
-}
-
-func installFakeSingBox(t *testing.T) string {
-	t.Helper()
-	src, err := os.ReadFile(filepath.Join("testdata", "fake_singbox.sh"))
-	if err != nil {
-		t.Fatalf("read fake sing-box script: %v", err)
-	}
-	bin := filepath.Join(t.TempDir(), "fake-sing-box")
-	if err := os.WriteFile(bin, src, 0o755); err != nil {
-		t.Fatalf("write fake sing-box: %v", err)
-	}
-	if out, err := exec.Command(bin, "version").CombinedOutput(); err != nil {
-		t.Fatalf("fake sing-box not runnable: %v: %s", err, out)
-	}
-	return bin
-}
-
-func agentConfigForTest(panelURL, registerToken string) *config.Agent {
-	return &config.Agent{
-		PanelURL:      panelURL,
-		RegisterToken: registerToken,
-		ServerID:      1,
-		Collection:    config.Collection{Traffic: true, Sessions: true, ConnectionLogs: true},
-	}
 }

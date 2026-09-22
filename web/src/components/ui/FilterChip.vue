@@ -74,13 +74,13 @@ function onKeydown(event: KeyboardEvent) {
 .filter-chip {
   display: inline-flex;
   align-items: center;
-  gap: var(--spacing-xs);
-  min-height: 30px;
-  padding: 3px 12px;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 12px;
   border: 1px solid var(--color-border);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: var(--color-surface);
-  color: var(--color-text-secondary);
+  color: var(--color-text);
   font-size: var(--font-size-sm);
   cursor: pointer;
   white-space: nowrap;
@@ -93,23 +93,29 @@ function onKeydown(event: KeyboardEvent) {
 
 .filter-chip.active,
 .filter-chip.open {
-  border-color: var(--color-primary-border);
-  background: var(--color-primary-soft);
+  border-color: var(--color-border-strong);
+  background: var(--color-muted-soft);
   color: var(--color-text);
 }
 
 .chevron {
   flex: none;
+  color: var(--color-text-secondary);
+  transition: transform 0.15s ease;
+}
+
+.filter-chip.open .chevron {
+  transform: rotate(180deg);
 }
 
 .chip-panel {
   position: fixed;
   z-index: 200;
   min-width: 160px;
-  padding: var(--spacing-sm);
+  padding: 6px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   box-shadow: var(--shadow-dialog);
 }
 </style>

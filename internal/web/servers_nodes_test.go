@@ -5,6 +5,7 @@ import (
 	"crypto/ecdh"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -30,7 +31,7 @@ func TestNodeCRUDOwnershipAndSecretExposure(t *testing.T) {
 	serverID := e.seedServer(t, "s1")
 	resp, body = e.do(t, "POST", "/api/nodes", map[string]any{
 		"server_id": serverID, "name": "hk-ss", "protocol": "shadowsocks", "port": 8388,
-		"settings": map[string]any{"method": "2022-blake3-aes-128-gcm", "password": "secret-password"},
+		"settings": map[string]any{"cipher": "2022-blake3-aes-128-gcm", "password": "secret-password"},
 	}, cookie)
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("create node: %d %s", resp.StatusCode, body)
@@ -44,14 +45,14 @@ func TestNodeCRUDOwnershipAndSecretExposure(t *testing.T) {
 
 	resp, body = e.do(t, "POST", "/api/nodes", map[string]any{
 		"server_id": serverID, "name": "dup-port", "protocol": "vless", "port": 8388,
-		"settings": map[string]any{"private_key": testRealityPrivateKey(t), "server_names": []string{"example.com"}},
+		"settings": map[string]any{"private_key": testRealityPrivateKey(t), "reality_settings": map[string]any{"server_name": "example.com"}},
 	}, cookie)
 	if resp.StatusCode != http.StatusConflict || errorCode(t, body) != "conflict" {
 		t.Fatalf("port conflict must be 409, got %d %s", resp.StatusCode, body)
 	}
 	resp, body = e.do(t, "POST", "/api/nodes", map[string]any{
 		"server_id": serverID, "name": "hk-ss", "protocol": "vless", "port": 9000,
-		"settings": map[string]any{"private_key": testRealityPrivateKey(t), "server_names": []string{"example.com"}},
+		"settings": map[string]any{"private_key": testRealityPrivateKey(t), "reality_settings": map[string]any{"server_name": "example.com"}},
 	}, cookie)
 	if resp.StatusCode != http.StatusConflict {
 		t.Fatalf("name conflict must be 409, got %d %s", resp.StatusCode, body)
@@ -108,7 +109,7 @@ func TestNodeCRUDOwnershipAndSecretExposure(t *testing.T) {
 		t.Fatalf("unknown settings field must be 422, got %d %s", resp.StatusCode, body)
 	}
 	resp, body = e.do(t, "PUT", fmt.Sprintf("/api/nodes/%d", nodeID), map[string]any{
-		"settings": map[string]any{"method": "not-a-cipher"},
+		"settings": map[string]any{"cipher": "not-a-cipher"},
 	}, cookie)
 	if resp.StatusCode != http.StatusUnprocessableEntity {
 		t.Fatalf("bad cipher must be 422, got %d %s", resp.StatusCode, body)
@@ -207,11 +208,11 @@ func TestNodeProtocolSettingsAllowlists(t *testing.T) {
 		settings map[string]any
 		wantCode int
 	}{
-		{"vless ok", "vless", map[string]any{"private_key": testRealityPrivateKey(t), "short_id": "0123abcd", "server_names": []string{"a.com", "b.com"}}, http.StatusCreated},
-		{"vless bad names", "vless", map[string]any{"server_names": "not-an-array"}, http.StatusUnprocessableEntity},
-		{"hysteria2 incomplete tls", "hysteria2", map[string]any{"password": "pw", "up_mbps": 100, "down_mbps": 200.0}, http.StatusUnprocessableEntity},
-		{"hysteria2 bad bw", "hysteria2", map[string]any{"up_mbps": 12.5}, http.StatusUnprocessableEntity},
-		{"hysteria2 negative", "hysteria2", map[string]any{"down_mbps": -1}, http.StatusUnprocessableEntity},
+		{"vless ok", "vless", map[string]any{"private_key": testRealityPrivateKey(t), "reality_settings": map[string]any{"server_name": "a.com", "short_id": "0123abcd"}}, http.StatusCreated},
+		{"vless bad names", "vless", map[string]any{"reality_settings": "not-an-object"}, http.StatusUnprocessableEntity},
+		{"hysteria2 incomplete tls", "hysteria2", map[string]any{"password": "pw", "bandwidth": map[string]any{"up": 100, "down": 200.0}}, http.StatusUnprocessableEntity},
+		{"hysteria2 bad bw", "hysteria2", map[string]any{"bandwidth": map[string]any{"up": 12.5}}, http.StatusUnprocessableEntity},
+		{"hysteria2 negative", "hysteria2", map[string]any{"bandwidth": map[string]any{"down": -1}}, http.StatusUnprocessableEntity},
 		{"ss empty settings", "shadowsocks", nil, http.StatusUnprocessableEntity},
 	}
 	for i, tc := range cases {
@@ -233,7 +234,7 @@ func TestNodeProtocolParamsValidation(t *testing.T) {
 	cert, key := testTLSMaterial(t, "hy2.example.com", now.Add(-time.Hour), now.Add(time.Hour))
 
 	hy2Base := func() map[string]any {
-		return map[string]any{"server_name": "hy2.example.com", "certificate": cert, "private_key": key}
+		return map[string]any{"tls": map[string]any{"server_name": "hy2.example.com"}, "certificate": cert, "private_key": key}
 	}
 
 	cases := []struct {
@@ -241,15 +242,19 @@ func TestNodeProtocolParamsValidation(t *testing.T) {
 		mutate   func(settings map[string]any)
 		wantCode int
 	}{
-		{"hy2 obfs ok", func(s map[string]any) { s["obfs_password"] = "obfs-secret" }, http.StatusCreated},
-		{"hy2 obfs too long", func(s map[string]any) { s["obfs_password"] = strings.Repeat("a", 65) }, http.StatusUnprocessableEntity},
-		{"hy2 hop ok", func(s map[string]any) { s["hop_ports"] = "30000-40000" }, http.StatusCreated},
-		{"hy2 hop empty ok", func(s map[string]any) { s["hop_ports"] = "" }, http.StatusCreated},
-		{"hy2 hop bad format", func(s map[string]any) { s["hop_ports"] = "abc" }, http.StatusUnprocessableEntity},
-		{"hy2 hop missing end", func(s map[string]any) { s["hop_ports"] = "1-" }, http.StatusUnprocessableEntity},
-		{"hy2 hop reversed", func(s map[string]any) { s["hop_ports"] = "40000-30000" }, http.StatusUnprocessableEntity},
-		{"hy2 hop out of range", func(s map[string]any) { s["hop_ports"] = "0-40000" }, http.StatusUnprocessableEntity},
-		{"hy2 hop end too large", func(s map[string]any) { s["hop_ports"] = "1-70000" }, http.StatusUnprocessableEntity},
+		{"hy2 obfs ok", func(s map[string]any) {
+			s["obfs"] = map[string]any{"open": true, "type": "salamander", "password": "obfs-secret"}
+		}, http.StatusCreated},
+		{"hy2 obfs too long", func(s map[string]any) {
+			s["obfs"] = map[string]any{"password": strings.Repeat("a", 65)}
+		}, http.StatusUnprocessableEntity},
+		{"hy2 hop ok", func(s map[string]any) { s["hop_interval"] = "30000-40000" }, http.StatusCreated},
+		{"hy2 hop empty ok", func(s map[string]any) { s["hop_interval"] = "" }, http.StatusCreated},
+		{"hy2 hop bad format", func(s map[string]any) { s["hop_interval"] = "abc" }, http.StatusUnprocessableEntity},
+		{"hy2 hop missing end", func(s map[string]any) { s["hop_interval"] = "1-" }, http.StatusUnprocessableEntity},
+		{"hy2 hop reversed", func(s map[string]any) { s["hop_interval"] = "40000-30000" }, http.StatusUnprocessableEntity},
+		{"hy2 hop out of range", func(s map[string]any) { s["hop_interval"] = "0-40000" }, http.StatusUnprocessableEntity},
+		{"hy2 hop end too large", func(s map[string]any) { s["hop_interval"] = "1-70000" }, http.StatusUnprocessableEntity},
 	}
 	for i, tc := range cases {
 		settings := hy2Base()
@@ -279,8 +284,10 @@ func TestNodeProtocolParamsRoundTrip(t *testing.T) {
 	resp, body := e.do(t, "POST", "/api/nodes", map[string]any{
 		"server_id": serverID, "name": "hy2-params", "protocol": "hysteria2", "port": 21443,
 		"settings": map[string]any{
-			"server_name": "hy2.example.com", "certificate": cert, "private_key": key,
-			"obfs_password": "obfs-secret", "hop_ports": "30000-40000",
+			"tls":         map[string]any{"server_name": "hy2.example.com"},
+			"certificate": cert, "private_key": key,
+			"obfs":         map[string]any{"open": true, "type": "salamander", "password": "obfs-secret"},
+			"hop_interval": "30000-40000",
 		},
 	}, cookie)
 	if resp.StatusCode != http.StatusCreated {
@@ -291,14 +298,14 @@ func TestNodeProtocolParamsRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get node: %v", err)
 	}
-	for _, want := range []string{`"obfs_password":"obfs-secret"`, `"hop_ports":"30000-40000"`} {
-		if !strings.Contains(node.Settings, want) {
-			t.Fatalf("settings must contain %s, got %s", want, node.Settings)
+	for _, want := range []string{`"password":"obfs-secret"`, `"hop_interval":"30000-40000"`} {
+		if !strings.Contains(node.ProtocolSettings, want) {
+			t.Fatalf("settings must contain %s, got %s", want, node.ProtocolSettings)
 		}
 	}
 
 	resp, body = e.do(t, "PUT", fmt.Sprintf("/api/nodes/%d", nodeID), map[string]any{
-		"settings": map[string]any{"up_mbps": 100},
+		"settings": map[string]any{"bandwidth": map[string]any{"up": 100}},
 	}, cookie)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("partial update: %d %s", resp.StatusCode, body)
@@ -307,8 +314,8 @@ func TestNodeProtocolParamsRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get node: %v", err)
 	}
-	if !strings.Contains(node.Settings, `"obfs_password":"obfs-secret"`) || !strings.Contains(node.Settings, `"hop_ports":"30000-40000"`) {
-		t.Fatalf("partial update must preserve new fields, got %s", node.Settings)
+	if !strings.Contains(node.ProtocolSettings, `"password":"obfs-secret"`) || !strings.Contains(node.ProtocolSettings, `"hop_interval":"30000-40000"`) {
+		t.Fatalf("partial update must preserve new fields, got %s", node.ProtocolSettings)
 	}
 
 	// The agent config must render obfs in the inbound and never leak hop_ports.
@@ -330,9 +337,9 @@ func TestNodeProtocolParamsRoundTrip(t *testing.T) {
 	if !ok || obfs["type"] != "salamander" || obfs["password"] != "obfs-secret" {
 		t.Fatalf("inbound must carry salamander obfs: %s", body)
 	}
-	for _, leak := range []string{"hop_ports", "mport", "ports"} {
+	for _, leak := range []string{"hop_interval", "hop_ports", "mport", "ports"} {
 		if _, has := inbound[leak]; has {
-			t.Fatalf("hop_ports must not leak into the server inbound: %s", body)
+			t.Fatalf("hop_interval must not leak into the server inbound: %s", body)
 		}
 	}
 }
@@ -346,10 +353,10 @@ func TestHysteria2TLSValidationAndUpdate(t *testing.T) {
 	_, otherKey := testTLSMaterial(t, "hy2.example.com", now.Add(-time.Hour), now.Add(time.Hour))
 	expiredCert, expiredKey := testTLSMaterial(t, "hy2.example.com", now.Add(-2*time.Hour), now.Add(-time.Hour))
 	cases := []map[string]any{
-		{"server_name": "hy2.example.com", "certificate": "bad", "private_key": "bad"},
-		{"server_name": "hy2.example.com", "certificate": cert, "private_key": otherKey},
-		{"server_name": "wrong.example.com", "certificate": cert, "private_key": key},
-		{"server_name": "hy2.example.com", "certificate": expiredCert, "private_key": expiredKey},
+		{"tls": map[string]any{"server_name": "hy2.example.com"}, "certificate": "bad", "private_key": "bad"},
+		{"tls": map[string]any{"server_name": "hy2.example.com"}, "certificate": cert, "private_key": otherKey},
+		{"tls": map[string]any{"server_name": "wrong.example.com"}, "certificate": cert, "private_key": key},
+		{"tls": map[string]any{"server_name": "hy2.example.com"}, "certificate": expiredCert, "private_key": expiredKey},
 	}
 	for i, settings := range cases {
 		resp, body := e.do(t, "POST", "/api/nodes", map[string]any{"server_id": serverID, "name": fmt.Sprintf("bad-%d", i), "protocol": "hysteria2", "port": 9000 + i, "settings": settings}, cookie)
@@ -357,7 +364,7 @@ func TestHysteria2TLSValidationAndUpdate(t *testing.T) {
 			t.Fatalf("case %d: %d %s", i, resp.StatusCode, body)
 		}
 	}
-	resp, body := e.do(t, "POST", "/api/nodes", map[string]any{"server_id": serverID, "name": "good", "protocol": "hysteria2", "port": 9100, "settings": map[string]any{"server_name": "hy2.example.com", "certificate": cert, "private_key": key}}, cookie)
+	resp, body := e.do(t, "POST", "/api/nodes", map[string]any{"server_id": serverID, "name": "good", "protocol": "hysteria2", "port": 9100, "settings": map[string]any{"tls": map[string]any{"server_name": "hy2.example.com"}, "certificate": cert, "private_key": key}}, cookie)
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("create: %d %s", resp.StatusCode, body)
 	}
@@ -421,7 +428,7 @@ func TestNodeSettingsUpdatePreservesRealitySecret(t *testing.T) {
 	privateKey := testRealityPrivateKey(t)
 	resp, body := e.do(t, "POST", "/api/nodes", map[string]any{
 		"server_id": serverID, "name": "vless", "protocol": "vless", "port": 443,
-		"settings": map[string]any{"private_key": privateKey, "short_id": "0123abcd", "server_names": []string{"a.com"}},
+		"settings": map[string]any{"private_key": privateKey, "reality_settings": map[string]any{"server_name": "a.com", "short_id": "0123abcd"}},
 	}, cookie)
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("create vless: %d %s", resp.StatusCode, body)
@@ -429,7 +436,7 @@ func TestNodeSettingsUpdatePreservesRealitySecret(t *testing.T) {
 	nodeID := int64(jsonMap(t, body)["id"].(float64))
 
 	resp, body = e.do(t, "PUT", fmt.Sprintf("/api/nodes/%d", nodeID), map[string]any{
-		"settings": map[string]any{"short_id": "abcdef12"},
+		"settings": map[string]any{"reality_settings": map[string]any{"short_id": "abcdef12"}},
 	}, cookie)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("partial update: %d %s", resp.StatusCode, body)
@@ -446,8 +453,8 @@ func TestNodeSettingsUpdatePreservesRealitySecret(t *testing.T) {
 	if !strings.Contains(string(plain), privateKey) {
 		t.Fatal("partial update must preserve the existing private key")
 	}
-	if !strings.Contains(node.Settings, `"server_names":["a.com"]`) || !strings.Contains(node.Settings, `"short_id":"abcdef12"`) {
-		t.Fatalf("partial update must merge public settings, got %s", node.Settings)
+	if !strings.Contains(node.ProtocolSettings, `"server_name":"a.com"`) || !strings.Contains(node.ProtocolSettings, `"short_id":"abcdef12"`) {
+		t.Fatalf("partial update must merge public settings, got %s", node.ProtocolSettings)
 	}
 }
 
@@ -555,24 +562,20 @@ func TestServerDeleteCascade(t *testing.T) {
 	if err := e.repo.AuthorizeUserNode(ctx, userID, nodeID); err != nil {
 		t.Fatalf("authorize: %v", err)
 	}
-	if _, err := e.repo.CreateAgent(ctx, serverID, "agent-hash", "1.0.0"); err != nil {
+	agentID, err := e.repo.CreateAgent(ctx, serverID, "agent-hash", "1.0.0")
+	if err != nil {
 		t.Fatalf("create agent: %v", err)
 	}
 	now := time.Now()
-	if err := e.repo.ReplaceServerSessions(ctx, serverID, []repo.NewSession{
-		{UserID: userID, NodeID: nodeID, ServerID: serverID, IP: "1.1.1.1", ConnectedAt: now, LastSeenAt: now},
-	}); err != nil {
-		t.Fatalf("sessions: %v", err)
+	if _, _, err := e.repo.IngestDeviceBatch(ctx, agentID, 1, serverID, []repo.NewOnlineDevice{
+		{UserID: userID, NodeID: nodeID, IP: "1.1.1.1", Online: 1},
+	}, map[int64]int{userID: 1}, now.Unix()); err != nil {
+		t.Fatalf("devices: %v", err)
 	}
 	if err := e.repo.InsertTrafficRecords(ctx, []repo.NewTrafficRecord{
-		{UserID: userID, NodeID: nodeID, ServerID: serverID, UploadBytes: 5, DownloadBytes: 6, CreatedAt: now},
+		{UserID: userID, NodeID: nodeID, ServerID: serverID, U: 5, D: 6, CreatedAt: now},
 	}); err != nil {
 		t.Fatalf("traffic: %v", err)
-	}
-	if _, err := e.repo.InsertConnectionLogs(ctx, []repo.NewConnectionLog{
-		{UserID: userID, NodeID: nodeID, ServerID: serverID, IP: "1.1.1.1", ConnectedAt: now, Status: "closed"},
-	}); err != nil {
-		t.Fatalf("logs: %v", err)
 	}
 
 	resp, body := e.do(t, "DELETE", fmt.Sprintf("/api/servers/%d", serverID), nil, cookie)
@@ -593,18 +596,13 @@ func TestServerDeleteCascade(t *testing.T) {
 	if err != nil || len(ids) != 0 {
 		t.Fatalf("expected authorizations removed, got %v %v", ids, err)
 	}
-	sessions, err := e.repo.ListSessionsByUser(ctx, userID, time.Time{})
-	if err != nil || len(sessions) != 0 {
-		t.Fatalf("expected sessions removed, got %v %v", sessions, err)
-	}
 
 	upload, download, err := e.repo.SumTraffic(ctx, repo.TrafficFilter{UserID: userID})
 	if err != nil || upload != 5 || download != 6 {
 		t.Fatalf("traffic must survive server deletion, got %d %d %v", upload, download, err)
 	}
-	logs, total, err := e.repo.ListConnectionLogs(ctx, repo.LogFilter{UserID: userID})
-	if err != nil || total != 1 || len(logs) != 1 {
-		t.Fatalf("connection logs must survive server deletion, got %d %v", total, err)
+	if devices, err := e.repo.ListDevicesByUser(ctx, userID); err != nil || len(devices) != 0 {
+		t.Fatalf("online devices must cascade with the server, got %v %v", devices, err)
 	}
 
 	if _, err := e.repo.GetUser(ctx, userID); err != nil {
@@ -736,7 +734,7 @@ func TestRevisionBumpsOnMutations(t *testing.T) {
 
 	resp, body = e.do(t, "POST", "/api/nodes", map[string]any{
 		"server_id": server1, "name": "n3", "protocol": "vless", "port": 9443,
-		"settings": map[string]any{"private_key": testRealityPrivateKey(t), "server_names": []string{"example.com"}},
+		"settings": map[string]any{"private_key": testRealityPrivateKey(t), "reality_settings": map[string]any{"server_name": "example.com"}},
 	}, cookie)
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("node create: %d %s", resp.StatusCode, body)
@@ -769,5 +767,337 @@ func TestRevisionBumpsOnMutations(t *testing.T) {
 	_, _ = e.do(t, "DELETE", fmt.Sprintf("/api/users/%d", userID), nil, cookie)
 	if rev := e.revision(t, server1); rev != 11 {
 		t.Fatalf("user delete must bump authorized server revision, got %d", rev)
+	}
+}
+
+func TestNodeRateAndTags(t *testing.T) {
+	e := newTestEnv(t)
+	cookie := e.login(t)
+	serverID := e.seedServer(t, "meta")
+
+	resp, body := e.do(t, "POST", "/api/nodes", map[string]any{
+		"server_id": serverID, "name": "meta-ss", "protocol": "shadowsocks", "port": 8388,
+		"rate": 2.5, "tags": []string{"hk", "premium"},
+		"settings": map[string]any{"cipher": "2022-blake3-aes-128-gcm"},
+	}, cookie)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("create with rate/tags: %d %s", resp.StatusCode, body)
+	}
+	created := jsonMap(t, body)
+	if created["rate"].(float64) != 2.5 {
+		t.Fatalf("rate must round-trip, got %s", body)
+	}
+	tags := created["tags"].([]any)
+	if len(tags) != 2 || tags[0] != "hk" || tags[1] != "premium" {
+		t.Fatalf("tags must round-trip, got %s", body)
+	}
+	nodeID := int64(created["id"].(float64))
+
+	resp, body = e.do(t, "POST", "/api/nodes", map[string]any{
+		"server_id": serverID, "name": "meta-default", "protocol": "shadowsocks", "port": 8389,
+		"settings": map[string]any{"cipher": "2022-blake3-aes-128-gcm"},
+	}, cookie)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("create with defaults: %d %s", resp.StatusCode, body)
+	}
+	defaults := jsonMap(t, body)
+	if defaults["rate"].(float64) != 1 || len(defaults["tags"].([]any)) != 0 {
+		t.Fatalf("omitted rate/tags must default to 1/[], got %s", body)
+	}
+
+	manyTags := make([]string, 21)
+	for i := range manyTags {
+		manyTags[i] = "t"
+	}
+	badCases := []map[string]any{
+		{"rate": 0},
+		{"rate": -1},
+		{"tags": []string{""}},
+		{"tags": []string{strings.Repeat("a", 33)}},
+		{"tags": manyTags},
+	}
+	for i, extra := range badCases {
+		payload := map[string]any{
+			"server_id": serverID, "name": fmt.Sprintf("meta-bad-%d", i), "protocol": "shadowsocks",
+			"port": 8500 + i, "settings": map[string]any{"cipher": "2022-blake3-aes-128-gcm"},
+		}
+		for key, value := range extra {
+			payload[key] = value
+		}
+		resp, body := e.do(t, "POST", "/api/nodes", payload, cookie)
+		if resp.StatusCode != http.StatusUnprocessableEntity || errorCode(t, body) != "validation" {
+			t.Fatalf("invalid rate/tags %v must be 422 validation, got %d %s", extra, resp.StatusCode, body)
+		}
+	}
+
+	rev := e.revision(t, serverID)
+	resp, body = e.do(t, "PUT", fmt.Sprintf("/api/nodes/%d", nodeID), map[string]any{
+		"rate": 3.0, "tags": []string{"jp"},
+	}, cookie)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("update rate/tags: %d %s", resp.StatusCode, body)
+	}
+	updated := jsonMap(t, body)
+	if updated["rate"].(float64) != 3 || len(updated["tags"].([]any)) != 1 {
+		t.Fatalf("rate/tags must update, got %s", body)
+	}
+	if e.revision(t, serverID) <= rev {
+		t.Fatal("rate/tags update must bump the server revision")
+	}
+
+	resp, body = e.do(t, "PUT", fmt.Sprintf("/api/nodes/%d", nodeID), map[string]any{"rate": 4.0}, cookie)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("partial rate update: %d %s", resp.StatusCode, body)
+	}
+	updated = jsonMap(t, body)
+	if updated["rate"].(float64) != 4 || len(updated["tags"].([]any)) != 1 {
+		t.Fatalf("omitted tags must be retained, got %s", body)
+	}
+}
+
+func TestNodeDTOIncludesRateAndTagsOnEveryPath(t *testing.T) {
+	e := newTestEnv(t)
+	cookie := e.login(t)
+	ctx := context.Background()
+	serverID := e.seedServer(t, "paths")
+
+	resp, body := e.do(t, "POST", "/api/nodes", map[string]any{
+		"server_id": serverID, "name": "paths-ss", "protocol": "shadowsocks", "port": 8388,
+		"rate": 1.5, "tags": []string{"edge"},
+		"settings": map[string]any{"cipher": "2022-blake3-aes-128-gcm"},
+	}, cookie)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("create: %d %s", resp.StatusCode, body)
+	}
+	nodeID := int64(jsonMap(t, body)["id"].(float64))
+
+	assertRateTags := func(label, body string, node map[string]any) {
+		t.Helper()
+		if node["rate"].(float64) != 1.5 {
+			t.Fatalf("%s: rate missing, got %s", label, body)
+		}
+		tags, ok := node["tags"].([]any)
+		if !ok || len(tags) != 1 || tags[0] != "edge" {
+			t.Fatalf("%s: tags missing, got %s", label, body)
+		}
+	}
+
+	resp, body = e.do(t, "GET", "/api/nodes", nil, cookie)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("list: %d %s", resp.StatusCode, body)
+	}
+	assertRateTags("list", body, jsonMap(t, body)["items"].([]any)[0].(map[string]any))
+
+	resp, body = e.do(t, "GET", fmt.Sprintf("/api/nodes/%d", nodeID), nil, cookie)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("detail: %d %s", resp.StatusCode, body)
+	}
+	assertRateTags("detail", body, jsonMap(t, body))
+
+	resp, body = e.do(t, "GET", fmt.Sprintf("/api/servers/%d", serverID), nil, cookie)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("server detail: %d %s", resp.StatusCode, body)
+	}
+	assertRateTags("server", body, jsonMap(t, body)["nodes"].([]any)[0].(map[string]any))
+
+	userID := e.seedUser(t, "paths-user")
+	if err := e.repo.AuthorizeUserNode(ctx, userID, nodeID); err != nil {
+		t.Fatalf("authorize: %v", err)
+	}
+	resp, body = e.do(t, "GET", fmt.Sprintf("/api/users/%d/nodes", userID), nil, cookie)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("user nodes: %d %s", resp.StatusCode, body)
+	}
+	assertRateTags("user nodes", body, jsonMap(t, body)["nodes"].([]any)[0].(map[string]any))
+}
+
+func TestVLESSNestedSettingsShape(t *testing.T) {
+	e := newTestEnv(t)
+	cookie := e.login(t)
+	ctx := context.Background()
+	serverID := e.seedServer(t, "nested")
+	privateKey := testRealityPrivateKey(t)
+
+	resp, body := e.do(t, "POST", "/api/nodes", map[string]any{
+		"server_id": serverID, "name": "nested-vless", "protocol": "vless", "port": 443,
+		"settings": map[string]any{
+			"private_key": privateKey,
+			"tls":         2,
+			"reality_settings": map[string]any{
+				"server_name": "nested.example.com",
+				"short_id":    "0123abcd",
+			},
+		},
+	}, cookie)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("create nested vless: %d %s", resp.StatusCode, body)
+	}
+	nodeID := int64(jsonMap(t, body)["id"].(float64))
+
+	node, err := e.repo.GetNode(ctx, nodeID)
+	if err != nil {
+		t.Fatalf("get node: %v", err)
+	}
+	settings := map[string]any{}
+	if err := json.Unmarshal([]byte(node.ProtocolSettings), &settings); err != nil {
+		t.Fatalf("decode settings: %v", err)
+	}
+	if _, has := settings["server_names"]; has {
+		t.Fatalf("flat server_names must not be stored: %s", node.ProtocolSettings)
+	}
+	reality, ok := settings["reality_settings"].(map[string]any)
+	if !ok || reality["server_name"] != "nested.example.com" || reality["short_id"] != "0123abcd" {
+		t.Fatalf("unexpected reality_settings: %s", node.ProtocolSettings)
+	}
+	if publicKey, _ := reality["public_key"].(string); publicKey == "" {
+		t.Fatalf("public_key must be derived into reality_settings: %s", node.ProtocolSettings)
+	}
+
+	resp, body = e.do(t, "PUT", fmt.Sprintf("/api/nodes/%d", nodeID), map[string]any{
+		"settings": map[string]any{"reality_settings": map[string]any{"short_id": "abcdef12"}},
+	}, cookie)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("nested partial update: %d %s", resp.StatusCode, body)
+	}
+	node, _ = e.repo.GetNode(ctx, nodeID)
+	if !strings.Contains(node.ProtocolSettings, `"server_name":"nested.example.com"`) || !strings.Contains(node.ProtocolSettings, `"short_id":"abcdef12"`) {
+		t.Fatalf("nested partial update must merge reality_settings, got %s", node.ProtocolSettings)
+	}
+
+	resp, body = e.do(t, "PUT", fmt.Sprintf("/api/nodes/%d", nodeID), map[string]any{
+		"settings": map[string]any{"reality_settings": map[string]any{"bogus": "field"}},
+	}, cookie)
+	if resp.StatusCode != http.StatusUnprocessableEntity || errorCode(t, body) != "validation" {
+		t.Fatalf("unknown nested field must be 422 validation, got %d %s", resp.StatusCode, body)
+	}
+
+	resp, body = e.do(t, "PUT", fmt.Sprintf("/api/nodes/%d", nodeID), map[string]any{
+		"settings": map[string]any{"reality_settings": map[string]any{"public_key": "not-the-derived-key"}},
+	}, cookie)
+	if resp.StatusCode != http.StatusUnprocessableEntity || errorCode(t, body) != "validation" {
+		t.Fatalf("mismatched public_key must be 422 validation, got %d %s", resp.StatusCode, body)
+	}
+
+	rotated := testRealityPrivateKey(t)
+	resp, body = e.do(t, "PUT", fmt.Sprintf("/api/nodes/%d", nodeID), map[string]any{
+		"settings": map[string]any{"private_key": rotated},
+	}, cookie)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("private key rotation must succeed, got %d %s", resp.StatusCode, body)
+	}
+	node, _ = e.repo.GetNode(ctx, nodeID)
+	plain, err := secrets.Decrypt(e.appKey, node.SecretEnc)
+	if err != nil {
+		t.Fatalf("decrypt secret: %v", err)
+	}
+	if !strings.Contains(string(plain), rotated) {
+		t.Fatalf("rotated private key must be stored, got %s", plain)
+	}
+	if !strings.Contains(node.ProtocolSettings, `"server_name":"nested.example.com"`) {
+		t.Fatalf("partial private key update must retain public settings, got %s", node.ProtocolSettings)
+	}
+}
+
+// Reserved Xboard sections (tls_settings/network_settings/multiplex/utls,
+// shadowsocks obfs_settings) are extension placeholders: accepted as opaque
+// objects, stored verbatim, and never rendered. Validated sections reject
+// unknown keys at any depth.
+func TestNodeReservedSettingsSectionsAreOpaqueAndInert(t *testing.T) {
+	e := newTestEnv(t)
+	cookie := e.login(t)
+	ctx := context.Background()
+	serverID := e.seedServer(t, "reserved")
+
+	resp, body := e.do(t, "POST", "/api/nodes", map[string]any{
+		"server_id": serverID, "name": "reserved-vless", "protocol": "vless", "port": 443,
+		"settings": map[string]any{
+			"private_key":      testRealityPrivateKey(t),
+			"reality_settings": map[string]any{"server_name": "reserved.example.com"},
+			"tls_settings":     map[string]any{"server_name": "reserved.example.com"},
+			"network_settings": map[string]any{"anything": "goes"},
+			"multiplex":        map[string]any{"enabled": true, "brutal": map[string]any{"up_mbps": 5}},
+			"utls":             map[string]any{"enabled": true, "fingerprint": "chrome"},
+		},
+	}, cookie)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("reserved sections must be accepted: %d %s", resp.StatusCode, body)
+	}
+	nodeID := int64(jsonMap(t, body)["id"].(float64))
+	node, err := e.repo.GetNode(ctx, nodeID)
+	if err != nil {
+		t.Fatalf("get node: %v", err)
+	}
+	for _, want := range []string{`"network_settings":{"anything":"goes"}`, `"utls":{"enabled":true,"fingerprint":"chrome"}`} {
+		if !strings.Contains(node.ProtocolSettings, want) {
+			t.Fatalf("reserved settings must be stored verbatim, want %s in %s", want, node.ProtocolSettings)
+		}
+	}
+
+	userID := e.seedUser(t, "reserved-user")
+	if err := e.repo.AuthorizeUserNode(ctx, userID, nodeID); err != nil {
+		t.Fatalf("authorize: %v", err)
+	}
+	token := e.registerAgent(t, cookie, serverID, "1.0.0")
+	resp, body = e.doAgent(t, "GET", "/api/agent/config?version=0", nil, token)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("reserved sections must not break rendering: %d %s", resp.StatusCode, body)
+	}
+	inbound := jsonMap(t, body)["config"].(map[string]any)["singbox"].(map[string]any)["inbounds"].([]any)[0].(map[string]any)
+	for _, leak := range []string{"tls_settings", "network_settings", "multiplex", "utls"} {
+		if _, has := inbound[leak]; has {
+			t.Fatalf("reserved section %q must never reach the rendered inbound: %s", leak, body)
+		}
+	}
+
+	// A supplied reserved section replaces the stored one as a whole (no deep merge).
+	resp, body = e.do(t, "PUT", fmt.Sprintf("/api/nodes/%d", nodeID), map[string]any{
+		"settings": map[string]any{"multiplex": map[string]any{"enabled": false}},
+	}, cookie)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("reserved section patch: %d %s", resp.StatusCode, body)
+	}
+	node, err = e.repo.GetNode(ctx, nodeID)
+	if err != nil {
+		t.Fatalf("get node: %v", err)
+	}
+	if !strings.Contains(node.ProtocolSettings, `"multiplex":{"enabled":false}`) || strings.Contains(node.ProtocolSettings, `"brutal"`) {
+		t.Fatalf("reserved section must be replaced as a whole, got %s", node.ProtocolSettings)
+	}
+	if !strings.Contains(node.ProtocolSettings, `"network_settings":{"anything":"goes"}`) {
+		t.Fatalf("unrelated reserved sections must be retained, got %s", node.ProtocolSettings)
+	}
+
+	now := time.Now()
+	cert, key := testTLSMaterial(t, "hy2.example.com", now.Add(-time.Hour), now.Add(time.Hour))
+	badNested := []struct {
+		name     string
+		protocol string
+		settings map[string]any
+	}{
+		{"bandwidth unknown", "hysteria2", map[string]any{
+			"tls": map[string]any{"server_name": "hy2.example.com"}, "certificate": cert, "private_key": key,
+			"bandwidth": map[string]any{"up": 1, "bogus": 2},
+		}},
+		{"tls unknown", "hysteria2", map[string]any{
+			"tls": map[string]any{"server_name": "hy2.example.com", "bogus": true}, "certificate": cert, "private_key": key,
+		}},
+		{"obfs unknown", "hysteria2", map[string]any{
+			"tls": map[string]any{"server_name": "hy2.example.com"}, "certificate": cert, "private_key": key,
+			"obfs": map[string]any{"open": true, "bogus": "x"},
+		}},
+		{"tls_settings not an object", "vless", map[string]any{
+			"private_key":      testRealityPrivateKey(t),
+			"reality_settings": map[string]any{"server_name": "a.com"},
+			"tls_settings":     "not-an-object",
+		}},
+	}
+	for i, tc := range badNested {
+		resp, body := e.do(t, "POST", "/api/nodes", map[string]any{
+			"server_id": serverID, "name": fmt.Sprintf("bad-reserved-%d", i), "protocol": tc.protocol,
+			"port": 26000 + i, "settings": tc.settings,
+		}, cookie)
+		if resp.StatusCode != http.StatusUnprocessableEntity || errorCode(t, body) != "validation" {
+			t.Fatalf("%s must be 422 validation, got %d %s", tc.name, resp.StatusCode, body)
+		}
 	}
 }

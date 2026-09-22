@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "重做样式与新增 SegmentedControl 组件时，必须保持 api/components/pages 的既有目录与单一属主约定"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "StatCard/SegmentedControl/Dialog 等组件的 props、插槽与组合方式须遵循既有前端组件规范"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "改动 AppLayout/组件 props 时避免类型回归，保持 DTO 与组件类型一致"}
+{"file": ".trellis/tasks/09-21-xboard-style-revamp/research/xboard-admin-style.md", "reason": "Xboard admin 精确 token、布局尺寸与组件类名的权威逆向参考"}
+{"file": ".trellis/tasks/09-22-xboard-visual-parity-v2/design.md", "reason": "分层重做策略、token 取值表与外壳/页面变更方案，是实现的约束依据"}

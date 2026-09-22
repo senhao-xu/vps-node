@@ -14,6 +14,7 @@ import ErrorBanner from '@/components/ErrorBanner.vue'
 import ProgressBar from '@/components/ProgressBar.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
+import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import StatCard from '@/components/ui/StatCard.vue'
 import { formatBytes } from '@/utils/format'
 import { userStatusInfo } from '@/utils/labels'
@@ -24,6 +25,10 @@ const error = ref('')
 
 const traffic = ref<DashboardUserTraffic | null>(null)
 const trafficRange = ref<DashboardUserTrafficRange>('today')
+const trafficRangeOptions: Array<{ value: DashboardUserTrafficRange; label: string }> = [
+  { value: 'today', label: '今日' },
+  { value: 'total', label: '累计' },
+]
 const trafficLoading = ref(false)
 const expandedUsers = ref<Set<number>>(new Set())
 
@@ -85,14 +90,19 @@ function onRowClick(item: DashboardUserTrafficItem) {
   toggleExpand(item.user_id)
 }
 
+function ratioPercent(part: number, total: number): string {
+  if (total <= 0) return '0%'
+  return `${Math.round((part / total) * 100)}%`
+}
+
 function quotaPercent(item: DashboardUserTrafficItem): number {
-  if (item.quota_bytes <= 0) return 0
-  return Math.min(100, (item.total_bytes / item.quota_bytes) * 100)
+  if (item.transfer_enable <= 0) return 0
+  return Math.min(100, (item.total_bytes / item.transfer_enable) * 100)
 }
 
 function quotaText(item: DashboardUserTrafficItem): string {
-  if (item.quota_bytes <= 0) return `${formatBytes(item.total_bytes)} / 不限`
-  return `${formatBytes(item.total_bytes)} / ${formatBytes(item.quota_bytes)}`
+  if (item.transfer_enable <= 0) return `${formatBytes(item.total_bytes)} / 不限`
+  return `${formatBytes(item.total_bytes)} / ${formatBytes(item.transfer_enable)}`
 }
 
 onMounted(() => {
@@ -136,33 +146,39 @@ onUnmounted(() => {
         label="用户总数"
         :value="stats.users_total"
         :icon="Users"
+        :hint="`在线 ${stats.users_online}`"
       />
       <StatCard
         label="在线用户"
         :value="stats.users_online"
         :icon="UserCheck"
         tone="success"
+        :hint="`占比 ${ratioPercent(stats.users_online, stats.users_total)}`"
       />
       <StatCard
         label="Server 总数"
         :value="stats.servers_total"
         :icon="Server"
+        :hint="`在线 ${stats.servers_online}`"
       />
       <StatCard
         label="在线 Server"
         :value="stats.servers_online"
         :icon="Activity"
         :tone="stats.servers_online < stats.servers_total ? 'warning' : 'success'"
+        :hint="`占比 ${ratioPercent(stats.servers_online, stats.servers_total)}`"
       />
       <StatCard
         label="今日流量"
         :value="formatBytes(stats.traffic_today_bytes)"
         :icon="ArrowDownUp"
+        hint="UTC 0 点起"
       />
       <StatCard
-        label="当前连接数"
-        :value="stats.sessions_current"
+        label="在线设备"
+        :value="stats.devices_current"
         :icon="Activity"
+        hint="按 IP 去重"
       />
     </div>
     <div
@@ -184,28 +200,12 @@ onUnmounted(() => {
         <h2 class="card-title traffic-title">
           用户流量 <span>{{ trafficRange === 'today' ? '今日（UTC 0 点起）' : '累计' }}</span>
         </h2>
-        <div
-          class="range-switch"
-          role="group"
+        <SegmentedControl
+          :items="trafficRangeOptions"
+          :model-value="trafficRange"
           aria-label="时间范围"
-        >
-          <button
-            type="button"
-            class="range-btn"
-            :class="{ active: trafficRange === 'today' }"
-            @click="setRange('today')"
-          >
-            今日
-          </button>
-          <button
-            type="button"
-            class="range-btn"
-            :class="{ active: trafficRange === 'total' }"
-            @click="setRange('total')"
-          >
-            累计
-          </button>
-        </div>
+          @update:model-value="setRange"
+        />
       </div>
 
       <DataTable
@@ -213,6 +213,7 @@ onUnmounted(() => {
         :rows="traffic?.items ?? []"
         :row-key="(row) => row.user_id"
         :loading="trafficLoading"
+        :bordered="false"
         @row-click="onRowClick"
       >
         <template #cell-username="{ row }">
@@ -323,8 +324,20 @@ onUnmounted(() => {
 <style scoped>
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(4, 1fr);
   gap: var(--spacing-md);
+}
+
+@media (max-width: 1200px) {
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .stat-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .stat-skeleton {
@@ -403,39 +416,6 @@ onUnmounted(() => {
   font-size: var(--font-size-sm);
   font-weight: 400;
   margin-left: var(--spacing-xs);
-}
-
-.range-switch {
-  display: inline-flex;
-  padding: 2px;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-muted-soft);
-  gap: 2px;
-}
-
-.range-btn {
-  padding: 4px 14px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
-  cursor: pointer;
-  transition:
-    background 0.15s ease,
-    color 0.15s ease;
-}
-
-.range-btn:hover {
-  color: var(--color-text);
-}
-
-.range-btn.active {
-  background: var(--color-primary);
-  color: var(--color-on-primary);
-  font-weight: 600;
-  box-shadow: none;
 }
 
 .traffic-card :deep(.data-table tbody tr) {

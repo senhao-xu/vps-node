@@ -8,27 +8,38 @@ import (
 )
 
 type User struct {
-	ID         int64
-	UUID       string
-	Username   string
-	TokenHash  string
-	Status     string
-	QuotaBytes int64
-	UsedBytes  int64
-	StartedAt  *time.Time
-	ExpiresAt  *time.Time
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	ID             int64
+	UUID           string
+	Username       string
+	TokenHash      string
+	Status         string
+	TransferEnable int64
+	U              int64
+	D              int64
+	SpeedLimit     int64
+	DeviceLimit    int64
+	OnlineCount    int64
+	LastOnlineAt   *time.Time
+	StartedAt      *time.Time
+	ExpiresAt      *time.Time
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+func (u User) UsedBytes() int64 {
+	return u.U + u.D
 }
 
 type NewUser struct {
-	UUID       string
-	Username   string
-	TokenHash  string
-	Status     string
-	QuotaBytes int64
-	StartedAt  *time.Time
-	ExpiresAt  *time.Time
+	UUID           string
+	Username       string
+	TokenHash      string
+	Status         string
+	TransferEnable int64
+	SpeedLimit     int64
+	DeviceLimit    int64
+	StartedAt      *time.Time
+	ExpiresAt      *time.Time
 }
 
 type UserFilter struct {
@@ -46,7 +57,7 @@ const (
 	UserStatusExpired  = "expired"
 )
 
-const userSelect = `SELECT id, uuid, username, token_hash, status, quota_bytes, used_bytes, started_at, expires_at, created_at, updated_at FROM users`
+const userSelect = `SELECT id, uuid, username, token_hash, status, transfer_enable, u, d, speed_limit, device_limit, online_count, last_online_at, started_at, expires_at, created_at, updated_at FROM users`
 
 type execer interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
@@ -60,9 +71,10 @@ func insertUserExec(ctx context.Context, q execer, n NewUser) (int64, error) {
 	}
 	now := nowUnix()
 	res, err := q.ExecContext(ctx,
-		`INSERT INTO users (uuid, username, token_hash, status, quota_bytes, used_bytes, started_at, expires_at, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
-		n.UUID, n.Username, n.TokenHash, n.Status, n.QuotaBytes, timeArg(n.StartedAt), timeArg(n.ExpiresAt), now, now)
+		`INSERT INTO users (uuid, username, token_hash, status, transfer_enable, u, d, speed_limit, device_limit, started_at, expires_at, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?)`,
+		n.UUID, n.Username, n.TokenHash, n.Status, n.TransferEnable, n.SpeedLimit, n.DeviceLimit,
+		timeArg(n.StartedAt), timeArg(n.ExpiresAt), now, now)
 	if err != nil {
 		return 0, mapErr(err)
 	}
@@ -168,14 +180,14 @@ func (r *Repo) CountUsers(ctx context.Context) (int64, error) {
 
 func (r *Repo) ListEligibleUsersByServer(ctx context.Context, serverID int64, now time.Time) ([]User, error) {
 	rows, err := r.DB.QueryContext(ctx,
-		`SELECT u.id, u.uuid, u.username, u.token_hash, u.status, u.quota_bytes, u.used_bytes, u.started_at, u.expires_at, u.created_at, u.updated_at
+		`SELECT u.id, u.uuid, u.username, u.token_hash, u.status, u.transfer_enable, u.u, u.d, u.speed_limit, u.device_limit, u.online_count, u.last_online_at, u.started_at, u.expires_at, u.created_at, u.updated_at
 		 FROM users u
 		 JOIN user_nodes un ON un.user_id = u.id
 		 JOIN nodes n ON n.id = un.node_id
 		 WHERE n.server_id = ?
 		   AND u.status = 'active'
 		   AND (u.expires_at IS NULL OR u.expires_at > ?)
-		   AND (u.quota_bytes = 0 OR u.used_bytes < u.quota_bytes)
+		   AND (u.transfer_enable = 0 OR (u.u + u.d) < u.transfer_enable)
 		 GROUP BY u.id ORDER BY u.id`, serverID, now.Unix())
 	if err != nil {
 		return nil, mapErr(err)
@@ -198,8 +210,8 @@ func (r *Repo) SetUserStatus(ctx context.Context, id int64, status string) error
 	return mapErr(err)
 }
 
-func (r *Repo) SetUserQuota(ctx context.Context, id int64, quotaBytes int64) error {
-	_, err := r.DB.ExecContext(ctx, `UPDATE users SET quota_bytes = ?, updated_at = ? WHERE id = ?`, quotaBytes, nowUnix(), id)
+func (r *Repo) SetUserTransferEnable(ctx context.Context, id int64, transferEnable int64) error {
+	_, err := r.DB.ExecContext(ctx, `UPDATE users SET transfer_enable = ?, updated_at = ? WHERE id = ?`, transferEnable, nowUnix(), id)
 	return mapErr(err)
 }
 
@@ -216,14 +228,14 @@ func (r *Repo) ResetUserTokenHash(ctx context.Context, id int64, tokenHash strin
 }
 
 func (r *Repo) ResetUserTraffic(ctx context.Context, id int64) error {
-	_, err := r.DB.ExecContext(ctx, `UPDATE users SET used_bytes = 0, updated_at = ? WHERE id = ?`, nowUnix(), id)
+	_, err := r.DB.ExecContext(ctx, `UPDATE users SET u = 0, d = 0, updated_at = ? WHERE id = ?`, nowUnix(), id)
 	return mapErr(err)
 }
 
 func (r *Repo) AddUserUsedBytes(ctx context.Context, id int64, uploadBytes, downloadBytes int64) error {
 	_, err := r.DB.ExecContext(ctx,
-		`UPDATE users SET used_bytes = used_bytes + ?, updated_at = ? WHERE id = ?`,
-		uploadBytes+downloadBytes, nowUnix(), id)
+		`UPDATE users SET u = u + ?, d = d + ?, updated_at = ? WHERE id = ?`,
+		uploadBytes, downloadBytes, nowUnix(), id)
 	return mapErr(err)
 }
 
@@ -234,13 +246,15 @@ func (r *Repo) DeleteUser(ctx context.Context, id int64) error {
 
 func scanUser(scan func(dest ...any) error) (User, error) {
 	var u User
-	var startedAt, expiresAt sql.NullInt64
+	var lastOnlineAt, startedAt, expiresAt sql.NullInt64
 	var createdAt, updatedAt int64
-	err := scan(&u.ID, &u.UUID, &u.Username, &u.TokenHash, &u.Status, &u.QuotaBytes, &u.UsedBytes,
+	err := scan(&u.ID, &u.UUID, &u.Username, &u.TokenHash, &u.Status, &u.TransferEnable, &u.U, &u.D,
+		&u.SpeedLimit, &u.DeviceLimit, &u.OnlineCount, &lastOnlineAt,
 		&startedAt, &expiresAt, &createdAt, &updatedAt)
 	if err != nil {
 		return User{}, mapErr(err)
 	}
+	u.LastOnlineAt = toTimePtr(lastOnlineAt)
 	u.StartedAt = toTimePtr(startedAt)
 	u.ExpiresAt = toTimePtr(expiresAt)
 	u.CreatedAt = toTime(createdAt)

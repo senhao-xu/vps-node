@@ -9,10 +9,16 @@ CREATE TABLE admins (
 CREATE TABLE users (
     id INTEGER PRIMARY KEY,
     uuid TEXT NOT NULL UNIQUE,
+    username TEXT NOT NULL UNIQUE,
     token_hash TEXT NOT NULL UNIQUE,
     status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled', 'expired')),
-    quota_bytes INTEGER NOT NULL DEFAULT 0,
-    used_bytes INTEGER NOT NULL DEFAULT 0,
+    transfer_enable INTEGER NOT NULL DEFAULT 0,
+    u INTEGER NOT NULL DEFAULT 0,
+    d INTEGER NOT NULL DEFAULT 0,
+    speed_limit INTEGER NOT NULL DEFAULT 0,
+    device_limit INTEGER NOT NULL DEFAULT 0,
+    online_count INTEGER NOT NULL DEFAULT 0,
+    last_online_at INTEGER,
     started_at INTEGER,
     expires_at INTEGER,
     created_at INTEGER NOT NULL,
@@ -57,9 +63,11 @@ CREATE TABLE nodes (
     id INTEGER PRIMARY KEY,
     server_id INTEGER NOT NULL REFERENCES servers (id) ON DELETE CASCADE,
     name TEXT NOT NULL,
-    protocol TEXT NOT NULL CHECK (protocol IN ('shadowsocks', 'vless', 'hysteria2')),
+    protocol TEXT NOT NULL CHECK (protocol IN ('shadowsocks', 'vless', 'hysteria2', 'anytls')),
     port INTEGER NOT NULL CHECK (port > 0 AND port <= 65535),
-    settings TEXT NOT NULL DEFAULT '{}',
+    protocol_settings TEXT NOT NULL DEFAULT '{}',
+    rate REAL NOT NULL DEFAULT 1,
+    tags TEXT NOT NULL DEFAULT '[]',
     secret_enc BLOB,
     status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
     created_at INTEGER NOT NULL,
@@ -79,49 +87,29 @@ CREATE TABLE user_nodes (
 
 CREATE INDEX idx_user_nodes_node ON user_nodes (node_id);
 
-CREATE TABLE sessions (
+CREATE TABLE online_devices (
     id INTEGER PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
     node_id INTEGER NOT NULL REFERENCES nodes (id) ON DELETE CASCADE,
     server_id INTEGER NOT NULL REFERENCES servers (id) ON DELETE CASCADE,
     ip TEXT NOT NULL,
-    upload_bytes INTEGER NOT NULL DEFAULT 0,
-    download_bytes INTEGER NOT NULL DEFAULT 0,
-    connected_at INTEGER NOT NULL,
+    online INTEGER NOT NULL DEFAULT 0,
     last_seen_at INTEGER NOT NULL,
-    UNIQUE (server_id, user_id, node_id, ip, connected_at)
+    created_at INTEGER NOT NULL,
+    UNIQUE (user_id, node_id, ip)
 );
 
-CREATE INDEX idx_sessions_user ON sessions (user_id, last_seen_at);
-CREATE INDEX idx_sessions_node ON sessions (node_id, last_seen_at);
-CREATE INDEX idx_sessions_server ON sessions (server_id, last_seen_at);
-
-CREATE TABLE connection_logs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    node_id INTEGER NOT NULL,
-    server_id INTEGER NOT NULL,
-    ip TEXT NOT NULL,
-    protocol TEXT NOT NULL DEFAULT '',
-    upload_bytes INTEGER NOT NULL DEFAULT 0,
-    download_bytes INTEGER NOT NULL DEFAULT 0,
-    connected_at INTEGER NOT NULL,
-    closed_at INTEGER,
-    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'closed')),
-    created_at INTEGER NOT NULL
-);
-
-CREATE INDEX idx_connection_logs_user ON connection_logs (user_id, connected_at);
-CREATE INDEX idx_connection_logs_node ON connection_logs (node_id, connected_at);
-CREATE INDEX idx_connection_logs_server ON connection_logs (server_id, connected_at);
+CREATE INDEX idx_online_devices_user ON online_devices (user_id, last_seen_at);
+CREATE INDEX idx_online_devices_node ON online_devices (node_id, last_seen_at);
+CREATE INDEX idx_online_devices_server ON online_devices (server_id, last_seen_at);
 
 CREATE TABLE traffic_records (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
     node_id INTEGER NOT NULL,
     server_id INTEGER NOT NULL,
-    upload_bytes INTEGER NOT NULL DEFAULT 0,
-    download_bytes INTEGER NOT NULL DEFAULT 0,
+    u INTEGER NOT NULL DEFAULT 0,
+    d INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL
 );
 
@@ -139,13 +127,15 @@ CREATE TABLE traffic_batches (
     agent_id INTEGER NOT NULL REFERENCES agents (id) ON DELETE CASCADE,
     seq INTEGER NOT NULL,
     received_at INTEGER NOT NULL,
+    records INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (agent_id, seq)
 );
 
-CREATE TABLE connection_log_batches (
+CREATE TABLE device_batches (
     agent_id INTEGER NOT NULL REFERENCES agents (id) ON DELETE CASCADE,
     seq INTEGER NOT NULL,
     received_at INTEGER NOT NULL,
+    devices INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (agent_id, seq)
 );
 
@@ -154,3 +144,23 @@ CREATE TABLE settings (
     value TEXT NOT NULL,
     updated_at INTEGER NOT NULL
 );
+
+CREATE TABLE admin_sessions (
+    token_hash TEXT PRIMARY KEY,
+    admin_id INTEGER NOT NULL REFERENCES admins (id) ON DELETE CASCADE,
+    created_at INTEGER NOT NULL,
+    last_seen_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL
+);
+
+CREATE INDEX idx_admin_sessions_admin ON admin_sessions (admin_id);
+
+CREATE TABLE user_subscriptions (
+    user_id INTEGER PRIMARY KEY REFERENCES users (id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL UNIQUE,
+    token_enc BLOB NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE UNIQUE INDEX idx_user_subscriptions_token_hash ON user_subscriptions (token_hash);

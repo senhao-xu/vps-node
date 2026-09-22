@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"math"
 	"path/filepath"
 	"testing"
 	"time"
@@ -27,7 +28,7 @@ func newTestRepo(t *testing.T) *repo.Repo {
 
 func mustCreateUser(t *testing.T, r *repo.Repo, uuid string) int64 {
 	t.Helper()
-	id, err := r.CreateUser(context.Background(), repo.NewUser{UUID: uuid, Username: "user-" + uuid, TokenHash: "hash-" + uuid, Status: repo.UserStatusActive, QuotaBytes: 100})
+	id, err := r.CreateUser(context.Background(), repo.NewUser{UUID: uuid, Username: "user-" + uuid, TokenHash: "hash-" + uuid, Status: repo.UserStatusActive, TransferEnable: 100})
 	if err != nil {
 		t.Fatalf("create user: %v", err)
 	}
@@ -62,7 +63,7 @@ func TestUserCRUD(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get user: %v", err)
 	}
-	if u.UUID != "uuid-1" || u.Status != repo.UserStatusActive || u.UsedBytes != 0 {
+	if u.UUID != "uuid-1" || u.Status != repo.UserStatusActive || u.UsedBytes() != 0 {
 		t.Fatalf("unexpected user: %+v", u)
 	}
 
@@ -87,8 +88,8 @@ func TestUserCRUD(t *testing.T) {
 	if err := r.SetUserStatus(ctx, id, repo.UserStatusDisabled); err != nil {
 		t.Fatalf("set status: %v", err)
 	}
-	if err := r.SetUserQuota(ctx, id, 500); err != nil {
-		t.Fatalf("set quota: %v", err)
+	if err := r.SetUserTransferEnable(ctx, id, 500); err != nil {
+		t.Fatalf("set transfer_enable: %v", err)
 	}
 	expiry := time.Unix(1800000000, 0)
 	if err := r.SetUserExpiry(ctx, id, nil, &expiry); err != nil {
@@ -99,7 +100,7 @@ func TestUserCRUD(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get user: %v", err)
 	}
-	if u.Status != repo.UserStatusDisabled || u.QuotaBytes != 500 || u.ExpiresAt == nil || !u.ExpiresAt.Equal(expiry) {
+	if u.Status != repo.UserStatusDisabled || u.TransferEnable != 500 || u.ExpiresAt == nil || !u.ExpiresAt.Equal(expiry) {
 		t.Fatalf("unexpected updated user: %+v", u)
 	}
 
@@ -107,16 +108,16 @@ func TestUserCRUD(t *testing.T) {
 		t.Fatalf("add used: %v", err)
 	}
 	u, _ = r.GetUser(ctx, id)
-	if u.UsedBytes != 30 {
-		t.Fatalf("expected used 30, got %d", u.UsedBytes)
+	if u.U != 10 || u.D != 20 || u.UsedBytes() != 30 {
+		t.Fatalf("expected u=10 d=20, got u=%d d=%d", u.U, u.D)
 	}
 
 	if err := r.ResetUserTraffic(ctx, id); err != nil {
 		t.Fatalf("reset traffic: %v", err)
 	}
 	u, _ = r.GetUser(ctx, id)
-	if u.UsedBytes != 0 {
-		t.Fatalf("expected used 0 after reset, got %d", u.UsedBytes)
+	if u.U != 0 || u.D != 0 {
+		t.Fatalf("expected zero traffic after reset, got u=%d d=%d", u.U, u.D)
 	}
 
 	if err := r.DeleteUser(ctx, id); err != nil {
@@ -423,84 +424,81 @@ func TestServerRevisionMonotonic(t *testing.T) {
 	}
 }
 
-func TestReplaceServerSessions(t *testing.T) {
+func TestIngestDeviceBatchPrunesStale(t *testing.T) {
 	r := newTestRepo(t)
 	ctx := context.Background()
 
 	userID := mustCreateUser(t, r, "uuid-s")
 	serverID := mustCreateServer(t, r, "s1")
 	nodeID := mustCreateNode(t, r, serverID, "n1", 443)
+	agentID, err := r.CreateAgent(ctx, serverID, "agent-hash", "")
+	if err != nil {
+		t.Fatalf("create agent: %v", err)
+	}
 
 	now := time.Now().Truncate(time.Second).UTC()
-	batch1 := []repo.NewSession{
-		{UserID: userID, NodeID: nodeID, ServerID: serverID, IP: "1.1.1.1", ConnectedAt: now, LastSeenAt: now},
-		{UserID: userID, NodeID: nodeID, ServerID: serverID, IP: "2.2.2.2", ConnectedAt: now, LastSeenAt: now},
-	}
-	if err := r.ReplaceServerSessions(ctx, serverID, batch1); err != nil {
-		t.Fatalf("replace sessions: %v", err)
+	if _, _, err := r.IngestDeviceBatch(ctx, agentID, 1, serverID, []repo.NewOnlineDevice{
+		{UserID: userID, NodeID: nodeID, IP: "1.1.1.1", Online: 1},
+		{UserID: userID, NodeID: nodeID, IP: "2.2.2.2", Online: 2},
+	}, map[int64]int{userID: 2}, now.Unix()); err != nil {
+		t.Fatalf("ingest devices: %v", err)
 	}
 
-	sessions, err := r.ListSessionsByServer(ctx, serverID, now.Add(-time.Minute))
+	devices, err := r.ListDevicesByNode(ctx, nodeID)
 	if err != nil {
-		t.Fatalf("list sessions: %v", err)
+		t.Fatalf("list devices: %v", err)
 	}
-	if len(sessions) != 2 {
-		t.Fatalf("expected 2 sessions, got %d", len(sessions))
-	}
-
-	batch2 := []repo.NewSession{
-		{UserID: userID, NodeID: nodeID, ServerID: serverID, IP: "3.3.3.3", ConnectedAt: now, LastSeenAt: now},
-	}
-	if err := r.ReplaceServerSessions(ctx, serverID, batch2); err != nil {
-		t.Fatalf("replace sessions: %v", err)
-	}
-	sessions, _ = r.ListSessionsByServer(ctx, serverID, now.Add(-time.Minute))
-	if len(sessions) != 1 || sessions[0].IP != "3.3.3.3" {
-		t.Fatalf("expected snapshot replaced, got %+v", sessions)
+	if len(devices) != 2 {
+		t.Fatalf("expected 2 devices, got %d", len(devices))
 	}
 
-	stale, err := r.ListSessionsByServer(ctx, serverID, now.Add(time.Minute))
-	if err != nil || len(stale) != 0 {
-		t.Fatalf("expected stale sessions filtered, got %d %v", len(stale), err)
+	later := now.Add(time.Minute)
+	if _, _, err := r.IngestDeviceBatch(ctx, agentID, 2, serverID, []repo.NewOnlineDevice{
+		{UserID: userID, NodeID: nodeID, IP: "3.3.3.3", Online: 1},
+	}, map[int64]int{userID: 1}, later.Unix()); err != nil {
+		t.Fatalf("ingest devices: %v", err)
+	}
+	devices, _ = r.ListDevicesByUser(ctx, userID)
+	if len(devices) != 1 || devices[0].IP != "3.3.3.3" {
+		t.Fatalf("expected snapshot replaced, got %+v", devices)
 	}
 
-	deleted, err := r.DeleteSessionsLastSeenBefore(ctx, now.Add(time.Minute))
+	deleted, err := r.DeleteStaleDevicesBatch(ctx, later.Add(time.Minute), 500)
 	if err != nil || deleted != 1 {
-		t.Fatalf("expected 1 deleted, got %d %v", deleted, err)
+		t.Fatalf("expected 1 stale deleted, got %d %v", deleted, err)
 	}
 }
 
-func TestConnectionLogsAndTraffic(t *testing.T) {
+func TestDevicesAndTraffic(t *testing.T) {
 	r := newTestRepo(t)
 	ctx := context.Background()
 
 	userID := mustCreateUser(t, r, "uuid-t")
 	serverID := mustCreateServer(t, r, "s1")
 	nodeID := mustCreateNode(t, r, serverID, "n1", 443)
-
-	connected := time.Now().Add(-time.Hour).UTC().Truncate(time.Second)
-	inserted, err := r.InsertConnectionLogs(ctx, []repo.NewConnectionLog{
-		{UserID: userID, NodeID: nodeID, ServerID: serverID, IP: "1.1.1.1", Protocol: "vless", UploadBytes: 1, DownloadBytes: 2, ConnectedAt: connected, Status: "closed"},
-		{UserID: userID, NodeID: nodeID, ServerID: serverID, IP: "2.2.2.2", Protocol: "vless", UploadBytes: 3, DownloadBytes: 4, ConnectedAt: connected, Status: "closed"},
-	})
+	agentID, err := r.CreateAgent(ctx, serverID, "agent-hash", "")
 	if err != nil {
-		t.Fatalf("insert logs: %v", err)
-	}
-	if inserted != 2 {
-		t.Fatalf("expected 2 inserted, got %d", inserted)
+		t.Fatalf("create agent: %v", err)
 	}
 
-	logs, total, err := r.ListConnectionLogs(ctx, repo.LogFilter{UserID: userID, Page: 1, PageSize: 1})
-	if err != nil {
-		t.Fatalf("list logs: %v", err)
+	seen := time.Now().Add(-time.Hour).UTC().Truncate(time.Second)
+	if _, _, err := r.IngestDeviceBatch(ctx, agentID, 1, serverID, []repo.NewOnlineDevice{
+		{UserID: userID, NodeID: nodeID, IP: "1.1.1.1", Online: 1},
+		{UserID: userID, NodeID: nodeID, IP: "2.2.2.2", Online: 1},
+	}, map[int64]int{userID: 2}, seen.Unix()); err != nil {
+		t.Fatalf("ingest devices: %v", err)
 	}
-	if total != 2 || len(logs) != 1 {
-		t.Fatalf("unexpected logs page: total=%d len=%d", total, len(logs))
+	devices, err := r.ListDevicesByUser(ctx, userID)
+	if err != nil {
+		t.Fatalf("list devices: %v", err)
+	}
+	if len(devices) != 2 {
+		t.Fatalf("expected 2 devices, got %d", len(devices))
 	}
 
 	records := []repo.NewTrafficRecord{
-		{UserID: userID, NodeID: nodeID, ServerID: serverID, UploadBytes: 10, DownloadBytes: 20, CreatedAt: connected},
-		{UserID: userID, NodeID: nodeID, ServerID: serverID, UploadBytes: 30, DownloadBytes: 40, CreatedAt: connected},
+		{UserID: userID, NodeID: nodeID, ServerID: serverID, U: 10, D: 20, CreatedAt: seen},
+		{UserID: userID, NodeID: nodeID, ServerID: serverID, U: 30, D: 40, CreatedAt: seen},
 	}
 	if err := r.InsertTrafficRecords(ctx, records); err != nil {
 		t.Fatalf("insert traffic: %v", err)
@@ -517,18 +515,216 @@ func TestConnectionLogsAndTraffic(t *testing.T) {
 		t.Fatalf("add used: %v", err)
 	}
 	u, _ := r.GetUser(ctx, userID)
-	if u.UsedBytes != 100 {
-		t.Fatalf("expected used 100, got %d", u.UsedBytes)
+	if u.UsedBytes() != 100 {
+		t.Fatalf("expected used 100, got %d", u.UsedBytes())
 	}
 
 	cutoff := time.Now().Add(time.Minute)
-	logDeleted, err := r.DeleteConnectionLogsBefore(ctx, cutoff)
-	if err != nil || logDeleted != 2 {
-		t.Fatalf("delete logs: %d %v", logDeleted, err)
-	}
 	recDeleted, err := r.DeleteTrafficRecordsBefore(ctx, cutoff)
 	if err != nil || recDeleted != 2 {
 		t.Fatalf("delete records: %d %v", recDeleted, err)
+	}
+}
+
+func TestIngestDeviceBatchChunkedSnapshot(t *testing.T) {
+	r := newTestRepo(t)
+	ctx := context.Background()
+
+	serverID := mustCreateServer(t, r, "s1")
+	nodeID := mustCreateNode(t, r, serverID, "n1", 443)
+	userA := mustCreateUser(t, r, "uuid-a")
+	userB := mustCreateUser(t, r, "uuid-b")
+	agentID, err := r.CreateAgent(ctx, serverID, "agent-hash", "")
+	if err != nil {
+		t.Fatalf("create agent: %v", err)
+	}
+
+	snapshotAt := time.Now().UTC().Truncate(time.Second)
+	if _, dup, err := r.IngestDeviceBatch(ctx, agentID, 1, serverID,
+		[]repo.NewOnlineDevice{{UserID: userA, NodeID: nodeID, IP: "1.1.1.1"}},
+		map[int64]int{userA: 1}, snapshotAt.Unix()); err != nil || dup {
+		t.Fatalf("first chunk: dup=%v err=%v", dup, err)
+	}
+	if _, dup, err := r.IngestDeviceBatch(ctx, agentID, 2, serverID,
+		[]repo.NewOnlineDevice{{UserID: userB, NodeID: nodeID, IP: "2.2.2.2"}},
+		map[int64]int{userB: 1}, snapshotAt.Unix()); err != nil || dup {
+		t.Fatalf("second chunk: dup=%v err=%v", dup, err)
+	}
+
+	devices, err := r.ListDevicesByNode(ctx, nodeID)
+	if err != nil {
+		t.Fatalf("list devices: %v", err)
+	}
+	if len(devices) != 2 {
+		t.Fatalf("chunks sharing recorded_at must both survive, got %+v", devices)
+	}
+
+	later := snapshotAt.Add(time.Minute)
+	if _, _, err := r.IngestDeviceBatch(ctx, agentID, 3, serverID,
+		[]repo.NewOnlineDevice{{UserID: userB, NodeID: nodeID, IP: "2.2.2.2"}},
+		map[int64]int{userB: 1}, later.Unix()); err != nil {
+		t.Fatalf("later snapshot: %v", err)
+	}
+	devices, err = r.ListDevicesByNode(ctx, nodeID)
+	if err != nil {
+		t.Fatalf("list devices: %v", err)
+	}
+	if len(devices) != 1 || devices[0].UserID != userB {
+		t.Fatalf("devices absent from a later snapshot must be pruned, got %+v", devices)
+	}
+
+	ua, _ := r.GetUser(ctx, userA)
+	ub, _ := r.GetUser(ctx, userB)
+	if ua.OnlineCount != 0 || ub.OnlineCount != 1 {
+		t.Fatalf("online_count must track current rows, got A=%d B=%d", ua.OnlineCount, ub.OnlineCount)
+	}
+}
+
+func TestIngestTrafficBatchAppliesNodeRate(t *testing.T) {
+	r := newTestRepo(t)
+	ctx := context.Background()
+
+	serverID := mustCreateServer(t, r, "s1")
+	nodeSingle, err := r.CreateNode(ctx, repo.NewNode{ServerID: serverID, Name: "n1", Protocol: repo.ProtocolVLESS, Port: 443, Rate: 1})
+	if err != nil {
+		t.Fatalf("create node: %v", err)
+	}
+	nodeDouble, err := r.CreateNode(ctx, repo.NewNode{ServerID: serverID, Name: "n2", Protocol: repo.ProtocolVLESS, Port: 8443, Rate: 2})
+	if err != nil {
+		t.Fatalf("create node: %v", err)
+	}
+	nodeFractional, err := r.CreateNode(ctx, repo.NewNode{ServerID: serverID, Name: "n3", Protocol: repo.ProtocolVLESS, Port: 8444, Rate: 1.5})
+	if err != nil {
+		t.Fatalf("create node: %v", err)
+	}
+	userID := mustCreateUser(t, r, "uuid-rate")
+	agentID, err := r.CreateAgent(ctx, serverID, "agent-hash", "")
+	if err != nil {
+		t.Fatalf("create agent: %v", err)
+	}
+
+	seen := time.Now().Add(-time.Minute).UTC().Truncate(time.Second)
+	records := []repo.NewTrafficRecord{
+		{UserID: userID, NodeID: nodeSingle, ServerID: serverID, U: 10, D: 20, CreatedAt: seen},
+		{UserID: userID, NodeID: nodeDouble, ServerID: serverID, U: 10, D: 20, CreatedAt: seen},
+		{UserID: userID, NodeID: nodeFractional, ServerID: serverID, U: 3, D: 3, CreatedAt: seen},
+	}
+	if _, dup, err := r.IngestTrafficBatch(ctx, agentID, 1, records); err != nil || dup {
+		t.Fatalf("ingest: dup=%v err=%v", dup, err)
+	}
+
+	upload, download, err := r.SumTraffic(ctx, repo.TrafficFilter{UserID: userID})
+	if err != nil || upload != 35 || download != 65 {
+		t.Fatalf("rate-scaled records: up=%d down=%d err=%v", upload, download, err)
+	}
+	u, _ := r.GetUser(ctx, userID)
+	if u.U != 35 || u.D != 65 {
+		t.Fatalf("rate-scaled user totals: u=%d d=%d", u.U, u.D)
+	}
+
+	if _, dup, err := r.IngestTrafficBatch(ctx, agentID, 1, records); err != nil || !dup {
+		t.Fatalf("duplicate must be reported: dup=%v err=%v", dup, err)
+	}
+	u, _ = r.GetUser(ctx, userID)
+	if u.U != 35 || u.D != 65 {
+		t.Fatalf("duplicate must not double-apply: u=%d d=%d", u.U, u.D)
+	}
+}
+
+func TestIngestTrafficBatchRateOverflowIsClamped(t *testing.T) {
+	r := newTestRepo(t)
+	ctx := context.Background()
+
+	serverID := mustCreateServer(t, r, "s1")
+	nodeID, err := r.CreateNode(ctx, repo.NewNode{
+		ServerID: serverID, Name: "huge", Protocol: repo.ProtocolVLESS, Port: 443, Rate: 1e18,
+	})
+	if err != nil {
+		t.Fatalf("create node: %v", err)
+	}
+	userID := mustCreateUser(t, r, "uuid-overflow")
+	agentID, err := r.CreateAgent(ctx, serverID, "agent-hash", "")
+	if err != nil {
+		t.Fatalf("create agent: %v", err)
+	}
+
+	seen := time.Now().Add(-time.Minute).UTC().Truncate(time.Second)
+	if _, _, err := r.IngestTrafficBatch(ctx, agentID, 1, []repo.NewTrafficRecord{
+		{UserID: userID, NodeID: nodeID, ServerID: serverID, U: 10, D: 0, CreatedAt: seen},
+	}); err != nil {
+		t.Fatalf("ingest: %v", err)
+	}
+	u, _ := r.GetUser(ctx, userID)
+	if u.U < 0 || u.D < 0 {
+		t.Fatalf("rate overflow must not wrap into negatives: u=%d d=%d", u.U, u.D)
+	}
+	if u.U != math.MaxInt64 {
+		t.Fatalf("rate overflow must clamp to MaxInt64, got %d", u.U)
+	}
+}
+
+func TestOnlineCountCountsDistinctIPs(t *testing.T) {
+	r := newTestRepo(t)
+	ctx := context.Background()
+
+	serverID := mustCreateServer(t, r, "s1")
+	node1 := mustCreateNode(t, r, serverID, "n1", 443)
+	node2 := mustCreateNode(t, r, serverID, "n2", 8443)
+	userID := mustCreateUser(t, r, "uuid-oc")
+	agentID, err := r.CreateAgent(ctx, serverID, "agent-hash", "")
+	if err != nil {
+		t.Fatalf("create agent: %v", err)
+	}
+
+	seen := time.Now().UTC().Truncate(time.Second)
+	if _, _, err := r.IngestDeviceBatch(ctx, agentID, 1, serverID, []repo.NewOnlineDevice{
+		{UserID: userID, NodeID: node1, IP: "1.1.1.1", Online: 2},
+		{UserID: userID, NodeID: node2, IP: "1.1.1.1", Online: 3},
+	}, map[int64]int{userID: 2}, seen.Unix()); err != nil {
+		t.Fatalf("ingest devices: %v", err)
+	}
+	u, _ := r.GetUser(ctx, userID)
+	if u.OnlineCount != 1 {
+		t.Fatalf("same IP on two nodes must count once, got %d", u.OnlineCount)
+	}
+	total, err := r.CountOnlineDevices(ctx)
+	if err != nil || total != 1 {
+		t.Fatalf("same (user, ip) across nodes must count once globally, got %d %v", total, err)
+	}
+	devices, err := r.ListDevicesByUser(ctx, userID)
+	if err != nil || len(devices) != 2 {
+		t.Fatalf("list devices: %d %v", len(devices), err)
+	}
+	onlineByNode := map[int64]int{}
+	for _, d := range devices {
+		onlineByNode[d.NodeID] = d.Online
+	}
+	if onlineByNode[node1] != 2 || onlineByNode[node2] != 3 {
+		t.Fatalf("online must persist per (user, node), got %+v", onlineByNode)
+	}
+
+	if _, _, err := r.IngestDeviceBatch(ctx, agentID, 2, serverID, []repo.NewOnlineDevice{
+		{UserID: userID, NodeID: node1, IP: "1.1.1.1", Online: 4},
+		{UserID: userID, NodeID: node1, IP: "2.2.2.2", Online: 4},
+	}, map[int64]int{userID: 2}, seen.Add(time.Second).Unix()); err != nil {
+		t.Fatalf("ingest devices: %v", err)
+	}
+	u, _ = r.GetUser(ctx, userID)
+	if u.OnlineCount != 2 {
+		t.Fatalf("two distinct IPs must count twice, got %d", u.OnlineCount)
+	}
+	total, err = r.CountOnlineDevices(ctx)
+	if err != nil || total != 2 {
+		t.Fatalf("two distinct (user, ip) pairs must count twice globally, got %d %v", total, err)
+	}
+	devices, err = r.ListDevicesByUser(ctx, userID)
+	if err != nil || len(devices) != 2 {
+		t.Fatalf("list devices: %d %v", len(devices), err)
+	}
+	for _, d := range devices {
+		if d.Online != 4 {
+			t.Fatalf("online must refresh on upsert, got %+v", d)
+		}
 	}
 }
 
@@ -554,16 +750,16 @@ func TestBatchIdempotencyTracking(t *testing.T) {
 		t.Fatal("expected batch present")
 	}
 
-	exists, _ = r.LogBatchExists(ctx, agentID, 7)
+	exists, _ = r.DeviceBatchExists(ctx, agentID, 7)
 	if exists {
-		t.Fatal("expected log batch absent")
+		t.Fatal("expected device batch absent")
 	}
-	if err := r.RecordLogBatch(ctx, agentID, 7); err != nil {
-		t.Fatalf("record log batch: %v", err)
+	if err := r.RecordDeviceBatch(ctx, agentID, 7); err != nil {
+		t.Fatalf("record device batch: %v", err)
 	}
-	exists, _ = r.LogBatchExists(ctx, agentID, 7)
+	exists, _ = r.DeviceBatchExists(ctx, agentID, 7)
 	if !exists {
-		t.Fatal("expected log batch present")
+		t.Fatal("expected device batch present")
 	}
 }
 

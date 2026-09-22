@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端改动质量门禁（构建/vet/测试/一致性）"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "核对 schema 重建与索引/约束是否符合规范"}
+{"file": ".trellis/spec/backend/node-protocol-settings.md", "reason": "核对 protocol_settings 字段/校验/加密契约是否满足"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端质量门禁（构建/类型/一致性）"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "核对前端 DTO 类型与后端契约同步"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "核对 panel→agent→tracker→上报→UI 的跨层数据流一致"}

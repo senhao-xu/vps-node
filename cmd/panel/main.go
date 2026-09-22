@@ -110,7 +110,7 @@ func run() error {
 	defer stop()
 
 	sweeper := janitor.New(store, cfg.Retention.SweepInterval, logger).
-		WithCaps(cfg.Retention.MaxConnectionLogs, cfg.Retention.MaxTrafficRecords)
+		WithCaps(cfg.Retention.MaxTrafficRecords)
 	go sweeper.Run(ctx)
 
 	errCh := make(chan error, 1)
@@ -119,7 +119,6 @@ func run() error {
 	}()
 
 	logger.Info("panel started", "addr", cfg.Listen, "db", cfg.DBPath,
-		"retention_raw_log_days", cfg.Retention.RawLogDays,
 		"retention_aggregate_days", cfg.Retention.AggregateDays)
 
 	select {

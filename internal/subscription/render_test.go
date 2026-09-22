@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"gopkg.in/yaml.v3"
+	"vps-node/internal/singbox"
 )
 
 func testNode(t *testing.T, protocol string) Node {
@@ -17,8 +18,12 @@ func testNode(t *testing.T, protocol string) Node {
 		t.Fatal(err)
 	}
 	return Node{ID: 1, Name: "node one", Protocol: protocol, Address: "2001:db8::1", Port: 443,
-		Settings: map[string]any{"method": "2022-blake3-aes-128-gcm", "server_names": []any{"example.com"}, "server_name": "example.com", "short_id": "0123abcd"},
-		Secret:   map[string]any{"private_key": base64.RawURLEncoding.EncodeToString(key.Bytes())}}
+		Settings: map[string]any{
+			"cipher":           "2022-blake3-aes-128-gcm",
+			"reality_settings": map[string]any{"server_name": "example.com", "short_id": "0123abcd"},
+			"tls":              map[string]any{"server_name": "example.com"},
+		},
+		Secret: map[string]any{"private_key": base64.RawURLEncoding.EncodeToString(key.Bytes())}}
 }
 
 func TestRenderGeneralIncludesAllProtocolsWithoutPrivateKey(t *testing.T) {
@@ -44,6 +49,106 @@ func TestRenderGeneralIncludesAllProtocolsWithoutPrivateKey(t *testing.T) {
 	}
 	if strings.Contains(text, "private_key") {
 		t.Fatal("private key leaked")
+	}
+}
+
+func renderSS(t *testing.T, appKey []byte, node Node) (string, map[string]any) {
+	t.Helper()
+	encoded, err := RenderGeneral(appKey, "user-uuid", []Node{node})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	link := string(raw)
+	if !strings.HasPrefix(link, "ss://") {
+		t.Fatalf("unexpected ss link: %q", link)
+	}
+	rest := strings.TrimPrefix(link, "ss://")
+	at := strings.Index(rest, "@")
+	if at < 0 {
+		t.Fatalf("ss link has no credential separator: %q", link)
+	}
+	decoded, err := base64.RawURLEncoding.DecodeString(rest[:at])
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	template := "proxy-groups:\n  - {name: all, type: select, proxies: [__ALL_PROXIES__]}\n"
+	out, err := RenderClash(appKey, "user-uuid", template, []Node{node})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config map[string]any
+	if err := yaml.Unmarshal(out, &config); err != nil {
+		t.Fatal(err)
+	}
+	proxy := config["proxies"].([]any)[0].(map[string]any)
+	return string(decoded), proxy
+}
+
+func TestRenderShadowsocks2022UsesCombinedClientPassword(t *testing.T) {
+	appKey := make([]byte, 32)
+	cipher := "2022-blake3-aes-128-gcm"
+	node := testNode(t, "shadowsocks")
+
+	userKey, err := singbox.DeriveSSPassword(appKey, node.ID, "user-uuid", cipher)
+	if err != nil {
+		t.Fatal(err)
+	}
+	serverKey, err := singbox.DeriveSSServerPassword(appKey, node.ID, cipher)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := serverKey + ":" + userKey
+
+	credential, proxy := renderSS(t, appKey, node)
+	if credential != cipher+":"+want {
+		t.Fatalf("ss URI credential = %q, want %q", credential, cipher+":"+want)
+	}
+	if proxy["password"] != want {
+		t.Fatalf("clash ss password = %v, want %q", proxy["password"], want)
+	}
+}
+
+func TestRenderShadowsocks2022UsesCustomServerPassword(t *testing.T) {
+	appKey := make([]byte, 32)
+	cipher := "2022-blake3-chacha20-poly1305"
+	node := testNode(t, "shadowsocks")
+	node.Settings["cipher"] = cipher
+	node.Secret = map[string]any{"password": "custom-server-key"}
+
+	userKey, err := singbox.DeriveSSPassword(appKey, node.ID, "user-uuid", cipher)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "custom-server-key:" + userKey
+
+	credential, proxy := renderSS(t, appKey, node)
+	if credential != cipher+":"+want {
+		t.Fatalf("ss URI credential = %q, want %q", credential, cipher+":"+want)
+	}
+	if proxy["cipher"] != cipher || proxy["password"] != want {
+		t.Fatalf("unexpected clash ss proxy: %+v", proxy)
+	}
+}
+
+func TestCombineSSClientPasswordNon2022UsesUserKeyOnly(t *testing.T) {
+	for _, cipher := range []string{"aes-256-gcm", "chacha20-poly1305"} {
+		if singbox.IsSS2022(cipher) {
+			t.Fatalf("%q must not be treated as a 2022 cipher", cipher)
+		}
+		if got := combineSSClientPassword(cipher, "server-key", "user-key"); got != "user-key" {
+			t.Fatalf("non-2022 cipher %q password = %q, want user key only", cipher, got)
+		}
+	}
+	if !singbox.IsSS2022("2022-blake3-aes-128-gcm") {
+		t.Fatal("2022 method must be detected as SS2022")
+	}
+	if got := combineSSClientPassword("2022-blake3-aes-128-gcm", "server-key", "user-key"); got != "server-key:user-key" {
+		t.Fatalf("2022 cipher password = %q, want server:user", got)
 	}
 }
 
@@ -85,7 +190,7 @@ func TestRenderAnyTLSLinkAndProxy(t *testing.T) {
 	}
 
 	broken := testNode(t, "anytls")
-	broken.Settings["server_name"] = ""
+	broken.Settings["tls"] = map[string]any{"server_name": ""}
 	if _, err := RenderGeneral(key, "user-uuid", []Node{broken}); err == nil {
 		t.Fatal("anytls node without server_name must fail to render")
 	}
@@ -149,8 +254,8 @@ func TestRenderClashPlaceholdersAndRestrictions(t *testing.T) {
 func TestRenderHysteria2ObfsAndHopPorts(t *testing.T) {
 	key := make([]byte, 32)
 	node := testNode(t, "hysteria2")
-	node.Settings["obfs_password"] = "obfs-secret"
-	node.Settings["hop_ports"] = "30000-40000"
+	node.Settings["obfs"] = map[string]any{"open": true, "type": "salamander", "password": "obfs-secret"}
+	node.Settings["hop_interval"] = "30000-40000"
 
 	encoded, err := RenderGeneral(key, "user-uuid", []Node{node})
 	if err != nil {

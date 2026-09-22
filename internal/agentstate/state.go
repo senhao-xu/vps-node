@@ -14,7 +14,8 @@ type State struct {
 	ServerID        int64     `json:"server_id,omitempty"`
 	AppliedRevision int64     `json:"applied_revision,omitempty"`
 	TrafficBatchSeq int64     `json:"traffic_batch_seq,omitempty"`
-	LogBatchSeq     int64     `json:"log_batch_seq,omitempty"`
+	DeviceBatchSeq  int64     `json:"device_batch_seq,omitempty"`
+	VisitBatchSeq   int64     `json:"visit_batch_seq,omitempty"`
 	UpdatedAt       time.Time `json:"updated_at"`
 }
 

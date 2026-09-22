@@ -7,16 +7,20 @@ import (
 )
 
 type UserPatch struct {
-	SetUsername  bool
-	Username     string
-	SetStatus    bool
-	Status       string
-	SetQuota     bool
-	QuotaBytes   int64
-	SetStartedAt bool
-	StartedAt    *time.Time
-	SetExpiresAt bool
-	ExpiresAt    *time.Time
+	SetUsername       bool
+	Username          string
+	SetStatus         bool
+	Status            string
+	SetTransferEnable bool
+	TransferEnable    int64
+	SetSpeedLimit     bool
+	SpeedLimit        int64
+	SetDeviceLimit    bool
+	DeviceLimit       int64
+	SetStartedAt      bool
+	StartedAt         *time.Time
+	SetExpiresAt      bool
+	ExpiresAt         *time.Time
 }
 
 func bumpRevisionExec(ctx context.Context, q execer, serverID int64) error {
@@ -129,9 +133,17 @@ func (r *Repo) UpdateUserAndBump(ctx context.Context, userID int64, p UserPatch)
 		if p.SetExpiresAt && p.ExpiresAt != nil && p.ExpiresAt.Before(time.Now()) {
 			status = UserStatusExpired
 		}
-		quota := existing.QuotaBytes
-		if p.SetQuota {
-			quota = p.QuotaBytes
+		quota := existing.TransferEnable
+		if p.SetTransferEnable {
+			quota = p.TransferEnable
+		}
+		speedLimit := existing.SpeedLimit
+		if p.SetSpeedLimit {
+			speedLimit = p.SpeedLimit
+		}
+		deviceLimit := existing.DeviceLimit
+		if p.SetDeviceLimit {
+			deviceLimit = p.DeviceLimit
 		}
 		startedAt := existing.StartedAt
 		if p.SetStartedAt {
@@ -147,8 +159,8 @@ func (r *Repo) UpdateUserAndBump(ctx context.Context, userID int64, p UserPatch)
 		}
 
 		res, err := tx.ExecContext(ctx,
-			`UPDATE users SET username = ?, status = ?, quota_bytes = ?, started_at = ?, expires_at = ?, updated_at = ? WHERE id = ?`,
-			username, status, quota, timeArg(startedAt), timeArg(expiresAt), nowUnix(), userID)
+			`UPDATE users SET username = ?, status = ?, transfer_enable = ?, speed_limit = ?, device_limit = ?, started_at = ?, expires_at = ?, updated_at = ? WHERE id = ?`,
+			username, status, quota, speedLimit, deviceLimit, timeArg(startedAt), timeArg(expiresAt), nowUnix(), userID)
 		if err != nil {
 			return mapErr(err)
 		}
@@ -156,8 +168,9 @@ func (r *Repo) UpdateUserAndBump(ctx context.Context, userID int64, p UserPatch)
 			return ErrNotFound
 		}
 
-		affectsEligibility := p.SetStatus || p.SetQuota || p.SetStartedAt || p.SetExpiresAt
-		if !affectsEligibility {
+		affectsAgentConfig := p.SetStatus || p.SetTransferEnable || p.SetStartedAt || p.SetExpiresAt ||
+			p.SetDeviceLimit || p.SetSpeedLimit
+		if !affectsAgentConfig {
 			u, err = getUserExec(ctx, tx, userID)
 			return err
 		}
@@ -206,7 +219,7 @@ func (r *Repo) ResetUserTrafficAndBump(ctx context.Context, userID int64) (User,
 	var u User
 	err := Tx(ctx, r.DB, func(tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx,
-			`UPDATE users SET used_bytes = 0, updated_at = ? WHERE id = ?`, nowUnix(), userID)
+			`UPDATE users SET u = 0, d = 0, updated_at = ? WHERE id = ?`, nowUnix(), userID)
 		if err != nil {
 			return mapErr(err)
 		}
@@ -284,12 +297,12 @@ func (r *Repo) CreateNodeAndBump(ctx context.Context, n NewNode) (int64, error) 
 	return id, nil
 }
 
-func (r *Repo) UpdateNodeAndBump(ctx context.Context, nodeID, serverID int64, name string, port int, settings string, secretEnc []byte, status *string) error {
+func (r *Repo) UpdateNodeAndBump(ctx context.Context, nodeID, serverID int64, name string, port int, settings string, secretEnc []byte, rate float64, tags string, status *string) error {
 	return Tx(ctx, r.DB, func(tx *sql.Tx) error {
 		if status != nil {
 			res, err := tx.ExecContext(ctx,
-				`UPDATE nodes SET name = ?, port = ?, settings = ?, secret_enc = ?, status = ?, updated_at = ? WHERE id = ?`,
-				name, port, settings, secretEnc, *status, nowUnix(), nodeID)
+				`UPDATE nodes SET name = ?, port = ?, protocol_settings = ?, secret_enc = ?, rate = ?, tags = ?, status = ?, updated_at = ? WHERE id = ?`,
+				name, port, settings, secretEnc, rate, tags, *status, nowUnix(), nodeID)
 			if err != nil {
 				return mapErr(err)
 			}
@@ -298,8 +311,8 @@ func (r *Repo) UpdateNodeAndBump(ctx context.Context, nodeID, serverID int64, na
 			}
 		} else {
 			res, err := tx.ExecContext(ctx,
-				`UPDATE nodes SET name = ?, port = ?, settings = ?, secret_enc = ?, updated_at = ? WHERE id = ?`,
-				name, port, settings, secretEnc, nowUnix(), nodeID)
+				`UPDATE nodes SET name = ?, port = ?, protocol_settings = ?, secret_enc = ?, rate = ?, tags = ?, updated_at = ? WHERE id = ?`,
+				name, port, settings, secretEnc, rate, tags, nowUnix(), nodeID)
 			if err != nil {
 				return mapErr(err)
 			}

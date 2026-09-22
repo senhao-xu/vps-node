@@ -117,14 +117,7 @@ func (h *Handler) handleUserList(w http.ResponseWriter, r *http.Request) {
 	for _, u := range users {
 		ids = append(ids, u.ID)
 	}
-	now := time.Now()
-	freshCutoff := now.Add(-h.sessionFreshness(r.Context()))
 	nodeCounts, err := h.repo.CountNodesByUserIDs(r.Context(), ids)
-	if err != nil {
-		writeErr(w, err)
-		return
-	}
-	sessionCounts, err := h.repo.CountFreshSessionsByUserIDs(r.Context(), ids, freshCutoff)
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -132,17 +125,19 @@ func (h *Handler) handleUserList(w http.ResponseWriter, r *http.Request) {
 
 	items := make([]userDTO, 0, len(users))
 	for _, u := range users {
-		items = append(items, toUserDTO(u, nodeCounts[u.ID], sessionCounts[u.ID]))
+		items = append(items, toUserDTO(u, nodeCounts[u.ID]))
 	}
 	writePage(w, items, total, page)
 }
 
 type createUserRequest struct {
-	Username   string  `json:"username"`
-	QuotaBytes *int64  `json:"quota_bytes"`
-	StartedAt  *string `json:"started_at"`
-	ExpiresAt  *string `json:"expires_at"`
-	NodeIDs    []int64 `json:"node_ids"`
+	Username       string  `json:"username"`
+	TransferEnable *int64  `json:"transfer_enable"`
+	SpeedLimit     *int64  `json:"speed_limit"`
+	DeviceLimit    *int64  `json:"device_limit"`
+	StartedAt      *string `json:"started_at"`
+	ExpiresAt      *string `json:"expires_at"`
+	NodeIDs        []int64 `json:"node_ids"`
 }
 
 type userCreatedDTO struct {
@@ -158,13 +153,23 @@ func (h *Handler) handleUserCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	quota := int64(0)
-	if req.QuotaBytes != nil {
-		if *req.QuotaBytes < 0 {
-			writeErr(w, errValidation("quota_bytes must be >= 0"))
+	transferEnable := int64(0)
+	if req.TransferEnable != nil {
+		if *req.TransferEnable < 0 {
+			writeErr(w, errValidation("transfer_enable must be >= 0"))
 			return
 		}
-		quota = *req.QuotaBytes
+		transferEnable = *req.TransferEnable
+	}
+	speedLimit, err := nonNegativeLimit(req.SpeedLimit, "speed_limit")
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	deviceLimit, err := nonNegativeLimit(req.DeviceLimit, "device_limit")
+	if err != nil {
+		writeErr(w, err)
+		return
 	}
 	username, err := validateUsername(req.Username)
 	if err != nil {
@@ -204,13 +209,15 @@ func (h *Handler) handleUserCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, err := h.repo.CreateUserWithNodesAndSubscription(r.Context(), repo.NewUser{
-		UUID:       uuid,
-		Username:   username,
-		TokenHash:  adminauth.HashToken(token),
-		Status:     repo.UserStatusActive,
-		QuotaBytes: quota,
-		StartedAt:  startedAt,
-		ExpiresAt:  expiresAt,
+		UUID:           uuid,
+		Username:       username,
+		TokenHash:      adminauth.HashToken(token),
+		Status:         repo.UserStatusActive,
+		TransferEnable: transferEnable,
+		SpeedLimit:     speedLimit,
+		DeviceLimit:    deviceLimit,
+		StartedAt:      startedAt,
+		ExpiresAt:      expiresAt,
 	}, nodeIDs, subHash, subEnc)
 	if err != nil {
 		writeErr(w, err)
@@ -230,6 +237,16 @@ func (h *Handler) handleUserCreate(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusCreated, userCreatedDTO{userDetailDTO: dto, Token: token, SubscriptionURL: subURL})
 }
 
+func nonNegativeLimit(v *int64, field string) (int64, error) {
+	if v == nil {
+		return 0, nil
+	}
+	if *v < 0 {
+		return 0, errValidation(field + " must be >= 0")
+	}
+	return *v, nil
+}
+
 func (h *Handler) userDetail(ctx context.Context, id int64) (userDetailDTO, error) {
 	u, err := h.repo.GetUser(ctx, id)
 	if err != nil {
@@ -239,12 +256,7 @@ func (h *Handler) userDetail(ctx context.Context, id int64) (userDetailDTO, erro
 	if err != nil {
 		return userDetailDTO{}, err
 	}
-	freshCutoff := time.Now().Add(-h.sessionFreshness(ctx))
-	sessionMap, err := h.repo.CountFreshSessionsByUserIDs(ctx, []int64{id}, freshCutoff)
-	if err != nil {
-		return userDetailDTO{}, err
-	}
-	return toUserDetailDTO(u, nodeMap[id], sessionMap[id]), nil
+	return toUserDetailDTO(u, nodeMap[id]), nil
 }
 
 func (h *Handler) handleUserGet(w http.ResponseWriter, r *http.Request) {
@@ -262,11 +274,13 @@ func (h *Handler) handleUserGet(w http.ResponseWriter, r *http.Request) {
 }
 
 type updateUserRequest struct {
-	Status     *string   `json:"status"`
-	Username   optString `json:"username"`
-	QuotaBytes optInt64  `json:"quota_bytes"`
-	StartedAt  optString `json:"started_at"`
-	ExpiresAt  optString `json:"expires_at"`
+	Status         *string   `json:"status"`
+	Username       optString `json:"username"`
+	TransferEnable optInt64  `json:"transfer_enable"`
+	SpeedLimit     optInt64  `json:"speed_limit"`
+	DeviceLimit    optInt64  `json:"device_limit"`
+	StartedAt      optString `json:"started_at"`
+	ExpiresAt      optString `json:"expires_at"`
 }
 
 func (h *Handler) handleUserUpdate(w http.ResponseWriter, r *http.Request) {
@@ -303,13 +317,29 @@ func (h *Handler) handleUserUpdate(w http.ResponseWriter, r *http.Request) {
 		patch.SetUsername = true
 		patch.Username = username
 	}
-	if req.QuotaBytes.Set {
-		if req.QuotaBytes.Value < 0 {
-			writeErr(w, errValidation("quota_bytes must be >= 0"))
+	if req.TransferEnable.Set {
+		if req.TransferEnable.Value < 0 {
+			writeErr(w, errValidation("transfer_enable must be >= 0"))
 			return
 		}
-		patch.SetQuota = true
-		patch.QuotaBytes = req.QuotaBytes.Value
+		patch.SetTransferEnable = true
+		patch.TransferEnable = req.TransferEnable.Value
+	}
+	if req.SpeedLimit.Set {
+		if req.SpeedLimit.Value < 0 {
+			writeErr(w, errValidation("speed_limit must be >= 0"))
+			return
+		}
+		patch.SetSpeedLimit = true
+		patch.SpeedLimit = req.SpeedLimit.Value
+	}
+	if req.DeviceLimit.Set {
+		if req.DeviceLimit.Value < 0 {
+			writeErr(w, errValidation("device_limit must be >= 0"))
+			return
+		}
+		patch.SetDeviceLimit = true
+		patch.DeviceLimit = req.DeviceLimit.Value
 	}
 	if req.StartedAt.Set {
 		t, err := parseTimeBody(req.StartedAt.Value, "started_at")

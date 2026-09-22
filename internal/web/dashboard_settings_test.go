@@ -19,42 +19,33 @@ func TestSettingsDefaultsAndPartialUpdate(t *testing.T) {
 		t.Fatalf("get settings: %d %s", resp.StatusCode, body)
 	}
 	s := jsonMap(t, body)
-	if s["retention_raw_log_days"].(float64) != 7 ||
-		s["retention_aggregate_days"].(float64) != 90 ||
-		s["collection_connection_logs"] != true ||
-		s["session_freshness_seconds"].(float64) != 300 ||
+	if s["retention_aggregate_days"].(float64) != 90 ||
 		s["server_offline_after_seconds"].(float64) != 60 {
 		t.Fatalf("unexpected defaults: %s", body)
 	}
 
-	resp, body = e.do(t, "PUT", "/api/settings", map[string]any{"retention_raw_log_days": 14}, cookie)
+	resp, body = e.do(t, "PUT", "/api/settings", map[string]any{"retention_aggregate_days": 180}, cookie)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("put settings: %d %s", resp.StatusCode, body)
 	}
 	s = jsonMap(t, body)
-	if s["retention_raw_log_days"].(float64) != 14 || s["retention_aggregate_days"].(float64) != 90 {
-		t.Fatalf("partial update must keep other fields: %s", body)
+	if s["retention_aggregate_days"].(float64) != 180 {
+		t.Fatalf("partial update must apply aggregate days: %s", body)
 	}
 
 	resp, body = e.do(t, "PUT", "/api/settings", map[string]any{
-		"collection_connection_logs":   false,
-		"session_freshness_seconds":    600,
 		"server_offline_after_seconds": 120,
 	}, cookie)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("put settings 2: %d %s", resp.StatusCode, body)
 	}
 	s = jsonMap(t, body)
-	if s["collection_connection_logs"] != false ||
-		s["session_freshness_seconds"].(float64) != 600 ||
-		s["server_offline_after_seconds"].(float64) != 120 {
+	if s["server_offline_after_seconds"].(float64) != 120 {
 		t.Fatalf("unexpected update result: %s", body)
 	}
 
 	for name, value := range map[string]int{
-		"retention_raw_log_days":       0,
 		"retention_aggregate_days":     -1,
-		"session_freshness_seconds":    5,
 		"server_offline_after_seconds": 999999,
 	} {
 		resp, body = e.do(t, "PUT", "/api/settings", map[string]any{name: value}, cookie)
@@ -71,7 +62,6 @@ func TestSettingsAffectLivenessAndFreshness(t *testing.T) {
 
 	resp, body := e.do(t, "PUT", "/api/settings", map[string]any{
 		"server_offline_after_seconds": 10,
-		"session_freshness_seconds":    10,
 	}, cookie)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("put settings: %d %s", resp.StatusCode, body)
@@ -113,13 +103,17 @@ func TestDashboardCounts(t *testing.T) {
 	e.seedUser(t, "u2")
 
 	now := time.Now().UTC().Truncate(time.Second)
-	if err := e.repo.ReplaceServerSessions(ctx, server1, []repo.NewSession{
-		{UserID: user1, NodeID: node1, ServerID: server1, IP: "1.1.1.1", ConnectedAt: now, LastSeenAt: now},
-	}); err != nil {
-		t.Fatalf("sessions: %v", err)
+	agentID, err := e.repo.CreateAgent(ctx, server1, "agent-hash", "")
+	if err != nil {
+		t.Fatalf("create agent: %v", err)
+	}
+	if _, _, err := e.repo.IngestDeviceBatch(ctx, agentID, 1, server1, []repo.NewOnlineDevice{
+		{UserID: user1, NodeID: node1, IP: "1.1.1.1", Online: 1},
+	}, map[int64]int{user1: 1}, now.Unix()); err != nil {
+		t.Fatalf("devices: %v", err)
 	}
 	if err := e.repo.InsertTrafficRecords(ctx, []repo.NewTrafficRecord{
-		{UserID: user1, NodeID: node1, ServerID: server1, UploadBytes: 100, DownloadBytes: 200, CreatedAt: now},
+		{UserID: user1, NodeID: node1, ServerID: server1, U: 100, D: 200, CreatedAt: now},
 	}); err != nil {
 		t.Fatalf("traffic: %v", err)
 	}
@@ -144,8 +138,8 @@ func TestDashboardCounts(t *testing.T) {
 	if d["traffic_today_bytes"].(float64) != 300 {
 		t.Fatalf("traffic_today_bytes: %s", body)
 	}
-	if d["sessions_current"].(float64) != 1 {
-		t.Fatalf("sessions_current: %s", body)
+	if d["devices_current"].(float64) != 1 {
+		t.Fatalf("devices_current: %s", body)
 	}
 }
 
