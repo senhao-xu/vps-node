@@ -154,7 +154,7 @@ func renderURI(appKey []byte, userUUID string, n Node) (string, error) {
 }
 
 var allowedTopLevel = map[string]bool{
-	"mixed-port": true, "allow-lan": true, "mode": true, "log-level": true, "ipv6": true,
+	"mixed-port": true, "allow-lan": true, "bind-address": true, "mode": true, "log-level": true, "ipv6": true,
 	"unified-delay": true, "tcp-concurrent": true, "find-process-mode": true,
 	"global-client-fingerprint": true, "dns": true, "proxy-groups": true, "rules": true, "rule-providers": true,
 }

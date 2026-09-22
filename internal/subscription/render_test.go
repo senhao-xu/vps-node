@@ -129,6 +129,9 @@ func TestRenderClashPlaceholdersAndRestrictions(t *testing.T) {
 	if err := ValidateTemplate("proxy-groups:\n  - name: x\n    type: select\n    proxies: [STATIC]\n"); err == nil {
 		t.Fatal("accepted dangling target")
 	}
+	if err := ValidateTemplate("bind-address: 127.0.0.1\nallow-lan: true\nproxy-groups:\n  - {name: x, type: select, proxies: [DIRECT]}\n"); err != nil {
+		t.Fatalf("rejected bind-address: %v", err)
+	}
 	for _, field := range []string{"url", "path", "header", "external-controller", "listeners", "authentication", "script", "proxy-providers"} {
 		template := "dns:\n  nested:\n    " + field + ": bad\nproxy-groups:\n  - {name: x, type: select, proxies: [DIRECT]}\n"
 		if field == "external-controller" || field == "listeners" || field == "authentication" || field == "script" || field == "proxy-providers" {
