@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"vps-node/internal/httpx"
 	"vps-node/internal/subscription"
@@ -34,6 +35,7 @@ type settingsUpdateRequest struct {
 	ServerOfflineAfterSeconds optInt64 `json:"server_offline_after_seconds"`
 	SubscribeURLs             *string  `json:"subscribe_urls"`
 	SubscribePath             *string  `json:"subscribe_path"`
+	SubscribeName             *string  `json:"subscribe_name"`
 	ClashMetaTemplate         *string  `json:"clash_meta_template"`
 }
 
@@ -107,6 +109,14 @@ func (h *Handler) handleSettingsPut(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		updates[settingSubscribePath] = *req.SubscribePath
+	}
+	if req.SubscribeName != nil {
+		name := strings.TrimSpace(*req.SubscribeName)
+		if utf8.RuneCountInString(name) > 64 || strings.ContainsAny(name, "\r\n") || strings.ContainsRune(name, 0x7f) {
+			writeErr(w, errValidation("subscribe_name must be at most 64 characters without line breaks"))
+			return
+		}
+		updates[settingSubscribeName] = name
 	}
 	if req.ClashMetaTemplate != nil {
 		if err := subscription.ValidateTemplate(*req.ClashMetaTemplate); err != nil {

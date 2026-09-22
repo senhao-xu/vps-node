@@ -28,6 +28,7 @@ const form = reactive({
   server_offline_after_seconds: 60,
   subscribe_urls: '',
   subscribe_path: 's',
+  subscribe_name: '',
   clash_meta_template: DefaultClashMetaTemplate,
 })
 
@@ -81,6 +82,7 @@ async function save() {
       server_offline_after_seconds: form.server_offline_after_seconds,
       subscribe_urls: form.subscribe_urls,
       subscribe_path: form.subscribe_path,
+      subscribe_name: form.subscribe_name,
       clash_meta_template: form.clash_meta_template,
     })
     Object.assign(form, data)
@@ -216,6 +218,19 @@ onMounted(() => {
               >
               <p class="form-help">
                 安全单路径段，修改后立即生效，例如 s 或 subscribe。
+              </p>
+            </div>
+            <div class="field">
+              <label for="subscribe-name">订阅名称</label>
+              <input
+                id="subscribe-name"
+                v-model="form.subscribe_name"
+                type="text"
+                maxlength="64"
+                placeholder="例如：我的节点"
+              >
+              <p class="form-help">
+                展示在客户端订阅列表中的名称，留空则由客户端自行决定。
               </p>
             </div>
           </div>

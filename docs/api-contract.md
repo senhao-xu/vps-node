@@ -395,10 +395,13 @@ Response `200`:
 
 Partial update of the same fields. Response `200`: settings DTO.
 
-Settings additionally include `subscribe_urls`, `subscribe_path`, and `clash_meta_template`.
-`subscribe_urls` is a comma-separated list of HTTP(S) origins; `subscribe_path` is a safe
-single path segment. The Clash Meta template is restricted and cannot contain generated
-proxies, proxy providers, listeners, controllers, authentication, or credentials.
+Settings additionally include `subscribe_urls`, `subscribe_path`, `subscribe_name`, and
+`clash_meta_template`. `subscribe_urls` is a comma-separated list of HTTP(S) origins;
+`subscribe_path` is a safe single path segment. `subscribe_name` (≤64 chars, no line breaks)
+sets the subscription display name via `profile-title` and `content-disposition` response
+headers; empty leaves naming to the client. The Clash Meta template is restricted and cannot
+contain generated proxies, proxy providers, listeners, controllers, authentication, or
+credentials.
 
 ## Subscriptions
 

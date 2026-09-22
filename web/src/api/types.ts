@@ -179,6 +179,7 @@ export type Settings = {
   server_offline_after_seconds: number
   subscribe_urls: string
   subscribe_path: string
+  subscribe_name: string
   clash_meta_template: string
 }
 

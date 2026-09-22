@@ -24,6 +24,7 @@ const (
 	settingServerOfflineAfter = "server.offline_after_seconds"
 	settingSubscribeURLs      = "subscribe_urls"
 	settingSubscribePath      = "subscribe_path"
+	settingSubscribeName      = "subscribe_name"
 	settingClashTemplate      = "clash_meta_template"
 )
 
@@ -243,6 +244,7 @@ func settingsFromMap(raw map[string]string) settingsDTO {
 		ServerOfflineAfterSeconds: settingInt(raw, settingServerOfflineAfter, 60, 1),
 		SubscribeURLs:             raw[settingSubscribeURLs],
 		SubscribePath:             settingString(raw, settingSubscribePath, "s"),
+		SubscribeName:             raw[settingSubscribeName],
 		ClashMetaTemplate:         settingString(raw, settingClashTemplate, subscription.DefaultClashMetaTemplate),
 	}
 }

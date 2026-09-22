@@ -2,6 +2,7 @@ package web
 
 import (
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -193,6 +194,15 @@ func (h *Handler) handlePublicSubscription(w http.ResponseWriter, r *http.Reques
 		h.logger.Warn("skipping unrenderable node in subscription", "user_id", u.ID, "node_id", n.ID, "error", err)
 	}
 	w.Header().Set("Subscription-Userinfo", subscriptionUserinfo(u))
+	name, err := h.repo.GetSettingOr(r.Context(), settingSubscribeName, "")
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	if name != "" {
+		w.Header().Set("Profile-Title", "base64:"+base64.StdEncoding.EncodeToString([]byte(name)))
+		w.Header().Set("Content-Disposition", "attachment; filename*=UTF-8''"+url.PathEscape(name))
+	}
 	if flag == "general" {
 		body := subscription.RenderGeneralLinks(h.appKey, u.UUID, nodes, skipNode)
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")

@@ -102,6 +102,9 @@ func TestSubscriptionEligibilityAndNodeFiltering(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("eligible: %d %s url=%s path=%s", resp.StatusCode, body, link, extractPath(link))
 	}
+	if got := resp.Header.Get("Subscription-Userinfo"); got != "upload=0; download=0; total=1000" {
+		t.Fatalf("subscription userinfo header: %q", got)
+	}
 	decoded, err := base64.StdEncoding.DecodeString(body)
 	if err != nil {
 		t.Fatalf("general subscription is not base64: %v", err)
@@ -188,6 +191,48 @@ func TestSubscriptionSettingsPathOriginsAndValidation(t *testing.T) {
 	resp, body = e.do(t, "PUT", "/api/settings", map[string]any{"clash_meta_template": "proxies: []"}, cookie)
 	if resp.StatusCode != http.StatusUnprocessableEntity {
 		t.Fatalf("forbidden template: %d %s", resp.StatusCode, body)
+	}
+}
+
+func TestSubscriptionNameHeaders(t *testing.T) {
+	e := newTestEnv(t)
+	cookie := e.login(t)
+	user := e.seedUser(t, "name-user")
+	resp, body := e.do(t, "POST", "/api/users/"+formatID(user)+"/subscription", nil, cookie)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatal(body)
+	}
+	link := extractPath(subscriptionURL(t, body))
+	resp, _ = e.do(t, "GET", link, nil, nil)
+	if resp.Header.Get("Profile-Title") != "" || resp.Header.Get("Content-Disposition") != "" {
+		t.Fatalf("name headers without configured name: %v", resp.Header)
+	}
+	resp, body = e.do(t, "PUT", "/api/settings", map[string]any{"subscribe_name": " 我的节点 "}, cookie)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("set name: %d %s", resp.StatusCode, body)
+	}
+	resp, body = e.do(t, "GET", link, nil, nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatal(body)
+	}
+	wantTitle := "base64:" + base64.StdEncoding.EncodeToString([]byte("我的节点"))
+	if got := resp.Header.Get("Profile-Title"); got != wantTitle {
+		t.Fatalf("profile title: %q", got)
+	}
+	if got := resp.Header.Get("Content-Disposition"); !strings.Contains(got, "attachment") || !strings.Contains(got, "%E6%88%91") {
+		t.Fatalf("content disposition: %q", got)
+	}
+	resp, body = e.do(t, "PUT", "/api/settings", map[string]any{"subscribe_name": "bad\nname"}, cookie)
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("invalid name: %d %s", resp.StatusCode, body)
+	}
+	resp, body = e.do(t, "PUT", "/api/settings", map[string]any{"subscribe_name": ""}, cookie)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("clear name: %d %s", resp.StatusCode, body)
+	}
+	resp, _ = e.do(t, "GET", link, nil, nil)
+	if resp.Header.Get("Profile-Title") != "" {
+		t.Fatalf("name header after clear: %v", resp.Header)
 	}
 }
 

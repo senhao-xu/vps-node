@@ -260,5 +260,6 @@ type settingsDTO struct {
 	ServerOfflineAfterSeconds int    `json:"server_offline_after_seconds"`
 	SubscribeURLs             string `json:"subscribe_urls"`
 	SubscribePath             string `json:"subscribe_path"`
+	SubscribeName             string `json:"subscribe_name"`
 	ClashMetaTemplate         string `json:"clash_meta_template"`
 }
