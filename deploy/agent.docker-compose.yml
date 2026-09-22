@@ -15,13 +15,18 @@ services:
       - "${NODE_PORT:-8388}:8388/udp"
     volumes:
       - agent-state:/var/lib/panel-agent
+      - agent-config:/etc/sing-box
 
 volumes:
   agent-state:
+  agent-config:
 
 # The agent image contains agent + sing-box + singbox-reload (all-in-one container;
-# sing-box is started by the agent's reload command after the first config apply).
-# Agent identity lives in the agent-state volume; deleting it forces re-registration.
+# sing-box is started by the agent's reload command after each config apply, including
+# at startup, so a restart brings sing-box back up).
+# Agent identity lives in the agent-state volume; rendered sing-box config lives in the
+# agent-config volume so it survives container recreation. Deleting agent-state forces
+# re-registration.
 #
 # Port mapping notes:
 # - The example publishes one port for a single shadowsocks/hysteria2 node

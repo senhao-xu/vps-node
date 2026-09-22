@@ -144,7 +144,7 @@ cp .env.example .env      # set AGENT_PANEL_URL, AGENT_SERVER_ID and one of the 
 docker compose -f agent.docker-compose.yml up -d
 ```
 
-The agent registers on first start and stores its identity in the `agent-state` volume (`/var/lib/panel-agent/state.json`); delete that volume to re-register. After the first config apply the agent spawns sing-box itself via `singbox-reload` — there is no separate sing-box container. Publish one port pair (`tcp`+`udp`) per node, e.g. `8388:8388/tcp` and `8388:8388/udp` (override the host side with `NODE_PORT`); with many nodes consider `network_mode: host`. Ports ≤1024 additionally require root (the container runs as root by default).
+The agent registers on first start and stores its identity in the `agent-state` volume (`/var/lib/panel-agent/state.json`); delete that volume to re-register. The rendered sing-box config lives in the `agent-config` volume (`/etc/sing-box`) so it survives container recreation. The agent re-applies its config (and restarts sing-box) on every start, so a container restart brings the nodes back up without any manual step. After a config apply the agent spawns sing-box itself via `singbox-reload` — there is no separate sing-box container. Publish one port pair (`tcp`+`udp`) per node, e.g. `8388:8388/tcp` and `8388:8388/udp` (override the host side with `NODE_PORT`); with many nodes consider `network_mode: host`. Ports ≤1024 additionally require root (the container runs as root by default).
 
 ### Run: All-in-one (panel + agent on one host)
 

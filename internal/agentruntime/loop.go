@@ -29,6 +29,7 @@ type Loop struct {
 	mu             sync.Mutex
 	collector      *Collector
 	lastApplyError string
+	forceApply     bool
 }
 
 type MetricsSource interface {
@@ -51,14 +52,15 @@ func NewLoop(o LoopOptions) *Loop {
 		o.Logger = discardLogger()
 	}
 	return &Loop{
-		cfg:       o.Config,
-		client:    o.Client,
-		state:     o.State,
-		statePath: o.StatePath,
-		applier:   o.Applier,
-		metrics:   o.Metrics,
-		logger:    o.Logger,
-		version:   o.Version,
+		cfg:        o.Config,
+		client:     o.Client,
+		state:      o.State,
+		statePath:  o.StatePath,
+		applier:    o.Applier,
+		metrics:    o.Metrics,
+		logger:     o.Logger,
+		version:    o.Version,
+		forceApply: true,
 	}
 }
 
@@ -202,12 +204,23 @@ func (l *Loop) heartbeatPass(ctx context.Context, nudge func()) time.Duration {
 }
 
 func (l *Loop) syncPass(ctx context.Context) {
-	resp, err := l.client.Config(ctx, l.state.AppliedRevision)
+	l.mu.Lock()
+	force := l.forceApply
+	l.mu.Unlock()
+
+	applied := l.state.AppliedRevision
+	if force {
+		applied = 0
+	}
+	resp, err := l.client.Config(ctx, applied)
 	if err != nil {
 		l.logger.Warn("config poll failed; keeping last applied revision", "applied_revision", l.state.AppliedRevision, "error", err)
 		return
 	}
-	if resp.Status != "updated" || resp.Config == nil || len(resp.Config.Singbox) == 0 {
+	if resp.Config == nil || len(resp.Config.Singbox) == 0 {
+		return
+	}
+	if !force && resp.Status != "updated" {
 		return
 	}
 
@@ -224,6 +237,7 @@ func (l *Loop) syncPass(ctx context.Context) {
 	l.saveState()
 	l.mu.Lock()
 	l.lastApplyError = ""
+	l.forceApply = false
 	l.mu.Unlock()
 	l.logger.Info("sing-box config applied", "revision", resp.Revision, "renderer", resp.RendererVersion)
 

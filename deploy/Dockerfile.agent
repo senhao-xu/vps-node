@@ -57,5 +57,5 @@ ENV AGENT_STATE_PATH=/var/lib/panel-agent/state.json \
     SINGBOX_PIDFILE=/run/singbox/singbox.pid \
     SINGBOX_BIN=/usr/local/bin/sing-box \
     SINGBOX_CONFIG=/etc/sing-box/config.json
-VOLUME /var/lib/panel-agent
+VOLUME /var/lib/panel-agent /etc/sing-box
 ENTRYPOINT ["/usr/local/bin/panel-agent"]
