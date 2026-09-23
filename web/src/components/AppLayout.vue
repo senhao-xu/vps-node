@@ -266,17 +266,18 @@ async function handleLogout() {
 }
 
 .nav-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  min-height: 44px;
+  min-height: 42px;
   padding: 0 var(--spacing-lg);
   border: none;
   border-radius: 0;
   background: none;
   color: var(--color-shell-muted);
   font-size: var(--font-size-md);
-  font-weight: 500;
+  font-weight: 400;
   text-align: left;
   width: 100%;
   cursor: pointer;
@@ -292,10 +293,23 @@ async function handleLogout() {
   background: var(--color-muted-soft);
 }
 
+/* TDesign menu: light blue fill plus a solid brand-blue indicator rail */
 .nav-item.active {
-  color: var(--color-text);
+  color: var(--color-primary);
   background: var(--color-shell-active);
   font-weight: 600;
+}
+
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 20px;
+  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
+  background: var(--color-primary);
 }
 
 .sidebar-footer {
@@ -489,7 +503,7 @@ async function handleLogout() {
   }
 
   .mobile-nav-item.active {
-    color: var(--color-text);
+    color: var(--color-primary);
     background: var(--color-shell-active);
     font-weight: 600;
   }

@@ -283,6 +283,8 @@ function display(value: unknown): string {
   font-size: var(--font-size-sm);
   white-space: nowrap;
   letter-spacing: 0.02em;
+  /* TDesign tables carry a tinted header band instead of relying on weight alone */
+  background: var(--color-surface-muted);
 }
 
 .data-table td {

@@ -60,20 +60,31 @@ withDefaults(
   color: var(--color-text-secondary);
 }
 
+/* TDesign stat tile: tinted rounded icon chip inside the card */
 .stat-icon {
   flex: none;
-  color: var(--color-text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
 }
 
 .stat-icon.tone-success {
+  background: var(--color-success-soft);
   color: var(--color-success);
 }
 
 .stat-icon.tone-warning {
+  background: var(--color-warning-soft);
   color: var(--color-warning);
 }
 
 .stat-icon.tone-danger {
+  background: var(--color-danger-soft);
   color: var(--color-danger);
 }
 

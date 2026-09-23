@@ -1,66 +1,109 @@
+/**
+ * Design tokens — Tencent TDesign language (T1: light, brand blue).
+ *
+ * Components must only consume the semantic `--color-*` / `--radius-*` /
+ * `--spacing-*` variables. The `--td-*` palettes below are private to this file:
+ * they are the raw TDesign color ramps that the semantic layer maps onto, so a
+ * theme can be retuned without touching components.
+ */
+
 :root {
-  --gray-0: #ffffff;
-  --gray-50: #f8fafc;
-  --gray-100: #f1f5f9;
-  --gray-200: #e2e8f0;
-  --gray-250: #dbe2ea;
-  --gray-400: #94a3b8;
-  --gray-500: #64748b;
-  --gray-900: #020817;
+  /* ---- TDesign neutral ramp ---- */
+  --td-white: #ffffff;
+  --td-gray-1: #f3f3f3;
+  --td-gray-2: #eeeeee;
+  --td-gray-3: #e7e7e7;
+  --td-gray-4: #dcdcdc;
+  --td-gray-5: #c5c5c5;
+  --td-gray-6: #a6a6a6;
+  --td-gray-7: #8b8b8b;
+  --td-gray-8: #777777;
+  --td-gray-9: #5e5e5e;
+  --td-gray-10: #4b4b4b;
+  --td-gray-11: #333333;
+  --td-gray-12: #1d2129;
+  --td-text-secondary: #4e5969;
+  --td-text-placeholder: #86909c;
+  --td-text-disabled: #c9cdd4;
 
-  --ink-900: #0f172a;
+  /* ---- TDesign brand blue ramp ---- */
+  --td-brand-1: #f3f9ff;
+  --td-brand-2: #dbe7fd;
+  --td-brand-3: #bedbff;
+  --td-brand-4: #96c6ff;
+  --td-brand-5: #6fa4ff;
+  --td-brand-6: #4b7fff;
+  --td-brand-7: #0052d9;
+  --td-brand-8: #0043b3;
+  --td-brand-9: #00348f;
+  --td-brand-10: #002266;
 
-  --green-100: #dcfce7;
-  --green-200: #bbf7d0;
-  --green-600: #16a34a;
+  /* ---- TDesign functional ramps ---- */
+  --td-success-1: #dff5ec;
+  --td-success-2: #b3e8d3;
+  --td-success-5: #00a870;
+  --td-success-6: #008a5c;
 
-  --amber-100: #fef3c7;
-  --amber-200: #fde68a;
-  --amber-600: #d97706;
+  --td-warning-1: #fef3e6;
+  --td-warning-2: #fbd9b4;
+  --td-warning-5: #ed7b2f;
+  --td-warning-6: #d35f1e;
 
-  --red-100: #fee2e2;
-  --red-200: #fecaca;
-  --red-500: #ef4444;
-  --red-600: #dc2626;
+  --td-error-1: #fde2e2;
+  --td-error-2: #f9b7b7;
+  --td-error-5: #d54941;
+  --td-error-6: #b93a33;
 
-  --color-bg: var(--gray-0);
-  --color-surface: var(--gray-0);
-  --color-surface-muted: var(--gray-50);
-  --color-border: var(--gray-200);
-  --color-border-strong: var(--gray-250);
-  --color-text: var(--gray-900);
-  --color-text-secondary: var(--gray-500);
-  --color-primary: var(--ink-900);
-  --color-primary-soft: var(--gray-100);
-  --color-primary-border: var(--gray-200);
-  --color-on-primary: var(--gray-50);
-  --color-success: var(--green-600);
-  --color-success-soft: var(--green-100);
-  --color-success-border: var(--green-200);
-  --color-warning: var(--amber-600);
-  --color-warning-soft: var(--amber-100);
-  --color-warning-border: var(--amber-200);
-  --color-danger: var(--red-500);
-  --color-danger-soft: var(--red-100);
-  --color-danger-border: var(--red-200);
-  --color-danger-strong: var(--red-500);
-  --color-danger-strong-hover: var(--red-600);
-  --color-on-danger: var(--gray-50);
-  --color-offline: var(--gray-400);
-  --color-muted-soft: var(--gray-100);
-  --color-overlay: rgba(15, 23, 42, 0.6);
-  --color-focus-ring: rgba(2, 8, 23, 0.1);
-  --color-skeleton: var(--gray-100);
-  --color-toggle-knob: var(--gray-0);
-  --color-shell: var(--gray-0);
-  --color-shell-muted: var(--gray-500);
-  --color-shell-active: var(--gray-100);
-  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  /* ---- Semantic: surfaces & text ---- */
+  --color-bg: var(--td-gray-1);
+  --color-surface: var(--td-white);
+  --color-surface-muted: var(--td-gray-1);
+  --color-border: var(--td-gray-3);
+  --color-border-strong: var(--td-gray-4);
+  --color-text: var(--td-gray-12);
+  --color-text-secondary: var(--td-text-secondary);
 
-  --radius-xs: 4px;
-  --radius-sm: 6px;
-  --radius-md: 12px;
-  --radius-dialog: 8px;
+  /* ---- Semantic: brand ---- */
+  --color-primary: var(--td-brand-7);
+  --color-primary-hover: var(--td-brand-8);
+  --color-primary-active: var(--td-brand-9);
+  --color-primary-soft: var(--td-brand-1);
+  --color-primary-border: var(--td-brand-3);
+  --color-on-primary: var(--td-white);
+
+  /* ---- Semantic: status ---- */
+  --color-success: var(--td-success-5);
+  --color-success-soft: var(--td-success-1);
+  --color-success-border: var(--td-success-2);
+  --color-warning: var(--td-warning-5);
+  --color-warning-soft: var(--td-warning-1);
+  --color-warning-border: var(--td-warning-2);
+  --color-danger: var(--td-error-5);
+  --color-danger-soft: var(--td-error-1);
+  --color-danger-border: var(--td-error-2);
+  --color-danger-strong: var(--td-error-5);
+  --color-danger-strong-hover: var(--td-error-6);
+  --color-on-danger: var(--td-white);
+  --color-offline: var(--td-gray-5);
+
+  /* ---- Semantic: misc ---- */
+  --color-muted-soft: var(--td-gray-2);
+  --color-overlay: rgba(0, 0, 0, 0.6);
+  --color-focus-ring: rgba(0, 82, 217, 0.18);
+  --color-skeleton: var(--td-gray-2);
+  --color-toggle-knob: var(--td-white);
+
+  /* ---- Semantic: app shell (sidebar / topbar) ---- */
+  --color-shell: var(--td-white);
+  --color-shell-muted: var(--td-text-secondary);
+  --color-shell-active: var(--td-brand-1);
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2386909c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+
+  /* ---- Radii: TDesign favours small corners ---- */
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-dialog: 6px;
   --radius-full: 999px;
 
   --spacing-xs: 4px;
@@ -72,75 +115,114 @@
   --card-padding: var(--spacing-lg);
 
   --font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
-    Arial, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+    'PingFang SC', -apple-system, BlinkMacSystemFont, 'Helvetica Neue',
+    'Hiragino Sans GB', 'Microsoft YaHei', Arial, sans-serif;
   --font-size-xs: 12px;
   --font-size-sm: 12px;
   --font-size-md: 14px;
   --font-size-lg: 20px;
   --font-size-xl: 24px;
 
-  --shadow-sm: 0 1px 2px rgba(2, 8, 23, 0.05);
-  --shadow-card: 0 1px 2px rgba(2, 8, 23, 0.06);
-  --shadow-dialog: 0 24px 64px rgba(15, 23, 42, 0.22);
+  /* TDesign keeps elevation almost flat: hairline borders carry the structure */
+  --shadow-sm: 0 1px 2px rgba(29, 33, 41, 0.05);
+  --shadow-card: 0 1px 3px rgba(29, 33, 41, 0.06);
+  --shadow-dialog: 0 6px 24px rgba(29, 33, 41, 0.14);
   --control-height: 36px;
-  --shell-width: 256px;
+  --shell-width: 232px;
   --shell-width-collapsed: 56px;
 
   color-scheme: light;
 }
 
+/**
+ * Dark theme — same semantic contract, TDesign dark ramp (T3 companion).
+ * Brand blue is lifted to --td-brand-6 so it stays legible on dark surfaces.
+ */
 [data-theme='dark'] {
-  --dark-gray-950: #020817;
-  --dark-gray-800: #1e293b;
-  --dark-gray-700: #334155;
-  --dark-gray-400: #94a3b8;
-  --dark-gray-50: #f8fafc;
+  --td-dark-bg: #17171a;
+  --td-dark-surface: #232324;
+  --td-dark-surface-2: #2a2a2b;
+  --td-dark-surface-3: #323233;
+  --td-dark-border: #3d3d3d;
+  --td-dark-border-strong: #5e5e5e;
+  --td-dark-text: #e7e7e7;
+  --td-dark-text-secondary: #a6a6a6;
 
-  --dark-green-400: #34c77b;
-  --dark-amber-400: #e8a33d;
-  --dark-red-400: #ef5b5b;
-  --dark-red-300: #f27373;
-  --dark-red-800: #7f1d1d;
-  --dark-red-700: #991b1b;
+  --td-brand-1: rgba(75, 139, 255, 0.14);
+  --td-brand-2: rgba(75, 139, 255, 0.28);
+  --td-brand-3: rgba(75, 139, 255, 0.4);
+  --td-brand-6: #4b8bff;
+  --td-brand-7: #4b8bff;
+  --td-brand-8: #6fa4ff;
+  --td-brand-9: #96c6ff;
 
-  --color-bg: var(--dark-gray-950);
-  --color-surface: var(--dark-gray-950);
-  --color-surface-muted: var(--dark-gray-800);
-  --color-border: var(--dark-gray-800);
-  --color-border-strong: var(--dark-gray-700);
-  --color-text: var(--dark-gray-50);
-  --color-text-secondary: var(--dark-gray-400);
-  --color-primary: var(--dark-gray-50);
-  --color-primary-soft: var(--dark-gray-800);
-  --color-primary-border: var(--dark-gray-800);
-  --color-on-primary: var(--dark-gray-950);
-  --color-success: var(--dark-green-400);
-  --color-success-soft: rgba(52, 199, 123, 0.14);
-  --color-success-border: rgba(52, 199, 123, 0.36);
-  --color-warning: var(--dark-amber-400);
-  --color-warning-soft: rgba(232, 163, 61, 0.14);
-  --color-warning-border: rgba(232, 163, 61, 0.36);
-  --color-danger: var(--dark-red-400);
-  --color-danger-soft: rgba(239, 91, 91, 0.14);
-  --color-danger-border: rgba(239, 91, 91, 0.36);
-  --color-danger-strong: var(--dark-red-800);
-  --color-danger-strong-hover: var(--dark-red-700);
-  --color-on-danger: var(--dark-gray-50);
-  --color-offline: #5f6c82;
-  --color-muted-soft: var(--dark-gray-800);
-  --color-overlay: rgba(4, 8, 16, 0.72);
-  --color-focus-ring: rgba(203, 213, 225, 0.25);
-  --color-skeleton: var(--dark-gray-800);
-  --color-toggle-knob: var(--dark-gray-50);
-  --color-shell: var(--dark-gray-950);
-  --color-shell-muted: var(--dark-gray-400);
-  --color-shell-active: var(--dark-gray-800);
-  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  --td-success-1: rgba(39, 192, 141, 0.14);
+  --td-success-2: rgba(39, 192, 141, 0.36);
+  --td-success-5: #27c08d;
+  --td-success-6: #4ad0a5;
+
+  --td-warning-1: rgba(232, 147, 74, 0.14);
+  --td-warning-2: rgba(232, 147, 74, 0.36);
+  --td-warning-5: #e8934a;
+  --td-warning-6: #f0a969;
+
+  --td-error-1: rgba(227, 115, 112, 0.14);
+  --td-error-2: rgba(227, 115, 112, 0.36);
+  --td-error-5: #e37370;
+  --td-error-6: #ea918e;
+
+  --td-white: #17171a;
+  --td-gray-1: var(--td-dark-surface);
+  --td-gray-2: var(--td-dark-surface-2);
+  --td-gray-3: var(--td-dark-border);
+  --td-gray-4: var(--td-dark-border-strong);
+  --td-gray-5: #5e5e5e;
+  --td-gray-12: var(--td-dark-text);
+  --td-text-secondary: var(--td-dark-text-secondary);
+
+  --color-bg: var(--td-dark-bg);
+  --color-surface: var(--td-dark-surface);
+  --color-surface-muted: var(--td-dark-surface-2);
+  --color-border: var(--td-dark-border);
+  --color-border-strong: var(--td-dark-border-strong);
+  --color-text: var(--td-dark-text);
+  --color-text-secondary: var(--td-dark-text-secondary);
+
+  --color-primary: var(--td-brand-7);
+  --color-primary-hover: var(--td-brand-8);
+  --color-primary-active: var(--td-brand-9);
+  --color-primary-soft: var(--td-brand-1);
+  --color-primary-border: var(--td-brand-2);
+  --color-on-primary: #17171a;
+
+  --color-success: var(--td-success-5);
+  --color-success-soft: var(--td-success-1);
+  --color-success-border: var(--td-success-2);
+  --color-warning: var(--td-warning-5);
+  --color-warning-soft: var(--td-warning-1);
+  --color-warning-border: var(--td-warning-2);
+  --color-danger: var(--td-error-5);
+  --color-danger-soft: var(--td-error-1);
+  --color-danger-border: var(--td-error-2);
+  --color-danger-strong: var(--td-error-5);
+  --color-danger-strong-hover: var(--td-error-6);
+  --color-on-danger: var(--td-dark-text);
+  --color-offline: #5e5e5e;
+
+  --color-muted-soft: var(--td-dark-surface-3);
+  --color-overlay: rgba(0, 0, 0, 0.72);
+  --color-focus-ring: rgba(75, 139, 255, 0.28);
+  --color-skeleton: var(--td-dark-surface-2);
+  --color-toggle-knob: #e7e7e7;
+
+  --color-shell: var(--td-dark-surface);
+  --color-shell-muted: var(--td-dark-text-secondary);
+  --color-shell-active: var(--td-brand-1);
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23a6a6a6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-dialog: 0 24px 64px rgba(0, 0, 0, 0.5);
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-dialog: 0 6px 24px rgba(0, 0, 0, 0.56);
 
   color-scheme: dark;
 }
