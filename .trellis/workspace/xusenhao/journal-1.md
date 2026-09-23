@@ -71,3 +71,24 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 2: 节点编辑回显公开协议配置
+
+**Date**: 2026-09-23
+**Task**: 节点编辑回显公开协议配置
+**Branch**: `main`
+
+### Summary
+
+GET /api/nodes/{id} 详情 DTO 新增 settings 字段回显公开协议配置（含派生 Reality 公钥），秘密字段仍仅存 secret_enc；编辑表单打开时拉取详情回填四协议公开字段，秘密字段保持留空不变，详情拉取失败时不提交 settings 避免覆盖存储值；同步更新 api-contract 与 node-protocol-settings spec；新增 nodes_settings_echo_test.go 秘密字段扫描断言。全部验证通过（go test/vue-tsc/lint/make build）。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2086dfb` | (see git log) |
+
+### Status
+
+[OK] **Completed**
