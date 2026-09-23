@@ -5,8 +5,9 @@ const props = withDefaults(
   defineProps<{
     text: string
     display?: string
+    buttonVariant?: 'link' | 'secondary'
   }>(),
-  { display: '' },
+  { display: '', buttonVariant: 'link' },
 )
 
 const { copied, copy } = useCopyFeedback()
@@ -21,7 +22,7 @@ async function onCopy() {
     <span class="value">{{ props.display || props.text }}</span>
     <button
       type="button"
-      class="btn link small"
+      :class="['btn', props.buttonVariant, 'small']"
       @click="onCopy"
     >
       {{ copied ? '已复制' : '复制' }}

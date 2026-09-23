@@ -165,10 +165,11 @@ async function expireNow() {
         <CopyText
           class="mono subscription-url"
           :text="subscription.url"
+          button-variant="secondary"
         />
         <button
           type="button"
-          class="btn link small"
+          class="btn secondary small"
           :disabled="rotatingSubscription"
           @click="showRotateConfirm = true"
         >
