@@ -37,7 +37,7 @@ func mustCreateUser(t *testing.T, r *repo.Repo, uuid string) int64 {
 
 func mustCreateServer(t *testing.T, r *repo.Repo, name string) int64 {
 	t.Helper()
-	id, err := r.CreateServer(context.Background(), name, "1.2.3.4", repo.ServerStatusActive)
+	id, err := r.CreateServer(context.Background(), name, repo.ServerStatusActive)
 	if err != nil {
 		t.Fatalf("create server: %v", err)
 	}
@@ -46,7 +46,7 @@ func mustCreateServer(t *testing.T, r *repo.Repo, name string) int64 {
 
 func mustCreateNode(t *testing.T, r *repo.Repo, serverID int64, name string, port int) int64 {
 	t.Helper()
-	id, err := r.CreateNode(context.Background(), repo.NewNode{ServerID: serverID, Name: name, Protocol: repo.ProtocolVLESS, Port: port})
+	id, err := r.CreateNode(context.Background(), repo.NewNode{ServerID: serverID, Address: name + ".example.com", Name: name, Protocol: repo.ProtocolVLESS, Port: port})
 	if err != nil {
 		t.Fatalf("create node: %v", err)
 	}
@@ -309,12 +309,17 @@ func TestNodeOwnershipConstraints(t *testing.T) {
 	if _, err := r.CreateNode(ctx, repo.NewNode{ServerID: server1, Name: "other", Protocol: repo.ProtocolVLESS, Port: 443}); !errors.Is(err, repo.ErrConflict) {
 		t.Fatalf("expected port conflict per server, got %v", err)
 	}
-	if _, err := r.CreateNode(ctx, repo.NewNode{ServerID: server1, Name: "n1", Protocol: repo.ProtocolVLESS, Port: 8443}); !errors.Is(err, repo.ErrConflict) {
-		t.Fatalf("expected name conflict per server, got %v", err)
+	// Duplicate names are allowed (node copy keeps the source name); only
+	// enabled nodes must have a unique port per server.
+	if _, err := r.CreateNode(ctx, repo.NewNode{ServerID: server1, Name: "n1", Protocol: repo.ProtocolVLESS, Port: 8443}); err != nil {
+		t.Fatalf("duplicate name must be allowed, got %v", err)
+	}
+	if _, err := r.CreateNode(ctx, repo.NewNode{ServerID: server1, Name: "disabled-dup", Protocol: repo.ProtocolVLESS, Port: 443, Status: repo.NodeStatusDisabled}); err != nil {
+		t.Fatalf("disabled node may reuse an active port, got %v", err)
 	}
 
 	nodes, err := r.ListNodesByServer(ctx, server1)
-	if err != nil || len(nodes) != 1 {
+	if err != nil || len(nodes) != 3 {
 		t.Fatalf("list by server: %v %d", err, len(nodes))
 	}
 

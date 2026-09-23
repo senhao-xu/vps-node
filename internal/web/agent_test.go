@@ -443,19 +443,19 @@ func TestAgentConfigCurrentAndPayload(t *testing.T) {
 	serverB := e.seedServer(t, "b")
 
 	_, body := e.do(t, "POST", "/api/nodes", map[string]any{
-		"server_id": serverA, "name": "a-vless", "protocol": "vless", "port": 443,
+		"server_id": serverA, "address": "a.example.com", "name": "a-vless", "protocol": "vless", "port": 443,
 		"settings": map[string]any{"private_key": realityPrivateKey, "reality_settings": map[string]any{"server_name": "example.com", "short_id": "abcd1234"}},
 	}, cookie)
 	nodeA1 := int64(jsonMap(t, body)["id"].(float64))
 
 	_, body = e.do(t, "POST", "/api/nodes", map[string]any{
-		"server_id": serverA, "name": "a-ss", "protocol": "shadowsocks", "port": 8388,
+		"server_id": serverA, "address": "a.example.com", "name": "a-ss", "protocol": "shadowsocks", "port": 8388,
 		"settings": map[string]any{"cipher": "2022-blake3-aes-128-gcm", "password": "server-secret-pw"},
 	}, cookie)
 	nodeA2 := int64(jsonMap(t, body)["id"].(float64))
 
 	_, body = e.do(t, "POST", "/api/nodes", map[string]any{
-		"server_id": serverB, "name": "b-ss", "protocol": "shadowsocks", "port": 8443,
+		"server_id": serverB, "address": "b.example.com", "name": "b-ss", "protocol": "shadowsocks", "port": 8443,
 		"settings": map[string]any{"cipher": "2022-blake3-aes-128-gcm", "password": "ss-pw"},
 	}, cookie)
 	nodeB := int64(jsonMap(t, body)["id"].(float64))

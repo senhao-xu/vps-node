@@ -58,7 +58,7 @@ func TestSweepRemovesOnlyExpiredRows(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now()
 
-	serverID, err := f.repo.CreateServer(ctx, "s1", "1.2.3.4", repo.ServerStatusActive)
+	serverID, err := f.repo.CreateServer(ctx, "s1", repo.ServerStatusActive)
 	if err != nil {
 		t.Fatalf("create server: %v", err)
 	}
@@ -163,7 +163,7 @@ func TestSweepRemovesExpiredVisits(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now()
 
-	serverID, err := f.repo.CreateServer(ctx, "s1", "1.2.3.4", repo.ServerStatusActive)
+	serverID, err := f.repo.CreateServer(ctx, "s1", repo.ServerStatusActive)
 	if err != nil {
 		t.Fatalf("create server: %v", err)
 	}
@@ -236,7 +236,7 @@ func TestSweepHonorsSettingsOverride(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now()
 
-	serverID, err := f.repo.CreateServer(ctx, "s1", "1.2.3.4", repo.ServerStatusActive)
+	serverID, err := f.repo.CreateServer(ctx, "s1", repo.ServerStatusActive)
 	if err != nil {
 		t.Fatalf("create server: %v", err)
 	}
@@ -269,7 +269,7 @@ func TestSweepEnforcesStorageCaps(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now()
 
-	serverID, err := f.repo.CreateServer(ctx, "s1", "1.2.3.4", repo.ServerStatusActive)
+	serverID, err := f.repo.CreateServer(ctx, "s1", repo.ServerStatusActive)
 	if err != nil {
 		t.Fatalf("create server: %v", err)
 	}

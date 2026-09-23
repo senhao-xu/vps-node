@@ -89,6 +89,7 @@ type nodeRefDTO struct {
 type nodeDTO struct {
 	ID        int64      `json:"id"`
 	ServerID  int64      `json:"server_id"`
+	Address   string     `json:"address"`
 	Name      string     `json:"name"`
 	Protocol  string     `json:"protocol"`
 	Port      int        `json:"port"`
@@ -111,6 +112,7 @@ func toNodeDTO(n repo.Node) nodeDTO {
 	return nodeDTO{
 		ID:        n.ID,
 		ServerID:  n.ServerID,
+		Address:   n.Address,
 		Name:      n.Name,
 		Protocol:  n.Protocol,
 		Port:      n.Port,
@@ -143,7 +145,6 @@ type agentInfoDTO struct {
 type serverDTO struct {
 	ID            int64   `json:"id"`
 	Name          string  `json:"name"`
-	Address       string  `json:"address"`
 	Status        string  `json:"status"`
 	CPUPercent    float64 `json:"cpu_percent"`
 	MemoryPercent float64 `json:"memory_percent"`
@@ -167,7 +168,6 @@ func toServerDTO(s repo.Server, nodeCount, onlineUsers int64) serverDTO {
 	return serverDTO{
 		ID:            s.ID,
 		Name:          s.Name,
-		Address:       s.Address,
 		Status:        s.Status,
 		CPUPercent:    s.CPUPercent,
 		MemoryPercent: s.MemoryPercent,

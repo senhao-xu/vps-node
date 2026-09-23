@@ -9,7 +9,6 @@ import (
 type Server struct {
 	ID                     int64
 	Name                   string
-	Address                string
 	Status                 string
 	CPUPercent             float64
 	MemoryPercent          float64
@@ -28,7 +27,7 @@ const (
 	ServerStatusOffline  = "offline"
 )
 
-const serverSelect = `SELECT id, name, address, status, cpu_percent, memory_percent, disk_percent, uptime_seconds,
+const serverSelect = `SELECT id, name, status, cpu_percent, memory_percent, disk_percent, uptime_seconds,
 		     agent_version, last_seen_at, register_token_expires_at, created_at, updated_at
 		     FROM servers`
 
@@ -37,14 +36,14 @@ func getServerExec(ctx context.Context, q execer, id int64) (Server, error) {
 	return scanServer(row.Scan)
 }
 
-func (r *Repo) CreateServer(ctx context.Context, name, address, status string) (int64, error) {
+func (r *Repo) CreateServer(ctx context.Context, name, status string) (int64, error) {
 	if status == "" {
 		status = ServerStatusActive
 	}
 	now := nowUnix()
 	res, err := r.DB.ExecContext(ctx,
-		`INSERT INTO servers (name, address, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
-		name, address, status, now, now)
+		`INSERT INTO servers (name, status, created_at, updated_at) VALUES (?, ?, ?, ?)`,
+		name, status, now, now)
 	if err != nil {
 		return 0, mapErr(err)
 	}
@@ -99,10 +98,10 @@ func (r *Repo) GetServerByRegisterTokenHash(ctx context.Context, tokenHash strin
 	return scanServer(row.Scan)
 }
 
-func (r *Repo) UpdateServer(ctx context.Context, id int64, name, address, status string) error {
+func (r *Repo) UpdateServer(ctx context.Context, id int64, name, status string) error {
 	_, err := r.DB.ExecContext(ctx,
-		`UPDATE servers SET name = ?, address = ?, status = ?, updated_at = ? WHERE id = ?`,
-		name, address, status, nowUnix(), id)
+		`UPDATE servers SET name = ?, status = ?, updated_at = ? WHERE id = ?`,
+		name, status, nowUnix(), id)
 	return mapErr(err)
 }
 
@@ -135,7 +134,7 @@ func scanServer(scan func(dest ...any) error) (Server, error) {
 	var s Server
 	var lastSeenAt, registerTokenExpiresAt sql.NullInt64
 	var createdAt, updatedAt int64
-	err := scan(&s.ID, &s.Name, &s.Address, &s.Status, &s.CPUPercent, &s.MemoryPercent, &s.DiskPercent,
+	err := scan(&s.ID, &s.Name, &s.Status, &s.CPUPercent, &s.MemoryPercent, &s.DiskPercent,
 		&s.UptimeSeconds, &s.AgentVersion, &lastSeenAt, &registerTokenExpiresAt, &createdAt, &updatedAt)
 	if err != nil {
 		return Server{}, mapErr(err)

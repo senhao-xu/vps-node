@@ -17,7 +17,7 @@ func TestNodesProtocolAndDeviceSchema(t *testing.T) {
 		t.Fatalf("migrate: %v", err)
 	}
 
-	if _, err := d.ExecContext(ctx, `INSERT INTO servers (id, name, address, created_at, updated_at) VALUES (1, 's1', 's1.example.com', 1, 1)`); err != nil {
+	if _, err := d.ExecContext(ctx, `INSERT INTO servers (id, name, created_at, updated_at) VALUES (1, 's1', 1, 1)`); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
 	for i, protocol := range []string{"shadowsocks", "vless", "hysteria2", "anytls"} {

@@ -54,18 +54,17 @@ func (h *Handler) handleServerList(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleServerCreate(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Name    string `json:"name"`
-		Address string `json:"address"`
+		Name string `json:"name"`
 	}
 	if err := decodeJSON(w, r, &req); err != nil {
 		writeErr(w, err)
 		return
 	}
-	if err := validateServerNameAddress(req.Name, req.Address); err != nil {
+	if err := validateServerName(req.Name); err != nil {
 		writeErr(w, err)
 		return
 	}
-	id, err := h.repo.CreateServer(r.Context(), req.Name, req.Address, repo.ServerStatusActive)
+	id, err := h.repo.CreateServer(r.Context(), req.Name, repo.ServerStatusActive)
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -78,12 +77,9 @@ func (h *Handler) handleServerCreate(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusCreated, toServerDTO(s, 0, 0))
 }
 
-func validateServerNameAddress(name, address string) error {
+func validateServerName(name string) error {
 	if name == "" || len(name) > 128 {
 		return errValidation("name must be 1-128 characters")
-	}
-	if address == "" || len(address) > 255 {
-		return errValidation("address must be 1-255 characters")
 	}
 	return nil
 }
@@ -189,21 +185,17 @@ func (h *Handler) handleServerUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Name    *string `json:"name"`
-		Address *string `json:"address"`
-		Status  *string `json:"status"`
+		Name   *string `json:"name"`
+		Status *string `json:"status"`
 	}
 	if err := decodeJSON(w, r, &req); err != nil {
 		writeErr(w, err)
 		return
 	}
 
-	name, address, status := current.Name, current.Address, current.Status
+	name, status := current.Name, current.Status
 	if req.Name != nil {
 		name = *req.Name
-	}
-	if req.Address != nil {
-		address = *req.Address
 	}
 	if req.Status != nil {
 		if !validServerStatuses[*req.Status] {
@@ -212,12 +204,12 @@ func (h *Handler) handleServerUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 		status = *req.Status
 	}
-	if err := validateServerNameAddress(name, address); err != nil {
+	if err := validateServerName(name); err != nil {
 		writeErr(w, err)
 		return
 	}
 
-	s, err := h.repo.UpdateServerAndBump(r.Context(), id, name, address, status)
+	s, err := h.repo.UpdateServerAndBump(r.Context(), id, name, status)
 	if err != nil {
 		writeErr(w, err)
 		return

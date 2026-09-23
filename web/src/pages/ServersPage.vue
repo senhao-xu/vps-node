@@ -36,7 +36,6 @@ const statusUpdatingId = ref<number | null>(null)
 
 const columns: Column[] = [
   { key: 'name', label: '名称', width: '140px' },
-  { key: 'address', label: '地址', width: '200px' },
   { key: 'status', label: '状态', width: '72px' },
   { key: 'agent_version', label: 'Agent 版本', width: '84px' },
   { key: 'last_seen_at', label: '最后心跳', width: '110px' },
@@ -218,9 +217,6 @@ onMounted(() => {
           <RouterLink :to="`/servers/${row.id}`">
             {{ row.name }}
           </RouterLink>
-        </template>
-        <template #cell-address="{ row }">
-          <span class="mono">{{ row.address }}</span>
         </template>
         <template #cell-status="{ row }">
           <StatusBadge v-bind="serverStatusInfo(row.status)" />

@@ -27,7 +27,7 @@ func seedProtocols(t *testing.T) (env *panelEnv, cookie *http.Cookie, registerTo
 	cookie = env.login()
 
 	_, out := env.do("POST", "/api/servers", map[string]string{
-		"name": "FULL-01", "address": "full01.example.com",
+		"name": "FULL-01",
 	}, cookie)
 	serverID := int64(out["id"].(float64))
 
@@ -41,13 +41,13 @@ func seedProtocols(t *testing.T) (env *panelEnv, cookie *http.Cookie, registerTo
 	cert, tlsKey := e2eTLSMaterial(t, "full01.example.com", now.Add(-time.Hour), now.Add(24*time.Hour))
 
 	_, out = env.do("POST", "/api/nodes", map[string]any{
-		"server_id": serverID, "name": "SS", "protocol": "shadowsocks", "port": 8388,
+		"server_id": serverID, "address": "full01.example.com", "name": "SS", "protocol": "shadowsocks", "port": 8388,
 		"settings": map[string]any{"cipher": "2022-blake3-aes-128-gcm"},
 	}, cookie)
 	ssID := int64(out["id"].(float64))
 
 	_, out = env.do("POST", "/api/nodes", map[string]any{
-		"server_id": serverID, "name": "VLESS", "protocol": "vless", "port": 443,
+		"server_id": serverID, "address": "full01.example.com", "name": "VLESS", "protocol": "vless", "port": 443,
 		"settings": map[string]any{
 			"private_key":      privateKey,
 			"reality_settings": map[string]any{"server_name": "example.com", "short_id": "0123abcd"},
@@ -56,7 +56,7 @@ func seedProtocols(t *testing.T) (env *panelEnv, cookie *http.Cookie, registerTo
 	vlessID := int64(out["id"].(float64))
 
 	_, out = env.do("POST", "/api/nodes", map[string]any{
-		"server_id": serverID, "name": "HY2", "protocol": "hysteria2", "port": 8443,
+		"server_id": serverID, "address": "full01.example.com", "name": "HY2", "protocol": "hysteria2", "port": 8443,
 		"settings": map[string]any{
 			"tls":         map[string]any{"server_name": "full01.example.com"},
 			"certificate": cert, "private_key": tlsKey,
@@ -66,7 +66,7 @@ func seedProtocols(t *testing.T) (env *panelEnv, cookie *http.Cookie, registerTo
 	hy2ID := int64(out["id"].(float64))
 
 	_, out = env.do("POST", "/api/nodes", map[string]any{
-		"server_id": serverID, "name": "ANYTLS", "protocol": "anytls", "port": 8444,
+		"server_id": serverID, "address": "full01.example.com", "name": "ANYTLS", "protocol": "anytls", "port": 8444,
 		"settings": map[string]any{
 			"tls":         map[string]any{"server_name": "full01.example.com"},
 			"certificate": cert, "private_key": tlsKey,

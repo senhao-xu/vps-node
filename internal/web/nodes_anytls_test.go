@@ -43,7 +43,7 @@ func TestAnyTLSCreateValidation(t *testing.T) {
 	}
 	for i, tc := range cases {
 		resp, body := e.do(t, "POST", "/api/nodes", map[string]any{
-			"server_id": serverID, "name": fmt.Sprintf("bad-%d", i), "protocol": "anytls",
+			"server_id": serverID, "address": "node.example.com", "name": fmt.Sprintf("bad-%d", i), "protocol": "anytls",
 			"port": 30000 + i, "settings": tc.settings,
 		}, cookie)
 		if resp.StatusCode != http.StatusUnprocessableEntity || errorCode(t, body) != "validation" {
@@ -52,7 +52,7 @@ func TestAnyTLSCreateValidation(t *testing.T) {
 	}
 
 	resp, body := e.do(t, "POST", "/api/nodes", map[string]any{
-		"server_id": serverID, "name": "good", "protocol": "anytls", "port": 30100,
+		"server_id": serverID, "address": "node.example.com", "name": "good", "protocol": "anytls", "port": 30100,
 		"settings": map[string]any{"tls": map[string]any{"server_name": "anytls.example.com"}, "certificate": cert, "private_key": key},
 	}, cookie)
 	if resp.StatusCode != http.StatusCreated {
@@ -74,7 +74,7 @@ func TestAnyTLSUpdatePreservesSecretAndAgentConfig(t *testing.T) {
 	cert, key := testTLSMaterial(t, "anytls.example.com", now.Add(-time.Hour), now.Add(time.Hour))
 
 	resp, body := e.do(t, "POST", "/api/nodes", map[string]any{
-		"server_id": serverID, "name": "anytls", "protocol": "anytls", "port": 9443,
+		"server_id": serverID, "address": "node.example.com", "name": "anytls", "protocol": "anytls", "port": 9443,
 		"settings": map[string]any{"tls": map[string]any{"server_name": "anytls.example.com"}, "certificate": cert, "private_key": key},
 	}, cookie)
 	if resp.StatusCode != http.StatusCreated {
@@ -169,7 +169,7 @@ func TestAnyTLSSubscriptionOutput(t *testing.T) {
 	cert, key := testTLSMaterial(t, "anytls.example.com", now.Add(-time.Hour), now.Add(time.Hour))
 
 	resp, body := e.do(t, "POST", "/api/nodes", map[string]any{
-		"server_id": serverID, "name": "anytls", "protocol": "anytls", "port": 9443,
+		"server_id": serverID, "address": "node.example.com", "name": "anytls", "protocol": "anytls", "port": 9443,
 		"settings": map[string]any{"tls": map[string]any{"server_name": "anytls.example.com"}, "certificate": cert, "private_key": key},
 	}, cookie)
 	if resp.StatusCode != http.StatusCreated {

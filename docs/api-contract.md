@@ -249,7 +249,6 @@ Response `200`: paginated list of:
 {
   "id": 1,
   "name": "HK-01",
-  "address": "hk01.example.com",
   "status": "active",
   "cpu_percent": 23.5,
   "memory_percent": 52.1,
@@ -266,7 +265,7 @@ Response `200`: paginated list of:
 ### POST /api/servers
 
 ```json
-{ "name": "HK-01", "address": "hk01.example.com" }
+{ "name": "HK-01" }
 ```
 
 Response `201`: server DTO. `status` starts as `active`.
@@ -282,7 +281,7 @@ Paginated visited-sites records for all nodes of one server. Query: `user_id`, `
 ### PUT /api/servers/:id
 
 ```json
-{ "name": "HK-01", "address": "hk01.example.com", "status": "active" }
+{ "name": "HK-01", "status": "active" }
 ```
 
 Response `200`: server DTO. Setting `status: "disabled"` stops config sync for that server.
@@ -312,20 +311,20 @@ Rotates the agent token of the server's agent. Response `200`: `{ "agent_token":
 Query (all optional, combinable): `server_id` (exact match), `protocol` (`shadowsocks|vless|hysteria2|anytls`), `status` (`active|disabled`), `q` (case-insensitive substring match on node name), plus `page` / `page_size`. Invalid enum values return `400 invalid_request`. Paginated node DTOs:
 
 ```json
-{ "id": 1, "server_id": 1, "name": "HK-SS", "protocol": "shadowsocks", "port": 8388, "rate": 1, "tags": [], "status": "active", "server": { "id": 1, "name": "HK-1" }, "created_at": "..." }
+{ "id": 1, "server_id": 1, "address": "hk01.example.com", "name": "HK-SS", "protocol": "shadowsocks", "port": 8388, "rate": 1, "tags": [], "status": "active", "server": { "id": 1, "name": "HK-1" }, "created_at": "..." }
 ```
 
-Every node DTO carries `server: { id, name }` referencing its owning server. `rate` is the traffic multiplier (default `1`) and `tags` is a string array.
+Every node DTO carries `server: { id, name }` referencing its owning server. `address` is the user-facing connection host used to render subscriptions. `rate` is the traffic multiplier (default `1`) and `tags` is a string array.
 
 Protocol secrets are never exposed.
 
 ### POST /api/nodes
 
 ```json
-{ "server_id": 1, "name": "HK-SS", "protocol": "shadowsocks", "port": 8388, "rate": 1.5, "tags": ["hk"], "settings": { "cipher": "2022-blake3-aes-128-gcm" } }
+{ "server_id": 1, "address": "hk01.example.com", "name": "HK-SS", "protocol": "shadowsocks", "port": 8388, "rate": 1.5, "tags": ["hk"], "settings": { "cipher": "2022-blake3-aes-128-gcm" } }
 ```
 
-`rate` is an optional positive traffic multiplier (default `1`); `tags` is an optional array of at most 20 non-empty strings of at most 32 characters. Invalid values return `422 validation`.
+`address` is required (1-255 characters). Node names are not unique per server (a copied node keeps its source name), but `port` must be unique among the server's `active` nodes; a duplicate active port returns `409 conflict`. `rate` is an optional positive traffic multiplier (default `1`); `tags` is an optional array of at most 20 non-empty strings of at most 32 characters. Invalid values return `422 validation`.
 
 `settings` is the protocol settings object, validated against a per-protocol allowlist; unknown keys in a validated section return `422 validation`, and validated sections deep-merge leaf by leaf. The reserved free-form sections `tls_settings`, `network_settings`, `multiplex`, `utls` (vless) and `obfs_settings` (shadowsocks) accept arbitrary JSON objects: a supplied section replaces the stored one as a whole, is preserved verbatim, and is never rendered, so it is an extension placeholder rather than runtime configuration. Public values are stored in `nodes.protocol_settings`; private material is encrypted at rest by Panel and never echoed.
 
@@ -356,7 +355,11 @@ Response `200`: node DTO plus `user_count`, `online_users`, `server: { id, name 
 
 ### PUT /api/nodes/:id
 
-Partial update of `name`, `port`, `rate`, `tags`, `settings`, `status`. Protocol settings are merged with stored settings section by section; omitted public fields and secrets remain unchanged, and `certificate`/`private_key` must be replaced as a pair. A supplied reserved free-form section (`tls_settings`/`network_settings`/`multiplex`/`utls`/`obfs_settings`) replaces its stored value as a whole. Response `200`: node DTO. Changes bump the owning server revision.
+Partial update of `address`, `name`, `port`, `rate`, `tags`, `settings`, `status`. Protocol settings are merged with stored settings section by section; omitted public fields and secrets remain unchanged, and `certificate`/`private_key` must be replaced as a pair. A supplied reserved free-form section (`tls_settings`/`network_settings`/`multiplex`/`utls`/`obfs_settings`) replaces its stored value as a whole. Response `200`: node DTO. Changes bump the owning server revision. Enabling a node whose port is already used by an active node on the same server returns `409 conflict`.
+
+### POST /api/nodes/:id/copy
+
+Duplicates a node verbatim onto the same server: name, address, port, protocol, `protocol_settings` and encrypted secrets are copied as-is. The copy starts `disabled` so it may temporarily reuse the source port; enabling it later requires freeing the port (enforced by the partial unique index on `(server_id, port)` for active nodes). Response `201`: the new node DTO. Bumps the server revision.
 
 ### DELETE /api/nodes/:id
 

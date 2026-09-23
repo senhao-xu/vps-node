@@ -63,18 +63,18 @@ func TestSubscriptionEligibilityAndNodeFiltering(t *testing.T) {
 	cookie := e.login(t)
 	server := e.seedServer(t, "sub")
 	disabledServer := e.seedServer(t, "disabled-sub")
-	node, err := e.repo.CreateNode(context.Background(), repo.NewNode{ServerID: server, Name: "active", Protocol: repo.ProtocolShadowsocks, Port: 443, ProtocolSettings: `{"cipher":"2022-blake3-aes-128-gcm"}`})
+	node, err := e.repo.CreateNode(context.Background(), repo.NewNode{ServerID: server, Address: "sub.example.com", Name: "active", Protocol: repo.ProtocolShadowsocks, Port: 443, ProtocolSettings: `{"cipher":"2022-blake3-aes-128-gcm"}`})
 	if err != nil {
 		t.Fatal(err)
 	}
-	disabledServerNode, err := e.repo.CreateNode(context.Background(), repo.NewNode{ServerID: disabledServer, Name: "disabled-server-node", Protocol: repo.ProtocolShadowsocks, Port: 445, ProtocolSettings: `{"cipher":"2022-blake3-aes-128-gcm"}`})
+	disabledServerNode, err := e.repo.CreateNode(context.Background(), repo.NewNode{ServerID: disabledServer, Address: "disabled-sub.example.com", Name: "disabled-server-node", Protocol: repo.ProtocolShadowsocks, Port: 445, ProtocolSettings: `{"cipher":"2022-blake3-aes-128-gcm"}`})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := e.repo.SetServerStatus(context.Background(), disabledServer, repo.ServerStatusDisabled); err != nil {
 		t.Fatal(err)
 	}
-	disabledNode, err := e.repo.CreateNode(context.Background(), repo.NewNode{ServerID: server, Name: "disabled", Protocol: repo.ProtocolShadowsocks, Port: 444, ProtocolSettings: `{"cipher":"2022-blake3-aes-128-gcm"}`})
+	disabledNode, err := e.repo.CreateNode(context.Background(), repo.NewNode{ServerID: server, Address: "disabled.example.com", Name: "disabled", Protocol: repo.ProtocolShadowsocks, Port: 444, ProtocolSettings: `{"cipher":"2022-blake3-aes-128-gcm"}`})
 	if err != nil {
 		t.Fatal(err)
 	}

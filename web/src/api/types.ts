@@ -49,6 +49,7 @@ export type UserCreated = UserDetail & {
 export type NodeBrief = {
   id: number
   server_id: number
+  address: string
   name: string
   protocol: Protocol
   port: number
@@ -123,7 +124,6 @@ export type TrafficSeries = {
 export type Server = {
   id: number
   name: string
-  address: string
   status: ServerStatus
   cpu_percent: number
   memory_percent: number
@@ -303,17 +303,16 @@ export type UpdateUserInput = {
 
 export type CreateServerInput = {
   name: string
-  address: string
 }
 
 export type UpdateServerInput = {
   name?: string
-  address?: string
   status?: ServerStatus
 }
 
 export type CreateNodeInput = {
   server_id: number
+  address: string
   name: string
   protocol: Protocol
   port: number
@@ -323,6 +322,7 @@ export type CreateNodeInput = {
 }
 
 export type UpdateNodeInput = {
+  address?: string
   name?: string
   port?: number
   rate?: number

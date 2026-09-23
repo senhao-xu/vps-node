@@ -62,6 +62,7 @@ func (h *Handler) handleNodeList(w http.ResponseWriter, r *http.Request) {
 
 type createNodeRequest struct {
 	ServerID int64           `json:"server_id"`
+	Address  string          `json:"address"`
 	Name     string          `json:"name"`
 	Protocol string          `json:"protocol"`
 	Port     int             `json:"port"`
@@ -89,7 +90,7 @@ func (h *Handler) handleNodeCreate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	if err := validateNodeSpec(req.Name, req.Protocol, req.Port); err != nil {
+	if err := validateNodeSpec(req.Address, req.Name, req.Protocol, req.Port); err != nil {
 		writeErr(w, err)
 		return
 	}
@@ -118,6 +119,7 @@ func (h *Handler) handleNodeCreate(w http.ResponseWriter, r *http.Request) {
 
 	id, err := h.repo.CreateNodeAndBump(r.Context(), repo.NewNode{
 		ServerID:         req.ServerID,
+		Address:          req.Address,
 		Name:             req.Name,
 		Protocol:         req.Protocol,
 		Port:             req.Port,
@@ -128,7 +130,7 @@ func (h *Handler) handleNodeCreate(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		if err == repo.ErrConflict {
-			writeErr(w, errConflict("node name or port already exists on this server"))
+			writeErr(w, errConflict("a node with this port is already enabled on this server"))
 			return
 		}
 		writeErr(w, err)
@@ -161,7 +163,10 @@ func (h *Handler) handleRealityKeypairGenerate(w http.ResponseWriter, _ *http.Re
 	})
 }
 
-func validateNodeSpec(name, protocol string, port int) error {
+func validateNodeSpec(address, name, protocol string, port int) error {
+	if address == "" || len(address) > 255 {
+		return errValidation("address must be 1-255 characters")
+	}
 	if name == "" || len(name) > 128 {
 		return errValidation("name must be 1-128 characters")
 	}
@@ -229,6 +234,7 @@ func (h *Handler) handleNodeGet(w http.ResponseWriter, r *http.Request) {
 }
 
 type updateNodeRequest struct {
+	Address  *string         `json:"address"`
 	Name     *string         `json:"name"`
 	Port     *int            `json:"port"`
 	Rate     *float64        `json:"rate"`
@@ -254,7 +260,10 @@ func (h *Handler) handleNodeUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	name, port := current.Name, current.Port
+	address, name, port := current.Address, current.Name, current.Port
+	if req.Address != nil {
+		address = *req.Address
+	}
 	if req.Name != nil {
 		name = *req.Name
 	}
@@ -275,7 +284,7 @@ func (h *Handler) handleNodeUpdate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := validateNodeSpec(name, current.Protocol, port); err != nil {
+	if err := validateNodeSpec(address, name, current.Protocol, port); err != nil {
 		writeErr(w, err)
 		return
 	}
@@ -295,9 +304,9 @@ func (h *Handler) handleNodeUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.repo.UpdateNodeAndBump(r.Context(), id, current.ServerID, name, port, settingsJSON, secretEnc, rate, string(tagsJSON), req.Status); err != nil {
+	if err := h.repo.UpdateNodeAndBump(r.Context(), id, current.ServerID, address, name, port, settingsJSON, secretEnc, rate, string(tagsJSON), req.Status); err != nil {
 		if err == repo.ErrConflict {
-			writeErr(w, errConflict("node name or port already exists on this server"))
+			writeErr(w, errConflict("a node with this port is already enabled on this server"))
 			return
 		}
 		writeErr(w, err)
@@ -333,4 +342,53 @@ func (h *Handler) handleNodeDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{})
+}
+
+// handleNodeCopy replicates a node verbatim (name, address, port, protocol
+// settings and secrets) onto the same server. The copy starts disabled so it
+// may temporarily reuse the source port; enabling it later requires freeing
+// the port, which the partial unique index enforces.
+func (h *Handler) handleNodeCopy(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	current, err := h.repo.GetNode(r.Context(), id)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	newID, err := h.repo.CreateNodeAndBump(r.Context(), repo.NewNode{
+		ServerID:         current.ServerID,
+		Address:          current.Address,
+		Name:             current.Name,
+		Protocol:         current.Protocol,
+		Port:             current.Port,
+		ProtocolSettings: current.ProtocolSettings,
+		Rate:             current.Rate,
+		Tags:             current.Tags,
+		SecretEnc:        current.SecretEnc,
+		Status:           repo.NodeStatusDisabled,
+	})
+	if err != nil {
+		if err == repo.ErrConflict {
+			writeErr(w, errConflict("a node with this port is already enabled on this server"))
+			return
+		}
+		writeErr(w, err)
+		return
+	}
+	n, err := h.repo.GetNode(r.Context(), newID)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	server, err := h.repo.GetServer(r.Context(), current.ServerID)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	n.ServerName = server.Name
+	httpx.WriteJSON(w, http.StatusCreated, toNodeDTO(n))
 }

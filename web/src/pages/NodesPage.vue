@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Plus, X } from 'lucide-vue-next'
-import { deleteNode, listNodes, updateNode } from '@/api/nodes'
+import { deleteNode, copyNode, listNodes, updateNode } from '@/api/nodes'
 import { listServers } from '@/api/servers'
 import { errorMessage } from '@/api/http'
 import type { NodeBrief, NodeStatus, Paged, Protocol, Server } from '@/api/types'
@@ -50,6 +50,7 @@ const deleting = ref(false)
 
 const columns: Column[] = [
   { key: 'name', label: '名称', width: '180px', sortable: true },
+  { key: 'address', label: '地址', width: '170px' },
   { key: 'protocol', label: '协议', width: '90px' },
   { key: 'port', label: '端口', align: 'right', width: '72px', sortable: true },
   { key: 'rate', label: '倍率', align: 'right', width: '70px' },
@@ -116,12 +117,26 @@ function onSort(key: string) {
 function rowActions(row: NodeBrief): OverflowMenuItem[] {
   return [
     { label: '编辑', onSelect: () => (editTarget.value = row) },
+    { label: '复制', onSelect: () => void copyRow(row) },
     {
       label: row.status === 'active' ? '禁用' : '启用',
       onSelect: () => void toggleStatus(row),
     },
     { label: '删除', danger: true, onSelect: () => (deleteTarget.value = row) },
   ]
+}
+
+async function copyRow(node: NodeBrief) {
+  error.value = ''
+  try {
+    const copy = await copyNode(node.id)
+    await load()
+    // The copy reuses the source name/port and starts disabled; open the edit
+    // form so the operator can adjust the port before enabling it.
+    editTarget.value = copy
+  } catch (err) {
+    error.value = errorMessage(err)
+  }
 }
 
 async function load() {
@@ -385,6 +400,9 @@ onMounted(() => {
             />
             {{ row.name }}
           </span>
+        </template>
+        <template #cell-address="{ row }">
+          <span class="mono">{{ row.address }}</span>
         </template>
         <template #cell-protocol="{ row }">
           {{ protocolLabel(row.protocol) }}

@@ -27,7 +27,7 @@ func TestNodeDetailEchoesPublicSettings(t *testing.T) {
 	wantPublicKey := base64.RawURLEncoding.EncodeToString(key.PublicKey().Bytes())
 
 	resp, body := e.do(t, "POST", "/api/nodes", map[string]any{
-		"server_id": serverID, "name": "vless-1", "protocol": "vless", "port": 9443,
+		"server_id": serverID, "address": "node.example.com", "name": "vless-1", "protocol": "vless", "port": 9443,
 		"settings": map[string]any{
 			"private_key": privateKey,
 			"reality_settings": map[string]any{
@@ -67,7 +67,7 @@ func TestNodeDetailEchoesPublicSettings(t *testing.T) {
 	assertNoSecrets(t, body, privateKey)
 
 	resp, body = e.do(t, "POST", "/api/nodes", map[string]any{
-		"server_id": serverID, "name": "ss-1", "protocol": "shadowsocks", "port": 8388,
+		"server_id": serverID, "address": "node.example.com", "name": "ss-1", "protocol": "shadowsocks", "port": 8388,
 		"settings": map[string]any{"cipher": "2022-blake3-aes-128-gcm", "password": "secret-password"},
 	}, cookie)
 	if resp.StatusCode != http.StatusCreated {
@@ -109,7 +109,7 @@ func TestNodeDetailEchoesHysteria2PublicSettings(t *testing.T) {
 	cert, key := testTLSMaterial(t, "hy2.example.com", now.Add(-time.Hour), now.Add(time.Hour))
 
 	resp, body := e.do(t, "POST", "/api/nodes", map[string]any{
-		"server_id": serverID, "name": "hy2-1", "protocol": "hysteria2", "port": 9443,
+		"server_id": serverID, "address": "node.example.com", "name": "hy2-1", "protocol": "hysteria2", "port": 9443,
 		"settings": map[string]any{
 			"tls":         map[string]any{"server_name": "hy2.example.com", "allow_insecure": true},
 			"certificate": cert, "private_key": key,

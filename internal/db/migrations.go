@@ -80,7 +80,23 @@ func (d *DB) applyMigration(ctx context.Context, version int64, name string) err
 		return fmt.Errorf("read migration: %w", err)
 	}
 
-	tx, err := d.BeginTx(ctx, nil)
+	// Table rebuilds (dropping a column or a table-level constraint) require
+	// foreign keys to be disabled. The pragma is a no-op inside a transaction,
+	// so bind it to a single connection before starting the migration tx.
+	conn, err := d.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire migration conn: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	if _, err := conn.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
+		return fmt.Errorf("disable foreign_keys: %w", err)
+	}
+	defer func() {
+		_, _ = conn.ExecContext(context.WithoutCancel(ctx), `PRAGMA foreign_keys = ON`)
+	}()
+
+	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin migration tx: %w", err)
 	}
@@ -92,7 +108,10 @@ func (d *DB) applyMigration(ctx context.Context, version int64, name string) err
 	if _, err := tx.ExecContext(ctx, `INSERT INTO schema_migrations (version, applied_at) VALUES (?, strftime('%s','now'))`, version); err != nil {
 		return fmt.Errorf("record version: %w", err)
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit migration: %w", err)
+	}
+	return nil
 }
 
 func migrationVersion(name string) (int64, error) {

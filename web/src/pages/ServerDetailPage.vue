@@ -272,7 +272,6 @@ onMounted(() => {
   <section class="page">
     <PageHeader
       :title="server ? server.name : '服务器详情'"
-      :subtitle="server ? server.address : undefined"
       back-to="/servers"
       back-title="服务器"
     >
@@ -324,10 +323,6 @@ onMounted(() => {
           <div class="info-item">
             <span class="info-label">名称</span>
             <span>{{ server.name }}</span>
-          </div>
-          <div class="info-item">
-            <span class="info-label">地址</span>
-            <span class="mono">{{ server.address }}</span>
           </div>
           <div class="info-item">
             <span class="info-label">Server ID</span>

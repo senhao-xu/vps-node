@@ -297,12 +297,12 @@ func (r *Repo) CreateNodeAndBump(ctx context.Context, n NewNode) (int64, error) 
 	return id, nil
 }
 
-func (r *Repo) UpdateNodeAndBump(ctx context.Context, nodeID, serverID int64, name string, port int, settings string, secretEnc []byte, rate float64, tags string, status *string) error {
+func (r *Repo) UpdateNodeAndBump(ctx context.Context, nodeID, serverID int64, address, name string, port int, settings string, secretEnc []byte, rate float64, tags string, status *string) error {
 	return Tx(ctx, r.DB, func(tx *sql.Tx) error {
 		if status != nil {
 			res, err := tx.ExecContext(ctx,
-				`UPDATE nodes SET name = ?, port = ?, protocol_settings = ?, secret_enc = ?, rate = ?, tags = ?, status = ?, updated_at = ? WHERE id = ?`,
-				name, port, settings, secretEnc, rate, tags, *status, nowUnix(), nodeID)
+				`UPDATE nodes SET address = ?, name = ?, port = ?, protocol_settings = ?, secret_enc = ?, rate = ?, tags = ?, status = ?, updated_at = ? WHERE id = ?`,
+				address, name, port, settings, secretEnc, rate, tags, *status, nowUnix(), nodeID)
 			if err != nil {
 				return mapErr(err)
 			}
@@ -311,8 +311,8 @@ func (r *Repo) UpdateNodeAndBump(ctx context.Context, nodeID, serverID int64, na
 			}
 		} else {
 			res, err := tx.ExecContext(ctx,
-				`UPDATE nodes SET name = ?, port = ?, protocol_settings = ?, secret_enc = ?, rate = ?, tags = ?, updated_at = ? WHERE id = ?`,
-				name, port, settings, secretEnc, rate, tags, nowUnix(), nodeID)
+				`UPDATE nodes SET address = ?, name = ?, port = ?, protocol_settings = ?, secret_enc = ?, rate = ?, tags = ?, updated_at = ? WHERE id = ?`,
+				address, name, port, settings, secretEnc, rate, tags, nowUnix(), nodeID)
 			if err != nil {
 				return mapErr(err)
 			}
@@ -337,12 +337,12 @@ func (r *Repo) DeleteNodeAndBump(ctx context.Context, nodeID, serverID int64) er
 	})
 }
 
-func (r *Repo) UpdateServerAndBump(ctx context.Context, id int64, name, address, status string) (Server, error) {
+func (r *Repo) UpdateServerAndBump(ctx context.Context, id int64, name, status string) (Server, error) {
 	var s Server
 	err := Tx(ctx, r.DB, func(tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx,
-			`UPDATE servers SET name = ?, address = ?, status = ?, updated_at = ? WHERE id = ?`,
-			name, address, status, nowUnix(), id)
+			`UPDATE servers SET name = ?, status = ?, updated_at = ? WHERE id = ?`,
+			name, status, nowUnix(), id)
 		if err != nil {
 			return mapErr(err)
 		}

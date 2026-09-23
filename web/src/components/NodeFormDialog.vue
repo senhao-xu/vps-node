@@ -36,6 +36,7 @@ const emit = defineEmits<{
 }>()
 
 const name = ref('')
+const address = ref('')
 const port = ref<number | null>(null)
 const protocol = ref<Protocol>('shadowsocks')
 const status = ref<'active' | 'disabled'>('active')
@@ -83,6 +84,7 @@ watch(
     error.value = ''
     isEdit.value = props.node !== null
     name.value = props.node?.name ?? ''
+    address.value = props.node?.address ?? ''
     port.value = props.node?.port ?? null
     protocol.value = props.node?.protocol ?? 'shadowsocks'
     status.value = props.node?.status === 'disabled' ? 'disabled' : 'active'
@@ -259,6 +261,8 @@ const validationMessage = computed(() => {
     return '请选择服务器'
   }
   if (!name.value.trim()) return '请填写节点名称'
+  if (!address.value.trim()) return '请填写节点地址'
+  if (address.value.trim().length > 255) return '节点地址最长 255 个字符'
   const portValue = port.value
   if (portValue === null || !Number.isInteger(portValue) || portValue < 1 || portValue > 65535) {
     return '端口必须是 1-65535 的整数'
@@ -383,6 +387,7 @@ async function submit() {
     if (isEdit.value && props.node) {
       await updateNode(props.node.id, {
         name: name.value.trim(),
+        address: address.value.trim(),
         port: port.value ?? undefined,
         rate: rate.value ?? undefined,
         tags: tagsPayload.value,
@@ -392,6 +397,7 @@ async function submit() {
     } else {
       await createNode({
         server_id: props.serverId ?? serverChoice.value ?? 0,
+        address: address.value.trim(),
         name: name.value.trim(),
         protocol: protocol.value,
         port: port.value ?? 0,
@@ -454,10 +460,22 @@ async function submit() {
                 :key="server.id"
                 :value="server.id"
               >
-                {{ server.name }}（{{ server.address }}）
+                {{ server.name }}
               </option>
             </select>
           </div>
+        </div>
+        <div class="field">
+          <label for="node-address">地址</label>
+          <input
+            id="node-address"
+            v-model="address"
+            type="text"
+            placeholder="例如 hk01.example.com 或 1.2.3.4"
+          >
+          <p class="field-hint">
+            用户连接使用的域名或 IP，订阅链接按该地址生成。
+          </p>
         </div>
         <div class="form-row">
           <div class="field">

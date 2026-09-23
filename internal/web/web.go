@@ -170,6 +170,7 @@ func (h *Handler) registerAdminRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/nodes", h.requireAdmin(h.handleNodeCreate))
 	mux.HandleFunc("POST /api/nodes/reality-keypair", h.requireAdmin(h.handleRealityKeypairGenerate))
 	mux.HandleFunc("GET /api/nodes/{id}", h.requireAdmin(h.handleNodeGet))
+	mux.HandleFunc("POST /api/nodes/{id}/copy", h.requireAdmin(h.handleNodeCopy))
 	mux.HandleFunc("PUT /api/nodes/{id}", h.requireAdmin(h.handleNodeUpdate))
 	mux.HandleFunc("DELETE /api/nodes/{id}", h.requireAdmin(h.handleNodeDelete))
 

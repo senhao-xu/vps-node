@@ -126,12 +126,13 @@ func (e *panelEnv) seedScenario(cookie *http.Cookie) (serverID, nodeID, userID i
 		e.t.Fatalf("generate test reality key: %v", err)
 	}
 	_, out := e.do("POST", "/api/servers", map[string]string{
-		"name": "HK-01", "address": "hk01.example.com",
+		"name": "HK-01",
 	}, cookie)
 	serverID = int64(out["id"].(float64))
 
 	_, out = e.do("POST", "/api/nodes", map[string]any{
 		"server_id": serverID,
+		"address":   "hk01.example.com",
 		"name":      "HK-VLESS",
 		"protocol":  "vless",
 		"port":      443,

@@ -51,3 +51,7 @@ export function updateNode(nodeId: number, input: UpdateNodeInput): Promise<Node
 export async function deleteNode(nodeId: number): Promise<void> {
   await request<unknown>(`/api/nodes/${nodeId}`, { method: 'DELETE' })
 }
+
+export function copyNode(nodeId: number): Promise<NodeBrief> {
+  return request<NodeBrief>(`/api/nodes/${nodeId}/copy`, { method: 'POST' })
+}

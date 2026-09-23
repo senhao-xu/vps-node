@@ -22,7 +22,6 @@ const emit = defineEmits<{
 }>()
 
 const name = ref('')
-const address = ref('')
 const status = ref<ServerStatus>('active')
 const submitting = ref(false)
 const error = ref('')
@@ -36,14 +35,13 @@ watch(
     error.value = ''
     isEdit.value = props.server !== null
     name.value = props.server?.name ?? ''
-    address.value = props.server?.address ?? ''
     status.value = props.server?.status === 'disabled' ? 'disabled' : 'active'
   },
 )
 
 async function submit() {
-  if (!name.value.trim() || !address.value.trim()) {
-    error.value = '请填写名称和地址'
+  if (!name.value.trim()) {
+    error.value = '请填写名称'
     return
   }
   submitting.value = true
@@ -52,11 +50,10 @@ async function submit() {
     if (isEdit.value && props.server) {
       await updateServer(props.server.id, {
         name: name.value.trim(),
-        address: address.value.trim(),
         status: status.value,
       })
     } else {
-      await createServer({ name: name.value.trim(), address: address.value.trim() })
+      await createServer({ name: name.value.trim() })
     }
     emit('saved')
     emit('close')
@@ -72,7 +69,7 @@ async function submit() {
   <ModalDialog
     :open="props.open"
     :title="isEdit ? '编辑服务器' : '创建服务器'"
-    :subtitle="isEdit ? '修改服务器名称、地址与同步状态' : '创建后在服务器上安装 Agent 完成接入'"
+    :subtitle="isEdit ? '修改服务器名称与同步状态' : '创建后在服务器上安装 Agent 完成接入'"
     :width="460"
     @close="emit('close')"
   >
@@ -88,15 +85,6 @@ async function submit() {
           v-model="name"
           type="text"
           placeholder="例如 HK-01"
-        >
-      </div>
-      <div class="field">
-        <label for="server-address">地址</label>
-        <input
-          id="server-address"
-          v-model="address"
-          type="text"
-          placeholder="例如 hk01.example.com"
         >
       </div>
       <div

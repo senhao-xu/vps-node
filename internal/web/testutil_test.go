@@ -208,7 +208,7 @@ func (e *testEnv) login(t *testing.T) *http.Cookie {
 
 func (e *testEnv) seedServer(t *testing.T, name string) int64 {
 	t.Helper()
-	id, err := e.repo.CreateServer(context.Background(), name, name+".example.com", repo.ServerStatusActive)
+	id, err := e.repo.CreateServer(context.Background(), name, repo.ServerStatusActive)
 	if err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
@@ -218,7 +218,7 @@ func (e *testEnv) seedServer(t *testing.T, name string) int64 {
 func (e *testEnv) seedNode(t *testing.T, serverID int64, name string, port int) int64 {
 	t.Helper()
 	id, err := e.repo.CreateNode(context.Background(), repo.NewNode{
-		ServerID: serverID, Name: name, Protocol: repo.ProtocolVLESS, Port: port,
+		ServerID: serverID, Address: name + ".example.com", Name: name, Protocol: repo.ProtocolVLESS, Port: port,
 	})
 	if err != nil {
 		t.Fatalf("seed node: %v", err)
