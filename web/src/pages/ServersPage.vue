@@ -42,7 +42,7 @@ const columns: Column[] = [
   { key: 'last_seen_at', label: '最后心跳', width: '110px' },
   { key: 'node_count', label: '节点数', align: 'right', width: '56px' },
   { key: 'online_users', label: '在线用户', align: 'right', width: '64px' },
-  { key: 'actions', label: '', width: '48px' },
+  { key: 'actions', label: '', width: '48px', divider: true },
 ]
 
 const offlineCount = computed(() =>

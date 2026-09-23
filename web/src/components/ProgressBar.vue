@@ -50,14 +50,14 @@ const tone = computed(() => {
 .track {
   flex: 1;
   min-width: 60px;
-  height: 8px;
+  height: 6px;
   border-radius: var(--radius-full);
   background: var(--color-muted-soft);
   overflow: hidden;
 }
 
 .compact .track {
-  height: 6px;
+  height: 4px;
   min-width: 40px;
 }
 

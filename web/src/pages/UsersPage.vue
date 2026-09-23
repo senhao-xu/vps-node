@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Plus, X } from 'lucide-vue-next'
 import { deleteUser, listUsers, updateUser } from '@/api/users'
@@ -37,17 +37,57 @@ const deleteTarget = ref<User | null>(null)
 const deleting = ref(false)
 const statusUpdatingId = ref<number | null>(null)
 
+const selectedIds = ref<number[]>([])
+const batchBusy = ref(false)
+
+const sortKey = ref('')
+const sortDir = ref<'asc' | 'desc'>('asc')
+
 const columns: Column[] = [
-  { key: 'id', label: 'ID', width: '80px' },
-  { key: 'username', label: '用户名', width: '150px' },
-  { key: 'traffic', label: '流量', width: '200px' },
-  { key: 'expires_at', label: '到期时间', width: '150px' },
+  { key: 'id', label: 'ID', width: '80px', sortable: true },
+  { key: 'username', label: '用户名', width: '150px', sortable: true },
+  { key: 'traffic', label: '流量', width: '200px', sortable: true },
+  { key: 'expires_at', label: '到期时间', width: '150px', sortable: true },
   { key: 'node_count', label: '节点数', align: 'right', width: '70px' },
   { key: 'online_count', label: '在线设备', align: 'right', width: '80px' },
-  { key: 'created_at', label: '创建时间', width: '150px' },
+  { key: 'created_at', label: '创建时间', width: '150px', sortable: true },
   { key: 'status', label: '状态', width: '80px' },
-  { key: 'actions', label: '', width: '48px' },
+  { key: 'actions', label: '', width: '48px', divider: true },
 ]
+
+const sortedItems = computed(() => {
+  if (!sortKey.value) return items.value
+  const dir = sortDir.value === 'asc' ? 1 : -1
+  return [...items.value].sort((a, b) => {
+    switch (sortKey.value) {
+      case 'id':
+        return (a.id - b.id) * dir
+      case 'username':
+        return a.username.localeCompare(b.username) * dir
+      case 'traffic':
+        return (a.used_bytes - b.used_bytes) * dir
+      case 'expires_at':
+        return (a.expires_at ?? '').localeCompare(b.expires_at ?? '') * dir
+      case 'created_at':
+        return a.created_at.localeCompare(b.created_at) * dir
+      default:
+        return 0
+    }
+  })
+})
+
+function onSort(key: string) {
+  if (sortKey.value === key) {
+    if (sortDir.value === 'asc') sortDir.value = 'desc'
+    else {
+      sortKey.value = ''
+      sortDir.value = 'asc'
+    }
+  } else {
+    sortKey.value = key
+    sortDir.value = 'asc'
+  }
+}
 
 const statusOptions: Array<{ value: UserStatus | ''; label: string }> = [
   { value: '', label: '全部状态' },
@@ -76,6 +116,7 @@ function rowActions(row: User): OverflowMenuItem[] {
 async function load() {
   loading.value = true
   error.value = ''
+  selectedIds.value = []
   try {
     const result: Paged<User> = await listUsers({
       query: query.value.trim() || undefined,
@@ -125,6 +166,11 @@ function trafficText(user: User): string {
   return `${formatBytes(user.used_bytes)} / ${formatBytes(user.transfer_enable)}`
 }
 
+function trafficPercentText(user: User): string {
+  const pct = trafficPercent(user)
+  return `${pct.toFixed(pct % 1 === 0 ? 0 : 1)}%`
+}
+
 function isExpired(user: User): boolean {
   if (!user.expires_at) return false
   const time = new Date(user.expires_at).getTime()
@@ -143,6 +189,19 @@ async function toggleStatus(user: User) {
   } finally {
     statusUpdatingId.value = null
   }
+}
+
+async function batchSetStatus(status: UserStatus) {
+  if (selectedIds.value.length === 0 || batchBusy.value) return
+  batchBusy.value = true
+  error.value = ''
+  const results = await Promise.allSettled(
+    selectedIds.value.map((id) => updateUser(id, { status })),
+  )
+  const failed = results.filter((result) => result.status === 'rejected').length
+  if (failed > 0) error.value = `${failed} 个用户操作失败，请重试`
+  batchBusy.value = false
+  await load()
 }
 
 async function confirmDelete() {
@@ -245,10 +304,16 @@ onMounted(() => {
 
     <DataTable
       :columns="columns"
-      :rows="items"
+      :rows="sortedItems"
       :row-key="(row) => row.id"
       :loading="loading"
+      selectable
+      :selected="selectedIds"
+      :sort-key="sortKey"
+      :sort-dir="sortDir"
       :total-count="total"
+      @update:selected="selectedIds = $event.map(Number)"
+      @sort="onSort"
     >
       <template #cell-id="{ row }">
         <span class="chip mono">#{{ row.id }}</span>
@@ -263,7 +328,13 @@ onMounted(() => {
       </template>
       <template #cell-traffic="{ row }">
         <div class="traffic-cell">
-          <span class="traffic-text">{{ trafficText(row) }}</span>
+          <div class="traffic-head">
+            <span class="traffic-text">{{ trafficText(row) }}</span>
+            <span
+              v-if="row.transfer_enable > 0"
+              class="traffic-percent"
+            >{{ trafficPercentText(row) }}</span>
+          </div>
           <ProgressBar
             :percent="trafficPercent(row)"
             compact
@@ -271,22 +342,26 @@ onMounted(() => {
         </div>
       </template>
       <template #cell-expires_at="{ row }">
-        <StatusBadge
-          v-if="!row.expires_at"
-          label="长期有效"
-          tone="muted"
-        />
-        <StatusBadge
-          v-else-if="isExpired(row)"
-          :label="`已过期 · ${formatDate(row.expires_at)}`"
-          tone="danger"
-        />
-        <div
-          v-else
-          class="expire-cell"
-        >
-          <span>{{ formatDate(row.expires_at) }}</span>
-          <span class="text-secondary remaining">{{ formatRemaining(row.expires_at) }}</span>
+        <div class="expire-cell">
+          <StatusBadge
+            v-if="!row.expires_at"
+            label="长期有效"
+            tone="muted"
+          />
+          <StatusBadge
+            v-else-if="isExpired(row)"
+            :label="`已过期 · ${formatDate(row.expires_at)}`"
+            tone="danger"
+          />
+          <StatusBadge
+            v-else
+            :label="formatDate(row.expires_at)"
+            tone="muted"
+          />
+          <span
+            v-if="row.expires_at && !isExpired(row)"
+            class="text-secondary remaining"
+          >{{ formatRemaining(row.expires_at) }}</span>
         </div>
       </template>
       <template #cell-created_at="{ row }">
@@ -302,6 +377,36 @@ onMounted(() => {
         没有符合条件的用户
       </template>
     </DataTable>
+
+    <div
+      v-if="selectedIds.length > 0"
+      class="batch-bar"
+    >
+      <button
+        type="button"
+        class="btn secondary small"
+        :disabled="batchBusy"
+        @click="batchSetStatus('active')"
+      >
+        批量启用
+      </button>
+      <button
+        type="button"
+        class="btn secondary small"
+        :disabled="batchBusy"
+        @click="batchSetStatus('disabled')"
+      >
+        批量禁用
+      </button>
+      <button
+        type="button"
+        class="btn link small"
+        :disabled="batchBusy"
+        @click="selectedIds = []"
+      >
+        清除选择
+      </button>
+    </div>
 
     <TablePaginator
       :page="page"
@@ -333,22 +438,44 @@ onMounted(() => {
 .traffic-cell {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 6px;
   min-width: 150px;
+}
+
+.traffic-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
 }
 
 .traffic-text {
   font-size: var(--font-size-sm);
 }
 
+.traffic-percent {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
 .expire-cell {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
 }
 
 .remaining {
   font-size: var(--font-size-sm);
 }
 
+.batch-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  padding-top: var(--spacing-md);
+}
 
 </style>

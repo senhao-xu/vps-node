@@ -7,7 +7,7 @@ import { getServerVisits } from '@/api/visits'
 import { errorMessage } from '@/api/http'
 import type { AgentTokenResult, NodeBrief, RegisterTokenResult, ServerDetail, ServerStatus, Visit } from '@/api/types'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
-import DataTable from '@/components/DataTable.vue'
+import DataTable, { type Column } from '@/components/DataTable.vue'
 import ErrorBanner from '@/components/ErrorBanner.vue'
 import TablePaginator from '@/components/TablePaginator.vue'
 import MetricBar from '@/components/MetricBar.vue'
@@ -122,12 +122,12 @@ const serverId = computed(() => {
   return Number.isInteger(id) && id > 0 ? id : null
 })
 
-const nodeColumns: { key: string; label: string; align?: 'left' | 'right' | 'center'; width?: string }[] = [
+const nodeColumns: Column[] = [
   { key: 'name', label: '节点名称' },
   { key: 'protocol', label: '协议', width: '120px' },
   { key: 'port', label: '端口', align: 'right', width: '80px' },
   { key: 'status', label: '状态', width: '80px' },
-  { key: 'actions', label: '', width: '48px' },
+  { key: 'actions', label: '', width: '48px', divider: true },
 ]
 
 function nodeActions(row: NodeBrief): OverflowMenuItem[] {

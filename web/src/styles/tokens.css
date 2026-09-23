@@ -55,7 +55,7 @@
   --td-error-6: #b93a33;
 
   /* ---- Semantic: surfaces & text ---- */
-  --color-bg: var(--td-gray-1);
+  --color-bg: var(--td-white);
   --color-surface: var(--td-white);
   --color-surface-muted: var(--td-gray-1);
   --color-border: var(--td-gray-3);

@@ -58,7 +58,7 @@ const columns: Column[] = [
   { key: 'status', label: '状态', width: '80px' },
   { key: 'enabled', label: '启用', width: '64px' },
   { key: 'created_at', label: '创建时间', width: '140px', sortable: true },
-  { key: 'actions', label: '', width: '48px' },
+  { key: 'actions', label: '', width: '48px', divider: true },
 ]
 
 const protocolOptions: Array<{ value: Protocol | ''; label: string }> = [

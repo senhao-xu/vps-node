@@ -22,9 +22,10 @@ const toneClass = computed(() => props.tone ?? 'muted')
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 2px 9px;
+  padding: 2px 10px;
   border: 1px solid transparent;
   border-radius: var(--radius-full);
+  background: var(--color-surface);
   font-size: var(--font-size-sm);
   white-space: nowrap;
 }
@@ -32,30 +33,25 @@ const toneClass = computed(() => props.tone ?? 'muted')
 .badge.success {
   color: var(--color-success);
   border-color: var(--color-success-border);
-  background: var(--color-success-soft);
 }
 
 .badge.warning {
   color: var(--color-warning);
   border-color: var(--color-warning-border);
-  background: var(--color-warning-soft);
 }
 
 .badge.danger {
   color: var(--color-danger);
   border-color: var(--color-danger-border);
-  background: var(--color-danger-soft);
 }
 
 .badge.primary {
   color: var(--color-primary);
   border-color: var(--color-primary-border);
-  background: var(--color-primary-soft);
 }
 
 .badge.muted {
-  color: var(--color-text-secondary);
-  border-color: var(--color-border);
-  background: var(--color-muted-soft);
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
 }
 </style>

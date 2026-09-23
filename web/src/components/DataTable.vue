@@ -9,6 +9,7 @@ export interface Column {
   align?: 'left' | 'right' | 'center'
   width?: string
   sortable?: boolean
+  divider?: boolean
 }
 
 const props = withDefaults(
@@ -123,6 +124,7 @@ function display(value: unknown): string {
           <th
             v-for="column in props.columns"
             :key="column.key"
+            :class="{ 'col-divider': column.divider }"
             :style="{ ...alignStyle(column), width: column.width }"
             :aria-sort="ariaSort(column)"
           >
@@ -212,6 +214,7 @@ function display(value: unknown): string {
               <td
                 v-for="column in props.columns"
                 :key="column.key"
+                :class="{ 'col-divider': column.divider }"
                 :style="alignStyle(column)"
               >
                 <slot
@@ -276,19 +279,21 @@ function display(value: unknown): string {
 }
 
 .data-table th {
-  height: 40px;
-  padding: 0 12px;
+  height: 44px;
+  padding: 0 14px;
   font-weight: 500;
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
   white-space: nowrap;
   letter-spacing: 0.02em;
-  /* TDesign tables carry a tinted header band instead of relying on weight alone */
-  background: var(--color-surface-muted);
 }
 
 .data-table td {
-  padding: 8px 12px;
+  padding: 14px;
+}
+
+.data-table .col-divider {
+  border-left: 1px solid var(--color-border);
 }
 
 .data-table tbody tr:hover {
@@ -296,7 +301,7 @@ function display(value: unknown): string {
 }
 
 .data-table tbody tr.selected {
-  background: var(--color-muted-soft);
+  background: var(--color-shell-active);
 }
 
 .data-table tbody tr:last-child td {
@@ -304,10 +309,14 @@ function display(value: unknown): string {
 }
 
 .select-cell {
-  width: 36px;
+  width: 44px;
+  padding-right: 0;
 }
 
 .select-cell input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-primary);
   vertical-align: middle;
   cursor: pointer;
 }
