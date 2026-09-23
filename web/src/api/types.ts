@@ -68,6 +68,7 @@ export type NodeDetail = NodeBrief & {
   user_count: number
   online_users: number
   server: NodeRef
+  settings?: NodeSettings
 }
 
 export type UserNodes = {
@@ -240,11 +241,11 @@ export type Hysteria2ObfsInput = {
 }
 
 /**
- * Xboard-style nested `protocol_settings` payload. The shape is a superset of the
- * per-protocol sections so the form can build one typed object; the panel validates
- * the resulting object against the protocol-specific allowlist.
+ * Public `protocol_settings` shape echoed by `GET /api/nodes/{id}`. Secret material
+ * (vless `private_key`, TLS `certificate`/`private_key`, server `password`) is
+ * encrypted at rest and never echoed.
  */
-export type NodeSettingsInput = {
+export type NodeSettings = {
   // shadowsocks
   cipher?: string
   obfs?: string | Hysteria2ObfsInput
@@ -266,6 +267,14 @@ export type NodeSettingsInput = {
   hop_interval?: string
   // anytls
   padding_scheme?: string | string[]
+}
+
+/**
+ * Xboard-style nested `protocol_settings` payload. The shape is a superset of the
+ * per-protocol sections so the form can build one typed object; the panel validates
+ * the resulting object against the protocol-specific allowlist.
+ */
+export type NodeSettingsInput = NodeSettings & {
   // shared encrypted material / optional password
   password?: string
   certificate?: string

@@ -215,11 +215,16 @@ func (h *Handler) handleNodeGet(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
+	settings := json.RawMessage(n.ProtocolSettings)
+	if len(settings) == 0 {
+		settings = json.RawMessage("{}")
+	}
 	httpx.WriteJSON(w, http.StatusOK, nodeDetailDTO{
 		nodeDTO:     toNodeDTO(n),
 		UserCount:   userCount,
 		OnlineUsers: onlineUsers[id],
 		Server:      nodeRefDTO{ID: server.ID, Name: server.Name},
+		Settings:    settings,
 	})
 }
 

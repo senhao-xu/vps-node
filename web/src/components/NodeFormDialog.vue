@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { createNode, generateRealityKeypair, updateNode } from '@/api/nodes'
+import { createNode, generateRealityKeypair, getNode, updateNode } from '@/api/nodes'
 import { listServers } from '@/api/servers'
 import { errorMessage } from '@/api/http'
 import type {
@@ -43,7 +43,6 @@ const rate = ref<number | null>(1)
 const tags = ref('')
 
 const ssCipher = ref<string>(SHADOWSOCKS_METHODS[0])
-const ssCipherTouched = ref(false)
 
 const vlessPrivateKey = ref('')
 const vlessPublicKey = ref('')
@@ -51,20 +50,16 @@ const vlessShortId = ref('')
 const vlessServerName = ref('')
 const vlessServerPort = ref<string | number | null>(443)
 const vlessAllowInsecure = ref(false)
-const vlessAllowInsecureTouched = ref(false)
 
 const hy2Up = ref<number | null>(null)
 const hy2Down = ref<number | null>(null)
 const hy2ObfsOpen = ref(false)
-const hy2ObfsOpenTouched = ref(false)
 const hy2ObfsPassword = ref('')
 const hy2HopInterval = ref('')
 const hy2AllowInsecure = ref(false)
-const hy2AllowInsecureTouched = ref(false)
 
 const anytlsPaddingScheme = ref('')
 const anytlsAllowInsecure = ref(false)
-const anytlsAllowInsecureTouched = ref(false)
 
 const tlsServerName = ref('')
 const tlsCertificate = ref('')
@@ -74,6 +69,8 @@ const submitting = ref(false)
 const generatingReality = ref(false)
 const error = ref('')
 const isEdit = ref(false)
+const loadingDetail = ref(false)
+const detailLoaded = ref(false)
 
 const servers = ref<Server[]>([])
 const serverChoice = ref<number | null>(null)
@@ -92,34 +89,77 @@ watch(
     rate.value = props.node?.rate ?? 1
     tags.value = props.node?.tags.join(', ') ?? ''
     ssCipher.value = SHADOWSOCKS_METHODS[0]
-    ssCipherTouched.value = false
     vlessPrivateKey.value = ''
     vlessPublicKey.value = ''
     vlessShortId.value = ''
     vlessServerName.value = ''
     vlessServerPort.value = isEdit.value ? null : 443
     vlessAllowInsecure.value = false
-    vlessAllowInsecureTouched.value = false
     hy2Up.value = null
     hy2Down.value = null
     hy2ObfsOpen.value = false
-    hy2ObfsOpenTouched.value = false
     hy2ObfsPassword.value = ''
     hy2HopInterval.value = ''
     hy2AllowInsecure.value = false
-    hy2AllowInsecureTouched.value = false
     anytlsPaddingScheme.value = ''
     anytlsAllowInsecure.value = false
-    anytlsAllowInsecureTouched.value = false
     tlsServerName.value = ''
     tlsCertificate.value = ''
     tlsPrivateKey.value = ''
     serverChoice.value = null
-    if (!isEdit.value && props.serverId === undefined) {
+    detailLoaded.value = false
+    if (isEdit.value && props.node) {
+      void loadNodeDetail(props.node.id)
+    } else if (!isEdit.value && props.serverId === undefined) {
       void loadServers()
     }
   },
 )
+
+async function loadNodeDetail(nodeId: number) {
+  loadingDetail.value = true
+  try {
+    const detail = await getNode(nodeId)
+    const settings = detail.settings
+    if (!settings) {
+      detailLoaded.value = true
+      return
+    }
+    if (protocol.value === 'shadowsocks') {
+      if (settings.cipher) ssCipher.value = settings.cipher
+    } else if (protocol.value === 'vless') {
+      const reality = settings.reality_settings
+      if (reality) {
+        vlessServerName.value = reality.server_name ?? ''
+        vlessServerPort.value = reality.server_port ?? null
+        vlessShortId.value = reality.short_id ?? ''
+        vlessAllowInsecure.value = reality.allow_insecure ?? false
+        vlessPublicKey.value = reality.public_key ?? ''
+      }
+    } else if (protocol.value === 'hysteria2') {
+      const tls = typeof settings.tls === 'object' ? settings.tls : undefined
+      tlsServerName.value = tls?.server_name ?? ''
+      hy2AllowInsecure.value = tls?.allow_insecure ?? false
+      hy2Up.value = settings.bandwidth?.up ?? null
+      hy2Down.value = settings.bandwidth?.down ?? null
+      const obfs = typeof settings.obfs === 'object' ? settings.obfs : undefined
+      hy2ObfsOpen.value = obfs?.open ?? false
+      hy2ObfsPassword.value = obfs?.password ?? ''
+      hy2HopInterval.value = settings.hop_interval ?? ''
+    } else if (protocol.value === 'anytls') {
+      const tls = typeof settings.tls === 'object' ? settings.tls : undefined
+      tlsServerName.value = tls?.server_name ?? ''
+      anytlsAllowInsecure.value = tls?.allow_insecure ?? false
+      const scheme = settings.padding_scheme
+      anytlsPaddingScheme.value = Array.isArray(scheme) ? scheme.join('\n') : (scheme ?? '')
+    }
+    detailLoaded.value = true
+  } catch (err) {
+    error.value = errorMessage(err)
+  } finally {
+    loadingDetail.value = false
+  }
+}
 
 async function loadServers() {
   loadingServers.value = true
@@ -151,8 +191,8 @@ function parseList(raw: string): string[] {
 
 /**
  * Reality handshake port. `present: false` means the field was left blank, so an
- * edit keeps the stored value (node DTOs never echo settings) and a create falls
- * back to the panel default. `value: null` with `present: true` is malformed input.
+ * edit keeps the stored value and a create falls back to the panel default.
+ * `value: null` with `present: true` is malformed input.
  */
 function normaliseServerPort(raw: string | number | null): { present: boolean; value: number | null } {
   if (raw === null || raw === '') return { present: false, value: null }
@@ -163,9 +203,10 @@ function normaliseServerPort(raw: string | number | null): { present: boolean; v
 const tagsPayload = computed(() => parseList(tags.value))
 
 const settingsPayload = computed<NodeSettingsInput | undefined>(() => {
+  if (isEdit.value && !detailLoaded.value) return undefined
   const payload: NodeSettingsInput = {}
   if (protocol.value === 'shadowsocks') {
-    if (!isEdit.value || ssCipherTouched.value) payload.cipher = ssCipher.value
+    payload.cipher = ssCipher.value
   } else if (protocol.value === 'vless') {
     payload.tls = 2
     const reality: RealitySettingsInput = {}
@@ -173,20 +214,16 @@ const settingsPayload = computed<NodeSettingsInput | undefined>(() => {
     const serverPort = normaliseServerPort(vlessServerPort.value)
     if (serverPort.value !== null) reality.server_port = serverPort.value
     if (vlessShortId.value.trim()) reality.short_id = vlessShortId.value.trim()
-    if (!isEdit.value) {
-      if (vlessPublicKey.value) reality.public_key = vlessPublicKey.value
-      reality.allow_insecure = vlessAllowInsecure.value
-    } else if (vlessAllowInsecureTouched.value) {
-      reality.allow_insecure = vlessAllowInsecure.value
-    }
+    if (vlessPublicKey.value) reality.public_key = vlessPublicKey.value
+    reality.allow_insecure = vlessAllowInsecure.value
     if (Object.keys(reality).length > 0) payload.reality_settings = reality
     if (vlessPrivateKey.value) payload.private_key = vlessPrivateKey.value
   } else if (protocol.value === 'hysteria2') {
     payload.version = 2
     const tls: TLSSettingsInput = {}
     if (tlsServerName.value.trim()) tls.server_name = tlsServerName.value.trim()
-    if (!isEdit.value || hy2AllowInsecureTouched.value) tls.allow_insecure = hy2AllowInsecure.value
-    if (Object.keys(tls).length > 0) payload.tls = tls
+    tls.allow_insecure = hy2AllowInsecure.value
+    payload.tls = tls
 
     const bandwidth: Hysteria2BandwidthInput = {}
     if (hy2Up.value !== null && !Number.isNaN(hy2Up.value)) bandwidth.up = hy2Up.value
@@ -194,10 +231,10 @@ const settingsPayload = computed<NodeSettingsInput | undefined>(() => {
     if (Object.keys(bandwidth).length > 0) payload.bandwidth = bandwidth
 
     const obfs: Hysteria2ObfsInput = {}
-    if (!isEdit.value || hy2ObfsOpenTouched.value) obfs.open = hy2ObfsOpen.value
+    obfs.open = hy2ObfsOpen.value
     if (hy2ObfsOpen.value) obfs.type = 'salamander'
     if (hy2ObfsPassword.value) obfs.password = hy2ObfsPassword.value
-    if (Object.keys(obfs).length > 0) payload.obfs = obfs
+    payload.obfs = obfs
 
     if (hy2HopInterval.value.trim()) payload.hop_interval = hy2HopInterval.value.trim()
     if (tlsCertificate.value) payload.certificate = tlsCertificate.value
@@ -205,8 +242,8 @@ const settingsPayload = computed<NodeSettingsInput | undefined>(() => {
   } else if (protocol.value === 'anytls') {
     const tls: TLSSettingsInput = {}
     if (tlsServerName.value.trim()) tls.server_name = tlsServerName.value.trim()
-    if (!isEdit.value || anytlsAllowInsecureTouched.value) tls.allow_insecure = anytlsAllowInsecure.value
-    if (Object.keys(tls).length > 0) payload.tls = tls
+    tls.allow_insecure = anytlsAllowInsecure.value
+    payload.tls = tls
 
     const scheme = parseList(anytlsPaddingScheme.value)
     if (scheme.length > 0) payload.padding_scheme = scheme
@@ -298,25 +335,20 @@ const validationMessage = computed(() => {
 
 function changeProtocol() {
   ssCipher.value = SHADOWSOCKS_METHODS[0]
-  ssCipherTouched.value = false
   vlessPrivateKey.value = ''
   vlessPublicKey.value = ''
   vlessShortId.value = ''
   vlessServerName.value = ''
   vlessServerPort.value = 443
   vlessAllowInsecure.value = false
-  vlessAllowInsecureTouched.value = false
   hy2Up.value = null
   hy2Down.value = null
   hy2ObfsOpen.value = false
-  hy2ObfsOpenTouched.value = false
   hy2ObfsPassword.value = ''
   hy2HopInterval.value = ''
   hy2AllowInsecure.value = false
-  hy2AllowInsecureTouched.value = false
   anytlsPaddingScheme.value = ''
   anytlsAllowInsecure.value = false
-  anytlsAllowInsecureTouched.value = false
   tlsServerName.value = ''
   tlsCertificate.value = ''
   tlsPrivateKey.value = ''
@@ -339,6 +371,7 @@ async function generateReality() {
 }
 
 async function submit() {
+  if (loadingDetail.value) return
   const problem = validationMessage.value
   if (problem) {
     error.value = problem
@@ -510,6 +543,14 @@ async function submit() {
         </div>
 
         <div
+          v-if="loadingDetail"
+          class="detail-loading"
+        >
+          <LoadingSpinner size="sm" />
+          <span>正在加载节点配置…</span>
+        </div>
+
+        <div
           v-if="protocol === 'shadowsocks'"
           class="settings-box"
         >
@@ -517,11 +558,10 @@ async function submit() {
             Shadowsocks
           </div>
           <div class="field method-field">
-            <label for="ss-cipher">加密方式{{ isEdit ? '（更改后才会提交）' : '' }}</label>
+            <label for="ss-cipher">加密方式</label>
             <select
               id="ss-cipher"
               v-model="ssCipher"
-              @change="ssCipherTouched = true"
             >
               <option
                 v-for="method in SHADOWSOCKS_METHODS"
@@ -562,7 +602,7 @@ async function submit() {
             v-if="vlessPublicKey"
             class="public-key"
           >
-            <span>公钥（仅本次显示）</span>
+            <span>{{ isEdit ? '公钥' : '公钥（仅本次显示）' }}</span>
             <CopyText
               :text="vlessPublicKey"
               :display="vlessPublicKey"
@@ -580,7 +620,7 @@ async function submit() {
           </div>
           <div class="form-row">
             <div class="field">
-              <label for="vless-server-name">Server Name{{ isEdit ? '（留空保持不变）' : '' }}</label>
+              <label for="vless-server-name">Server Name</label>
               <input
                 id="vless-server-name"
                 v-model="vlessServerName"
@@ -589,14 +629,14 @@ async function submit() {
               >
             </div>
             <div class="field port-field">
-              <label for="vless-server-port">握手端口{{ isEdit ? '（留空保持不变）' : '' }}</label>
+              <label for="vless-server-port">握手端口</label>
               <input
                 id="vless-server-port"
                 v-model.number="vlessServerPort"
                 type="number"
                 min="1"
                 max="65535"
-                :placeholder="isEdit ? '留空保持不变（默认 443）' : '443'"
+                placeholder="443"
               >
             </div>
           </div>
@@ -617,7 +657,6 @@ async function submit() {
             <ToggleSwitch
               v-model="vlessAllowInsecure"
               label="允许不安全"
-              @update:model-value="vlessAllowInsecureTouched = true"
             />
           </div>
           <p class="field-hint">
@@ -634,7 +673,7 @@ async function submit() {
           </div>
           <div class="form-row">
             <div class="field">
-              <label for="hy2-server-name">TLS Server Name{{ isEdit ? '（留空保持不变）' : '' }}</label>
+              <label for="hy2-server-name">TLS Server Name</label>
               <input
                 id="hy2-server-name"
                 v-model="tlsServerName"
@@ -707,7 +746,6 @@ async function submit() {
             <ToggleSwitch
               v-model="hy2ObfsOpen"
               label="启用混淆"
-              @update:model-value="hy2ObfsOpenTouched = true"
             />
           </div>
           <div class="form-row">
@@ -721,7 +759,7 @@ async function submit() {
               >
             </div>
             <div class="field">
-              <label for="hy2-obfs-password">obfs 混淆密码{{ isEdit ? '（留空保持不变）' : '' }}</label>
+              <label for="hy2-obfs-password">obfs 混淆密码</label>
               <input
                 id="hy2-obfs-password"
                 v-model="hy2ObfsPassword"
@@ -731,7 +769,7 @@ async function submit() {
             </div>
           </div>
           <div class="field">
-            <label for="hy2-hop-interval">端口跳跃 hop_interval{{ isEdit ? '（留空保持不变）' : '' }}</label>
+            <label for="hy2-hop-interval">端口跳跃 hop_interval</label>
             <input
               id="hy2-hop-interval"
               v-model="hy2HopInterval"
@@ -750,7 +788,6 @@ async function submit() {
             <ToggleSwitch
               v-model="hy2AllowInsecure"
               label="允许不安全"
-              @update:model-value="hy2AllowInsecureTouched = true"
             />
           </div>
         </div>
@@ -763,7 +800,7 @@ async function submit() {
             AnyTLS · TLS
           </div>
           <div class="field">
-            <label for="anytls-server-name">TLS Server Name{{ isEdit ? '（留空保持不变）' : '' }}</label>
+            <label for="anytls-server-name">TLS Server Name</label>
             <input
               id="anytls-server-name"
               v-model="tlsServerName"
@@ -797,7 +834,6 @@ async function submit() {
             <ToggleSwitch
               v-model="anytlsAllowInsecure"
               label="允许不安全"
-              @update:model-value="anytlsAllowInsecureTouched = true"
             />
           </div>
           <div class="field">
@@ -816,7 +852,7 @@ async function submit() {
       </section>
 
       <p class="text-secondary tip">
-        协议密钥由 Panel 加密保存且不会回显；编辑时留空即保持不变。
+        协议密钥由 Panel 加密保存且不会回显；编辑时密钥类字段留空即保持不变，公开字段展示即当前生效值。
       </p>
     </div>
     <template #footer>
@@ -832,7 +868,7 @@ async function submit() {
         type="button"
         class="btn"
         :class="{ 'is-loading': submitting }"
-        :disabled="submitting"
+        :disabled="submitting || loadingDetail"
         @click="submit"
       >
         <LoadingSpinner
@@ -1012,6 +1048,14 @@ async function submit() {
 
 .tip {
   margin: 0;
+  font-size: var(--font-size-sm);
+}
+
+.detail-loading {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
 }
 

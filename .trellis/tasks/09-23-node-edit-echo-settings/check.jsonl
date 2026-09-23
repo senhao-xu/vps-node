@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/node-protocol-settings.md", "reason": "验收时核对 settings 回显不含任何 secret 标记字段"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端测试与 lint 验收标准"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端 build/typecheck 验收标准"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "检查前端类型定义与使用一致"}

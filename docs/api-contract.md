@@ -352,7 +352,7 @@ The private key is submitted through `POST /api/nodes` when creating a VLESS nod
 
 ### GET /api/nodes/:id
 
-Response `200`: node DTO plus `user_count`, `online_users`, `server: { id, name }`.
+Response `200`: node DTO plus `user_count`, `online_users`, `server: { id, name }`, and `settings` — the node's public `protocol_settings` object (`{}` when unset). `settings` echoes only public configuration; secret material (vless `private_key`, TLS `certificate`/`private_key`, server `password`) is encrypted at rest and never echoed. Note that hysteria2 `obfs.password` is a public setting and is included. List endpoints (`GET /api/nodes`, user-scoped node lists) never include `settings`.
 
 ### PUT /api/nodes/:id
 

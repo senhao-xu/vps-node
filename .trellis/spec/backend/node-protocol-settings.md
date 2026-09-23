@@ -66,7 +66,7 @@ Both are **plain settings** (never `secretFields`) and optional everywhere (crea
 - `obfs` section `{open, type, password}`: `password` 1-64 chars, `type` empty or `salamander`; when enabled with a password it renders `"obfs": {"type":"salamander","password":...}` in the sing-box inbound and adds `obfs=salamander&obfs-password=` (URI) / `obfs`+`obfs-password` (Clash) to subscriptions.
 - `hop_interval`: `start-end` string, 1-65535, start<=end. **Subscription-only** (`mport` URI param, `ports` Clash field) — must never enter the sing-box inbound; server-side NAT redirect is the admin's job.
 - VLESS flow is hardcoded to `xtls-rprx-vision`, the Reality handshake target is `reality_settings.server_name:server_port` (default `443`), and `public_key` is derived from `private_key`; configurable client `flow`/`dest` were considered and rejected as unnecessary surface area.
-- Node DTOs never echo settings, so the edit form treats every field as "blank = keep current"; there is no way to clear a once-set field via the UI.
+- List/user-side `nodeDTO`s never echo settings; only the admin detail endpoint (`GET /api/nodes/{id}`) echoes public `protocol_settings` as `settings` (secrets never). The edit form therefore shows stored public values as-is and submits them back; secret fields stay "blank = keep current", and there is still no way to clear a once-set field via the UI.
 
 
 ## 5. Good/Base/Bad Cases

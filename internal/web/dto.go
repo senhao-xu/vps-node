@@ -101,9 +101,10 @@ type nodeDTO struct {
 
 type nodeDetailDTO struct {
 	nodeDTO
-	UserCount   int64      `json:"user_count"`
-	OnlineUsers int64      `json:"online_users"`
-	Server      nodeRefDTO `json:"server"`
+	UserCount   int64           `json:"user_count"`
+	OnlineUsers int64           `json:"online_users"`
+	Server      nodeRefDTO      `json:"server"`
+	Settings    json.RawMessage `json:"settings"`
 }
 
 func toNodeDTO(n repo.Node) nodeDTO {
