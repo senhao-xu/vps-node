@@ -70,7 +70,7 @@ async function save() {
 </script>
 
 <template>
-  <div class="card">
+  <div class="card compact">
     <div class="card-head">
       <h2 class="card-title">
         限制与在线
@@ -152,10 +152,6 @@ async function save() {
 </template>
 
 <style scoped>
-.card {
-  --card-padding: var(--spacing-md);
-}
-
 .limits-editor {
   display: flex;
   align-items: flex-end;
@@ -169,11 +165,6 @@ async function save() {
 }
 
 @media (max-width: 560px) {
-  .card-head {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
   .limits-editor .btn {
     width: 100%;
   }

@@ -47,7 +47,7 @@ function select(value: T) {
 .segment {
   padding: 4px 12px;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: transparent;
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);

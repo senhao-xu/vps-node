@@ -12,6 +12,7 @@ const emit = defineEmits<{
   <div
     v-if="message"
     class="error-banner"
+    role="alert"
   >
     <span>{{ message }}</span>
     <button

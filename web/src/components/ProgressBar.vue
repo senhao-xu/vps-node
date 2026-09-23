@@ -51,7 +51,7 @@ const tone = computed(() => {
   flex: 1;
   min-width: 60px;
   height: 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: var(--color-muted-soft);
   overflow: hidden;
 }
@@ -63,7 +63,7 @@ const tone = computed(() => {
 
 .fill {
   height: 100%;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   transition: width 0.2s ease;
 }
 
@@ -84,5 +84,6 @@ const tone = computed(() => {
   color: var(--color-text-secondary);
   min-width: 42px;
   text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 </style>

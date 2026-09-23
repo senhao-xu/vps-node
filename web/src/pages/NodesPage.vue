@@ -381,7 +381,7 @@ onMounted(() => {
           <span class="name-cell">
             <i
               class="status-dot"
-              :class="row.status === 'active' ? 'on' : 'off'"
+              :class="row.status === 'active' ? 'success' : 'muted'"
             />
             {{ row.name }}
           </span>
@@ -507,18 +507,6 @@ onMounted(() => {
   align-items: center;
   gap: var(--spacing-sm);
   font-weight: 500;
-}
-
-.status-dot {
-  width: 8px;
-  height: 8px;
-  flex: none;
-  border-radius: 50%;
-  background: var(--color-offline);
-}
-
-.status-dot.on {
-  background: var(--color-success);
 }
 
 .batch-bar {

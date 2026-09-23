@@ -340,32 +340,13 @@ onUnmounted(() => {
   }
 }
 
-.stat-skeleton {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
-  min-height: 96px;
-}
-
-.skeleton-line {
-  display: block;
-  height: 12px;
-  width: 40%;
-}
-
-.skeleton-value {
-  display: block;
-  height: 24px;
-  width: 60%;
-}
-
 .health-pill {
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-xs);
   padding: 7px 11px;
   border: 1px solid var(--color-primary-border);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: var(--color-primary-soft);
   color: var(--color-primary);
   font-size: var(--font-size-sm);
@@ -450,7 +431,7 @@ onUnmounted(() => {
   height: 26px;
   padding: 0;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--color-text-secondary);
   cursor: pointer;

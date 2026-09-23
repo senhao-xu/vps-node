@@ -107,8 +107,8 @@ watch(
   >
     <span
       v-if="current?.dot"
-      class="dot"
-      :class="`dot-${current.dot}`"
+      class="status-dot"
+      :class="current.dot"
     />
     <span class="value">{{ current?.label ?? '—' }}</span>
     <ChevronDown
@@ -139,8 +139,8 @@ watch(
       >
         <span
           v-if="option.dot"
-          class="dot"
-          :class="`dot-${option.dot}`"
+          class="status-dot"
+          :class="option.dot"
         />
         <span class="option-label">{{ option.label }}</span>
         <Check
@@ -179,14 +179,7 @@ watch(
   background: var(--color-muted-soft);
   color: var(--color-text-secondary);
   cursor: not-allowed;
-}
-
-.app-select:disabled .chevron {
-  opacity: 0.5;
-}
-
-.app-select:disabled .dot {
-  opacity: 0.5;
+  opacity: 0.52;
 }
 
 .value {
@@ -249,33 +242,5 @@ watch(
 .check {
   flex: none;
   color: var(--color-primary);
-}
-
-.dot {
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--color-text-secondary);
-}
-
-.dot.dot-primary {
-  background: var(--color-primary);
-}
-
-.dot.dot-success {
-  background: var(--color-success);
-}
-
-.dot.dot-warning {
-  background: var(--color-warning);
-}
-
-.dot.dot-danger {
-  background: var(--color-danger);
-}
-
-.dot.dot-muted {
-  background: var(--color-offline);
 }
 </style>

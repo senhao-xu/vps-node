@@ -63,7 +63,7 @@ onMounted(() => {
       <h2 class="card-title">
         访问站点
       </h2>
-      <div class="head-actions">
+      <div class="card-head-actions">
         <span class="text-secondary count">共 {{ total }} 条</span>
         <button
           type="button"
@@ -117,20 +117,7 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.head-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-md);
-}
-
 .count {
   font-size: var(--font-size-sm);
-}
-
-@media (max-width: 560px) {
-  .card-head {
-    align-items: flex-start;
-    flex-direction: column;
-  }
 }
 </style>

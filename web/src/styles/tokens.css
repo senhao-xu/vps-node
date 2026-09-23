@@ -1,6 +1,5 @@
 :root {
   --gray-0: #ffffff;
-  --gray-25: #fafbfd;
   --gray-50: #f8fafc;
   --gray-100: #f1f5f9;
   --gray-200: #e2e8f0;
@@ -10,7 +9,6 @@
   --gray-900: #020817;
 
   --ink-900: #0f172a;
-  --ink-950: #020817;
 
   --green-100: #dcfce7;
   --green-200: #bbf7d0;
@@ -33,7 +31,6 @@
   --color-text: var(--gray-900);
   --color-text-secondary: var(--gray-500);
   --color-primary: var(--ink-900);
-  --color-primary-hover: var(--ink-900);
   --color-primary-soft: var(--gray-100);
   --color-primary-border: var(--gray-200);
   --color-on-primary: var(--gray-50);
@@ -44,7 +41,6 @@
   --color-warning-soft: var(--amber-100);
   --color-warning-border: var(--amber-200);
   --color-danger: var(--red-500);
-  --color-danger-hover: var(--red-600);
   --color-danger-soft: var(--red-100);
   --color-danger-border: var(--red-200);
   --color-danger-strong: var(--red-500);
@@ -52,7 +48,6 @@
   --color-on-danger: var(--gray-50);
   --color-offline: var(--gray-400);
   --color-muted-soft: var(--gray-100);
-  --color-table-hover: var(--gray-50);
   --color-overlay: rgba(15, 23, 42, 0.6);
   --color-focus-ring: rgba(2, 8, 23, 0.1);
   --color-skeleton: var(--gray-100);
@@ -62,10 +57,9 @@
   --color-shell-active: var(--gray-100);
   --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 
+  --radius-xs: 4px;
   --radius-sm: 6px;
   --radius-md: 12px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
   --radius-dialog: 8px;
   --radius-full: 999px;
 
@@ -118,7 +112,6 @@
   --color-text: var(--dark-gray-50);
   --color-text-secondary: var(--dark-gray-400);
   --color-primary: var(--dark-gray-50);
-  --color-primary-hover: var(--dark-gray-50);
   --color-primary-soft: var(--dark-gray-800);
   --color-primary-border: var(--dark-gray-800);
   --color-on-primary: var(--dark-gray-950);
@@ -129,7 +122,6 @@
   --color-warning-soft: rgba(232, 163, 61, 0.14);
   --color-warning-border: rgba(232, 163, 61, 0.36);
   --color-danger: var(--dark-red-400);
-  --color-danger-hover: var(--dark-red-300);
   --color-danger-soft: rgba(239, 91, 91, 0.14);
   --color-danger-border: rgba(239, 91, 91, 0.36);
   --color-danger-strong: var(--dark-red-800);
@@ -137,7 +129,6 @@
   --color-on-danger: var(--dark-gray-50);
   --color-offline: #5f6c82;
   --color-muted-soft: var(--dark-gray-800);
-  --color-table-hover: rgba(255, 255, 255, 0.03);
   --color-overlay: rgba(4, 8, 16, 0.72);
   --color-focus-ring: rgba(203, 213, 225, 0.25);
   --color-skeleton: var(--dark-gray-800);

@@ -24,6 +24,7 @@ const props = withDefaults(
     skeletonRows?: number
     totalCount?: number
     bordered?: boolean
+    ariaLabel?: string
   }>(),
   {
     loading: false,
@@ -34,6 +35,7 @@ const props = withDefaults(
     skeletonRows: 5,
     totalCount: undefined,
     bordered: true,
+    ariaLabel: '数据表格',
   },
 )
 
@@ -99,6 +101,9 @@ function display(value: unknown): string {
   <div
     class="table-box"
     :class="{ plain: !props.bordered }"
+    role="region"
+    tabindex="0"
+    :aria-label="props.ariaLabel"
   >
     <table class="data-table">
       <thead>
@@ -250,11 +255,17 @@ function display(value: unknown): string {
   border-radius: 0;
 }
 
+.table-box:focus-visible {
+  box-shadow: 0 0 0 3px var(--color-focus-ring);
+  outline: none;
+}
+
 .data-table {
   width: 100%;
   border-collapse: collapse;
   font-size: var(--font-size-md);
   min-width: 760px;
+  font-variant-numeric: tabular-nums;
 }
 
 .data-table th,

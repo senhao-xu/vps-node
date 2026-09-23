@@ -44,7 +44,7 @@ function toggle() {
   height: 20px;
   padding: 2px;
   border: none;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: var(--color-border-strong);
   cursor: pointer;
   transition: background 0.15s ease;
@@ -55,7 +55,7 @@ function toggle() {
 }
 
 .toggle:disabled {
-  opacity: 0.55;
+  opacity: 0.52;
   cursor: not-allowed;
 }
 

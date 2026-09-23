@@ -34,5 +34,6 @@ defineProps<{
   color: var(--color-text-secondary);
   width: 42px;
   text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 </style>

@@ -24,7 +24,7 @@ const toneClass = computed(() => props.tone ?? 'muted')
   gap: 5px;
   padding: 2px 9px;
   border: 1px solid transparent;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   font-size: var(--font-size-sm);
   white-space: nowrap;
 }

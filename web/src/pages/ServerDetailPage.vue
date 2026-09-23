@@ -18,6 +18,7 @@ import StatusBadge from '@/components/StatusBadge.vue'
 import LoadingSpinner from '@/components/ui/LoadingSpinner.vue'
 import OverflowMenu, { type OverflowMenuItem } from '@/components/ui/OverflowMenu.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
+import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import { useCopyFeedback } from '@/utils/clipboard'
 import { formatDateTime, formatDuration, formatRelative } from '@/utils/format'
 import { binaryInstallCommand, dockerInstallCommand } from '@/utils/installCommands'
@@ -42,6 +43,10 @@ const generatingRegisterToken = ref(false)
 type InstallTab = 'binary' | 'docker'
 
 const installTab = ref<InstallTab>('binary')
+const installTabItems: { value: InstallTab; label: string }[] = [
+  { value: 'binary', label: '二进制安装' },
+  { value: 'docker', label: 'Docker 安装' },
+]
 const { copied: commandCopied, copy } = useCopyFeedback()
 
 const visits = ref<Visit[]>([])
@@ -418,24 +423,12 @@ onMounted(() => {
         <div class="install-block">
           <div class="install-head">
             <span class="install-title">Agent 安装</span>
-            <div class="install-tabs">
-              <button
-                type="button"
-                class="install-tab"
-                :class="{ active: installTab === 'binary' }"
-                @click="installTab = 'binary'"
-              >
-                二进制安装
-              </button>
-              <button
-                type="button"
-                class="install-tab"
-                :class="{ active: installTab === 'docker' }"
-                @click="installTab = 'docker'"
-              >
-                Docker 安装
-              </button>
-            </div>
+            <SegmentedControl
+              v-model="installTab"
+              class="install-segmented"
+              :items="installTabItems"
+              aria-label="安装方式"
+            />
           </div>
           <p
             v-if="freshRegisterToken === ''"
@@ -459,7 +452,7 @@ onMounted(() => {
               {{ commandCopied ? '已复制' : '复制' }}
             </button>
           </div>
-          <pre class="install-code">{{ activeInstallCommand }}</pre>
+          <pre class="install-code mono">{{ activeInstallCommand }}</pre>
           <p class="install-note">
             {{ installNotes[installTab] }}
           </p>
@@ -674,31 +667,6 @@ onMounted(() => {
   font-weight: 600;
 }
 
-.install-tabs {
-  display: inline-flex;
-  gap: var(--spacing-xs);
-  padding: 2px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-muted);
-}
-
-.install-tab {
-  border: none;
-  background: transparent;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
-  padding: 4px 12px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-
-.install-tab.active {
-  background: var(--color-surface);
-  color: var(--color-primary);
-  font-weight: 600;
-}
-
 .install-hint {
   margin: 0 0 var(--spacing-sm);
   font-size: var(--font-size-sm);
@@ -723,7 +691,6 @@ onMounted(() => {
   background: var(--color-surface-muted);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
   font-size: var(--font-size-sm);
   line-height: 1.6;
   overflow-x: auto;
@@ -765,7 +732,7 @@ onMounted(() => {
     flex-direction: column;
   }
 
-  .install-tabs {
+  .install-segmented {
     align-self: flex-start;
   }
 }

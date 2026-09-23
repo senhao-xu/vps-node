@@ -20,7 +20,7 @@ async function onCopy() {
       {{ props.label }}
     </div>
     <div class="secret-row">
-      <code class="secret-value">{{ props.value }}</code>
+      <code class="secret-value mono">{{ props.value }}</code>
       <button
         type="button"
         class="btn small"
@@ -59,7 +59,6 @@ async function onCopy() {
 
 .secret-value {
   flex: 1;
-  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
   font-size: var(--font-size-md);
   word-break: break-all;
   background: var(--color-surface);

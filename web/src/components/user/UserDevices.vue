@@ -102,12 +102,3 @@ onMounted(() => {
     </DataTable>
   </div>
 </template>
-
-<style scoped>
-@media (max-width: 560px) {
-  .card-head {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-}
-</style>

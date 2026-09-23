@@ -155,7 +155,7 @@ onMounted(() => {
   padding: var(--spacing-xl) 0;
 }
 
-.page .card + .card {
+.page > .card + .card {
   margin-top: var(--spacing-lg);
 }
 
@@ -167,16 +167,12 @@ onMounted(() => {
   margin-top: var(--spacing-lg);
 }
 
-.two-col .card + .card {
-  margin-top: 0;
-}
-
 .two-col + .card {
   margin-top: var(--spacing-lg);
 }
 
 @media (max-width: 700px) {
-  .page .card + .card,
+  .page > .card + .card,
   .two-col,
   .two-col + .card {
     margin-top: var(--spacing-md);

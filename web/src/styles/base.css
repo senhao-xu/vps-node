@@ -6,6 +6,7 @@ html,
 body {
   margin: 0;
   padding: 0;
+  min-width: 320px;
 }
 
 body {
@@ -40,6 +41,10 @@ a {
   margin-top: var(--spacing-md);
 }
 
+.card.compact {
+  --card-padding: var(--spacing-md);
+}
+
 /* Cards laid out side by side in a grid must not inherit the stacked-card
    margin, otherwise they are pushed down inside their grid cell and the row
    looks misaligned. */
@@ -64,6 +69,14 @@ a {
 
 .card-head .card-title {
   margin-bottom: 0;
+}
+
+.card-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+  margin-left: auto;
 }
 
 .text-secondary {
@@ -147,7 +160,7 @@ textarea:focus-visible {
 }
 
 .btn:disabled {
-  opacity: 0.55;
+  opacity: 0.52;
   cursor: not-allowed;
 }
 
@@ -334,6 +347,35 @@ select:disabled {
   padding: var(--spacing-lg) 0;
 }
 
+.status-dot {
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--color-text-secondary);
+}
+
+.status-dot.success {
+  background: var(--color-success);
+}
+
+.status-dot.warning {
+  background: var(--color-warning);
+}
+
+.status-dot.danger {
+  background: var(--color-danger);
+}
+
+.status-dot.primary {
+  background: var(--color-primary);
+}
+
+.status-dot.muted {
+  background: var(--color-offline);
+}
+
 .btn.is-loading {
   pointer-events: none;
   opacity: 0.75;
@@ -369,7 +411,7 @@ select:disabled {
   height: 26px;
   padding: 0;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: transparent;
   color: var(--color-text-secondary);
   cursor: pointer;
@@ -392,7 +434,7 @@ select:disabled {
   padding: 1px 6px;
   border: 1px solid var(--color-border);
   border-bottom-width: 2px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--color-surface-muted);
   color: var(--color-text-secondary);
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
@@ -415,6 +457,25 @@ select:disabled {
   50% {
     opacity: 0.45;
   }
+}
+
+.stat-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  min-height: 96px;
+}
+
+.skeleton-line {
+  display: block;
+  height: 12px;
+  width: 40%;
+}
+
+.skeleton-value {
+  display: block;
+  height: 24px;
+  width: 60%;
 }
 
 .info-grid {
@@ -513,8 +574,26 @@ select:disabled {
   }
 }
 
+@media (max-width: 560px) {
+  .card-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
 @media (max-width: 480px) {
   .page {
     padding: var(--spacing-sm);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

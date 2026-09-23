@@ -55,6 +55,9 @@ web/src/
 - Palette direction is the Xboard/shadcn neutral theme: `--color-primary` is near-black (`#0F172A`, and near-white `#F8FAFC` in dark), surfaces are white/`#020817`, and the secondary fill is `#F1F5F9` / `#1E293B`. Semantic green/amber/red stay as accents — do not introduce a brand-colored primary.
 - The app is not color-theme-agnostic: a token used as a background must ship a matching foreground token. `--color-primary` pairs with `--color-on-primary`; solid danger buttons use `--color-danger-strong` + `--color-on-danger`, while `--color-danger` remains the readable-on-surface text/tint variant (light `#EF4444`, dark `#ef5b5b`).
 - Sidebar width is token-driven (`--shell-width: 256px`, `--shell-width-collapsed: 56px`); the collapsed state is persisted in `localStorage['sidebar-collapsed']` and only applies on desktop (`min-width: 901px`).
+- Radius scale is `--radius-xs: 4px` / `sm: 6px` / `md: 12px` / `dialog: 8px` / `full: 999px`; use `--radius-xs` for the smallest controls (e.g. segmented items) and `--radius-full` for pills/circles. Do not hardcode `4px`/`6px`/`999px` border radii in components.
+- Motion and viewport floors live in `base.css`: a global `@media (prefers-reduced-motion: reduce)` block neutralizes animation/transition/scroll behavior, and `html, body { min-width: 320px }` is the minimum supported width. Add new motion or sub-320 layouts with those constraints in mind.
+- Disabled controls share one opacity (`0.52`) across `.btn`, `.toggle`, `.page-btn`, and `.app-select`; floating overlay panels (AppSelect/OverflowMenu/FilterChip) all use `--radius-md` + `--shadow-dialog`.
 
 ### Build-time version constant
 

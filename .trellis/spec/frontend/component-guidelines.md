@@ -17,7 +17,12 @@ Vue 3 SFC (`<script setup>`), TypeScript strict, no UI library. Two component ti
 
 - SFC with `<script setup lang="ts">`; scoped styles; zh-CN UI text.
 - Icons come from `lucide-vue-next` only (tree-shaken) — never inline hand-written SVG paths.
-- Shared cross-component CSS primitives live in `styles/base.css` (`.chip`, `.kbd`, `.skeleton`, `.menu-list`, `.toggle-row`, `.info-grid`, `.card-head`, `.actions`, `.table-toolbar`). Never re-define these in scoped styles — that copy-paste pattern was explicitly eliminated.
+- Shared cross-component CSS primitives live in `styles/base.css` (`.chip`, `.kbd`, `.skeleton`, `.stat-skeleton`/`.skeleton-line`/`.skeleton-value`, `.menu-list`, `.toggle-row`, `.info-grid`, `.card-head`, `.card-head-actions`, `.card.compact`, `.status-dot`, `.actions`, `.table-toolbar`). Never re-define these in scoped styles — that copy-paste pattern was explicitly eliminated.
+- `.card.compact` is the only way to shrink a card's padding (`--card-padding`) for dense two-column panels; do not re-declare `--card-padding` in a scoped `.card`.
+- `.card-head` is globally responsive at `max-width: 560px` (stacks to a column) — do not add a per-component `.card-head` media block.
+- `.card-head-actions` is the shared right-aligned action group inside `.card-head` (has `margin-left: auto`); page/panel-specific mobile overrides may still target it in scoped CSS.
+- `.status-dot` (8px circle) is the shared dot primitive; use the tone modifiers `.success/.warning/.danger/.primary/.muted` instead of a local dot class.
+- Async error banners must carry `role="alert"`; scrollable `DataTable` regions must expose `role="region"` + `tabindex="0"` + `aria-label` (pass `ariaLabel` for multiple tables on one page).
 
 ## Props Conventions
 

@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Code-quality standards used by the check sub-agent for the web package."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Shared-primitive reuse, no-scoped-clones, focus/disabled patterns, and accessibility expectations to verify against."}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Visual system ownership and page-scoped CSS boundaries to confirm placement of each change."}
+{"file": ".trellis/tasks/09-23-frontend-style-optimize/research/gap-analysis.md", "reason": "Resolved anchors and expected outcomes used to verify the dedup and accessibility fixes were actually applied."}
+{"file": ".trellis/tasks/09-23-frontend-style-optimize/design.md", "reason": "Design contract to check the implementation against."}
+{"file": ".trellis/tasks/09-23-frontend-style-optimize/implement.md", "reason": "Batch checklist and validation commands used to confirm every item is complete."}

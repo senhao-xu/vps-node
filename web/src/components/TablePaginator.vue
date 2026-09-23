@@ -130,6 +130,7 @@ function changePageSize(size: number) {
 .page-info {
   font-weight: 500;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .pager {
@@ -159,7 +160,7 @@ function changePageSize(size: number) {
 }
 
 .page-btn:disabled {
-  opacity: 0.45;
+  opacity: 0.52;
   cursor: not-allowed;
 }
 

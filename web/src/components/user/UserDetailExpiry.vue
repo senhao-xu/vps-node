@@ -60,7 +60,7 @@ async function save() {
 </script>
 
 <template>
-  <div class="card">
+  <div class="card compact">
     <div class="card-head">
       <h2 class="card-title">
         有效期
@@ -130,7 +130,6 @@ async function save() {
 
 <style scoped>
 .card {
-  --card-padding: var(--spacing-md);
   display: flex;
   flex-direction: column;
 }
@@ -182,12 +181,5 @@ async function save() {
   gap: var(--spacing-sm);
   flex-wrap: wrap;
   margin-top: var(--spacing-md);
-}
-
-@media (max-width: 560px) {
-  .card-head {
-    align-items: flex-start;
-    flex-direction: column;
-  }
 }
 </style>

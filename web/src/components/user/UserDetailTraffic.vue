@@ -76,12 +76,12 @@ async function resetTraffic() {
 </script>
 
 <template>
-  <div class="card">
+  <div class="card compact">
     <div class="card-head">
       <h2 class="card-title">
         流量
       </h2>
-      <div class="head-actions">
+      <div class="card-head-actions">
         <button
           type="button"
           class="btn secondary small"
@@ -175,16 +175,6 @@ async function resetTraffic() {
 </template>
 
 <style scoped>
-.card {
-  --card-padding: var(--spacing-md);
-}
-
-.head-actions {
-  display: flex;
-  gap: var(--spacing-sm);
-  flex-wrap: wrap;
-}
-
 .quota-input {
   width: 140px;
 }
@@ -230,16 +220,11 @@ async function resetTraffic() {
 }
 
 @media (max-width: 560px) {
-  .card-head {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .head-actions {
+  .card-head-actions {
     width: 100%;
   }
 
-  .head-actions .btn {
+  .card-head-actions .btn {
     flex: 1;
   }
 }

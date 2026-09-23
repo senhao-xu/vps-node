@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend guideline index and conventions entry point for the web package."}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Defines the styles/ visual system, token layers, dark-mode direction, --card-padding, and page-scoped CSS rules touched by this task."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Shared-primitive ownership, no-scoped-clone rule, styling patterns, focus/disabled state feedback, and accessibility expectations for the component edits."}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Type rules for adding the optional DataTable ariaLabel prop and keeping the SegmentedControl generic binding typesafe."}
+{"file": ".trellis/tasks/09-23-frontend-style-optimize/research/gap-analysis.md", "reason": "Evidence base with verified file:line anchors for every P0/P1/P2 change and the per-component dedup targets."}
+{"file": ".trellis/tasks/09-23-frontend-style-optimize/design.md", "reason": "Committed technical design: exact token/base.css primitives and per-component change contracts."}
+{"file": ".trellis/tasks/09-23-frontend-style-optimize/implement.md", "reason": "Ordered batch checklist with validation commands and rollback points to execute."}

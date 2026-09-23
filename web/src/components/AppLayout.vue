@@ -112,7 +112,7 @@ async function handleLogout() {
         </RouterLink>
       </nav>
       <div class="sidebar-footer">
-        <i class="version-dot" />
+        <i class="status-dot success" />
         <span class="version-text mono">{{ appVersion }}</span>
       </div>
       <button
@@ -305,14 +305,6 @@ async function handleLogout() {
   gap: var(--spacing-sm);
   padding: var(--spacing-md) var(--spacing-lg);
   border-top: 1px solid var(--color-border);
-}
-
-.version-dot {
-  width: 7px;
-  height: 7px;
-  flex: none;
-  border-radius: 50%;
-  background: var(--color-success);
 }
 
 .version-text {

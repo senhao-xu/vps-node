@@ -604,6 +604,7 @@ async function submit() {
           >
             <span>{{ isEdit ? '公钥' : '公钥（仅本次显示）' }}</span>
             <CopyText
+              class="mono"
               :text="vlessPublicKey"
               :display="vlessPublicKey"
             />
@@ -950,7 +951,7 @@ async function submit() {
   flex: none;
   padding: 3px 8px;
   border: 1px solid var(--color-primary-border);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: var(--color-primary-soft);
   color: var(--color-primary) !important;
   font-size: var(--font-size-sm);
@@ -1042,7 +1043,6 @@ async function submit() {
 }
 
 .public-key :deep(.value) {
-  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
   font-size: var(--font-size-sm);
 }
 

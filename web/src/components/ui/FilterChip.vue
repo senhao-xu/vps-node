@@ -115,7 +115,7 @@ function onKeydown(event: KeyboardEvent) {
   padding: 6px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   box-shadow: var(--shadow-dialog);
 }
 </style>

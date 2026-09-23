@@ -178,11 +178,6 @@ function onKeydown(event: KeyboardEvent) {
   background: var(--color-surface);
 }
 
-.palette-input:focus {
-  box-shadow: none;
-  border-color: var(--color-border);
-}
-
 .palette-list {
   max-height: 300px;
   overflow-y: auto;

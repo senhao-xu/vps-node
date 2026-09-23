@@ -289,25 +289,6 @@ onMounted(() => {
   gap: var(--spacing-md);
 }
 
-.stat-skeleton {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
-  min-height: 96px;
-}
-
-.skeleton-line {
-  display: block;
-  height: 12px;
-  width: 40%;
-}
-
-.skeleton-value {
-  display: block;
-  height: 24px;
-  width: 60%;
-}
-
 .table-card {
   margin-top: var(--spacing-md);
 }

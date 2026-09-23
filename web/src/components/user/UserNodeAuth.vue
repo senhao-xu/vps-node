@@ -64,7 +64,7 @@ async function save() {
       <h2 class="card-title">
         节点授权
       </h2>
-      <div class="head-actions">
+      <div class="card-head-actions">
         <span
           v-if="savedTip"
           class="saved-tip"
@@ -97,13 +97,6 @@ async function save() {
 </template>
 
 <style scoped>
-.head-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  margin-left: auto;
-}
-
 .saved-tip {
   color: var(--color-success);
   font-size: var(--font-size-sm);
@@ -115,12 +108,7 @@ async function save() {
 }
 
 @media (max-width: 560px) {
-  .card-head {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .head-actions {
+  .card-head-actions {
     margin-left: 0;
   }
 }
