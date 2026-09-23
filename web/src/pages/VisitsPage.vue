@@ -338,6 +338,11 @@ onMounted(() => {
     </div>
 
     <div class="card">
+      <div class="card-head">
+        <h2 class="card-title">
+          访问明细
+        </h2>
+      </div>
       <DataTable
         :columns="columns"
         :rows="items"
