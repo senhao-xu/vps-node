@@ -80,6 +80,7 @@ func run() error {
 		"traffic_interval", cfg.TrafficInterval.String(),
 		"collection", map[string]bool{
 			"traffic": cfg.Collection.Traffic,
+			"visits":  cfg.Collection.Visits,
 		})
 
 	loop := agentruntime.NewLoop(agentruntime.LoopOptions{
