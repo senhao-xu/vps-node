@@ -188,9 +188,9 @@ func TestSubscriptionSettingsPathOriginsAndValidation(t *testing.T) {
 	if resp.StatusCode != http.StatusUnprocessableEntity {
 		t.Fatalf("invalid template: %d %s", resp.StatusCode, body)
 	}
-	resp, body = e.do(t, "PUT", "/api/settings", map[string]any{"clash_meta_template": "proxies: []"}, cookie)
-	if resp.StatusCode != http.StatusUnprocessableEntity {
-		t.Fatalf("forbidden template: %d %s", resp.StatusCode, body)
+	resp, body = e.do(t, "PUT", "/api/settings", map[string]any{"clash_meta_template": "proxy-groups:\n  - {name: x, type: select, proxies: [__ALL_PROXIES__]}\nproxies: []"}, cookie)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("template with ignored proxies: %d %s", resp.StatusCode, body)
 	}
 }
 

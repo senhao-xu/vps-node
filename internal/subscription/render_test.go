@@ -228,8 +228,20 @@ func TestRenderClashPlaceholdersAndRestrictions(t *testing.T) {
 			t.Fatalf("group %v got %v", group["name"], got)
 		}
 	}
-	if err := ValidateTemplate("proxy-groups:\n  - name: x\n    type: select\n    proxies: [__ALL_PROXIES__]\nproxies: []\n"); err == nil {
-		t.Fatal("accepted static proxies")
+	templateWithProxies := "proxies:\n  - {name: stale, type: ss, server: example.com, port: 1, cipher: none, password: x}\nproxy-groups:\n  - {name: x, type: select, proxies: [__ALL_PROXIES__]}\n"
+	if err := ValidateTemplate(templateWithProxies); err != nil {
+		t.Fatalf("rejected ignored proxies field: %v", err)
+	}
+	outWithProxies, err := RenderClash(make([]byte, 32), "uuid", templateWithProxies, nodes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var configWithProxies map[string]any
+	if err := yaml.Unmarshal(outWithProxies, &configWithProxies); err != nil {
+		t.Fatal(err)
+	}
+	if renderedProxies := configWithProxies["proxies"].([]any); len(renderedProxies) != 3 {
+		t.Fatalf("expected generated proxies to replace template proxies, got %v", renderedProxies)
 	}
 	if err := ValidateTemplate("proxy-groups:\n  - name: x\n    type: select\n    proxies: [STATIC]\n"); err == nil {
 		t.Fatal("accepted dangling target")
@@ -237,17 +249,69 @@ func TestRenderClashPlaceholdersAndRestrictions(t *testing.T) {
 	if err := ValidateTemplate("bind-address: 127.0.0.1\nallow-lan: true\nproxy-groups:\n  - {name: x, type: select, proxies: [DIRECT]}\n"); err != nil {
 		t.Fatalf("rejected bind-address: %v", err)
 	}
-	for _, field := range []string{"url", "path", "header", "external-controller", "listeners", "authentication", "script", "proxy-providers"} {
+	for _, field := range []string{"url", "path", "header"} {
 		template := "dns:\n  nested:\n    " + field + ": bad\nproxy-groups:\n  - {name: x, type: select, proxies: [DIRECT]}\n"
-		if field == "external-controller" || field == "listeners" || field == "authentication" || field == "script" || field == "proxy-providers" {
-			template = field + ": bad\nproxy-groups:\n  - {name: x, type: select, proxies: [DIRECT]}\n"
-		}
 		if err := ValidateTemplate(template); err == nil {
-			t.Fatalf("accepted forbidden field %s", field)
+			t.Fatalf("accepted forbidden nested field %s", field)
+		}
+	}
+	tunTemplate := "tun:\n  enable: true\n  stack: gvisor\nproxy-groups:\n  - {name: x, type: select, proxies: [DIRECT]}\n"
+	keptTun, err := RenderClash(make([]byte, 32), "uuid", tunTemplate, nodes)
+	if err != nil {
+		t.Fatalf("rejected tun: %v", err)
+	}
+	if !strings.Contains(string(keptTun), "tun:") {
+		t.Fatal("tun config dropped from output")
+	}
+	for _, field := range []string{"proxy-providers", "listeners", "external-controller", "external-controller-tls", "secret", "authentication", "skip-auth-prefixes", "script"} {
+		template := field + ": bad\nproxy-groups:\n  - {name: x, type: select, proxies: [DIRECT]}\n"
+		if err := ValidateTemplate(template); err != nil {
+			t.Fatalf("rejected stripped field %s: %v", field, err)
+		}
+		stripped, err := RenderClash(make([]byte, 32), "uuid", template, nodes)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(stripped), field) {
+			t.Fatalf("stripped field %s leaked into output", field)
 		}
 	}
 	if strings.Contains(string(out), "private_key") || strings.Contains(string(out), nodes[1].Secret["private_key"].(string)) {
 		t.Fatal("private key leaked")
+	}
+}
+
+func TestDefaultClashMetaTemplate(t *testing.T) {
+	if err := ValidateTemplate(DefaultClashMetaTemplate); err != nil {
+		t.Fatalf("default template rejected: %v", err)
+	}
+	nodes := []Node{testNode(t, "shadowsocks"), testNode(t, "hysteria2")}
+	nodes[1].ID = 2
+	nodes[1].Name = "node two"
+	out, err := RenderClash(make([]byte, 32), "user-uuid", DefaultClashMetaTemplate, nodes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config map[string]any
+	if err := yaml.Unmarshal(out, &config); err != nil {
+		t.Fatal(err)
+	}
+	if config["tun"] == nil {
+		t.Fatal("tun config missing from rendered default template")
+	}
+	if _, ok := config["external-controller"]; ok {
+		t.Fatal("external-controller leaked into rendered default template")
+	}
+	if proxies := config["proxies"].([]any); len(proxies) != 2 {
+		t.Fatalf("expected 2 generated proxies, got %v", proxies)
+	}
+	groups := config["proxy-groups"].([]any)
+	autoSelect, ok := groups[0].(map[string]any)
+	if !ok || autoSelect["name"] != "AutoSelect" {
+		t.Fatalf("unexpected first group: %v", groups[0])
+	}
+	if items := autoSelect["proxies"].([]any); len(items) != 2 {
+		t.Fatalf("expected AutoSelect to expand all proxies, got %v", items)
 	}
 }
 

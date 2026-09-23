@@ -14,27 +14,144 @@ import (
 )
 
 const DefaultClashMetaTemplate = `mixed-port: 7890
-allow-lan: false
+allow-lan: true
+bind-address: "*"
 mode: rule
 log-level: info
+ipv6: false
+unified-delay: true
+tcp-concurrent: true
+find-process-mode: strict
 dns:
   enable: true
+  listen: 0.0.0.0:1053
+  ipv6: false
+  prefer-h3: false
+  respect-rules: true
+  use-hosts: true
+  use-system-hosts: true
+  cache-algorithm: arc
+  cache-size: 8192
   enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter:
+    - geosite:private
+    - "*.lan"
+    - "*.qq.com"
+    - "*.qpic.cn"
+    - "*.qlogo.cn"
+    - "*.weixin.qq.com"
+    - "*.wechat.com"
+    - "*.push.apple.com"
+    - "*.apple.com"
+    - "*.icloud.com"
+    - "*.mzstatic.com"
+    - www.msftconnecttest.com
+    - www.msftncsi.com
+    - dns.msftncsi.com
+    - "*.msftconnecttest.com"
+    - "*.msftncsi.com"
+    - "*.windows.com"
+    - "*.onedrive.live.com"
+  default-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
   nameserver:
-    - https://1.1.1.1/dns-query
+    - https://cloudflare-dns.com/dns-query#Proxy
+    - https://dns.google/dns-query#Proxy
+  proxy-server-nameserver:
+    - https://223.5.5.5/dns-query
+    - https://doh.pub/dns-query
+  direct-nameserver:
+    - https://223.5.5.5/dns-query
+    - https://doh.pub/dns-query
+  direct-nameserver-follow-policy: true
+  nameserver-policy:
+    geosite:cn:
+      - https://223.5.5.5/dns-query
+      - https://doh.pub/dns-query
+    geosite:tencent:
+      - https://223.5.5.5/dns-query
+      - https://doh.pub/dns-query
+    geosite:apple-cn:
+      - https://223.5.5.5/dns-query
+    geosite:microsoft@cn:
+      - https://223.5.5.5/dns-query
+    geosite:onedrive:
+      - https://223.5.5.5/dns-query
+  fallback:
+    - https://cloudflare-dns.com/dns-query#Proxy
+    - https://dns.google/dns-query#Proxy
+  fallback-filter:
+    geoip: true
+    geoip-code: CN
+tun:
+  enable: true
+  stack: gvisor
+  auto-route: true
+  auto-detect-interface: true
+  strict-route: true
+  dns-hijack:
+    - any:53
+  mtu: 1500
 proxy-groups:
-  - name: 节点选择
-    type: select
-    proxies:
-      - __ALL_PROXIES__
-  - name: 自动选择
+  - name: AutoSelect
     type: url-test
-    url: https://www.gstatic.com/generate_204
+    url: http://www.gstatic.com/generate_204
     interval: 300
     proxies:
       - __ALL_PROXIES__
+  - name: Proxy
+    type: select
+    proxies:
+      - AutoSelect
+      - __ALL_PROXIES__
+  - name: OpenAi
+    type: select
+    proxies:
+      - __ALL_PROXIES__
+  - name: Others
+    type: select
+    proxies:
+      - Proxy
+      - DIRECT
 rules:
-  - MATCH,节点选择
+  - GEOSITE,private,DIRECT
+  - GEOIP,private,DIRECT,no-resolve
+  - GEOIP,lan,DIRECT,no-resolve
+  - PROCESS-NAME,Weixin.exe,DIRECT
+  - PROCESS-NAME,WeChat.exe,DIRECT
+  - GEOSITE,category-ads-all,REJECT
+  - GEOSITE,tencent,DIRECT
+  - GEOSITE,openai,OpenAi
+  - GEOSITE,anthropic,OpenAi
+  - GEOSITE,cursor,OpenAi
+  - DOMAIN-SUFFIX,models.dev,OpenAi
+  - GEOSITE,huggingface,Proxy
+  - GEOSITE,category-ai-!cn,OpenAi
+  - GEOSITE,category-scholar-!cn,Proxy
+  - GEOSITE,google,Proxy
+  - GEOSITE,youtube,Proxy
+  - GEOSITE,github,Proxy
+  - GEOSITE,twitter,Proxy
+  - GEOSITE,pixiv,Proxy
+  - GEOSITE,discord,Proxy
+  - GEOSITE,wallhaven,Proxy
+  - GEOSITE,onedrive,DIRECT
+  - GEOSITE,microsoft,DIRECT
+  - GEOSITE,apple-cn,DIRECT
+  - GEOSITE,steam@cn,DIRECT
+  - GEOSITE,category-games@cn,DIRECT
+  - GEOSITE,geolocation-cn,DIRECT
+  - DOMAIN-SUFFIX,ipwho.is,Proxy
+  - DOMAIN-SUFFIX,ipapi.co,Proxy
+  - DOMAIN-SUFFIX,aloxaf.com,Proxy
+  - GEOSITE,geolocation-!cn,Proxy
+  - GEOSITE,cn,DIRECT
+  - GEOIP,telegram,Proxy,no-resolve
+  - GEOIP,google,Proxy,no-resolve
+  - GEOIP,CN,DIRECT
+  - MATCH,Others
 `
 
 type Node struct {
@@ -162,7 +279,26 @@ func renderURI(appKey []byte, userUUID string, n Node) (string, error) {
 var allowedTopLevel = map[string]bool{
 	"mixed-port": true, "allow-lan": true, "bind-address": true, "mode": true, "log-level": true, "ipv6": true,
 	"unified-delay": true, "tcp-concurrent": true, "find-process-mode": true,
-	"global-client-fingerprint": true, "dns": true, "proxy-groups": true, "rules": true, "rule-providers": true,
+	"global-client-fingerprint": true, "dns": true, "proxy-groups": true, "proxies": true, "rules": true,
+	"rule-providers": true,
+	"proxy-providers": true, "listeners": true, "tun": true, "external-controller": true,
+	"external-controller-tls": true, "secret": true, "authentication": true, "skip-auth-prefixes": true,
+	"script": true,
+}
+
+// replacedTopLevel fields are accepted so a full Clash config can be pasted
+// verbatim, but are rebuilt from panel-generated values during assembly.
+// droppedTopLevel fields are accepted for paste compatibility, then removed
+// before rendering because they would expose control-plane or resource-fetching
+// capabilities to every subscriber. Neither set has its contents validated.
+var replacedTopLevel = map[string]bool{
+	"proxy-groups": true, "proxies": true,
+}
+
+var droppedTopLevel = map[string]bool{
+	"proxy-providers": true, "listeners": true, "external-controller": true,
+	"external-controller-tls": true, "secret": true, "authentication": true, "skip-auth-prefixes": true,
+	"script": true,
 }
 
 var forbiddenRecursive = map[string]bool{
@@ -183,7 +319,7 @@ func ValidateTemplate(text string) error {
 		if !allowedTopLevel[key] {
 			return fmt.Errorf("Clash Meta template field %q is not allowed", key)
 		}
-		if key != "proxy-groups" && hasForbidden(value) {
+		if !replacedTopLevel[key] && !droppedTopLevel[key] && hasForbidden(value) {
 			return fmt.Errorf("Clash Meta template field %q contains a forbidden capability", key)
 		}
 	}
@@ -235,6 +371,11 @@ func assembleClash(template string, proxies []map[string]any, names map[string][
 	groups, err := expandGroups(config, names, false)
 	if err != nil {
 		return nil, err
+	}
+	for key := range config {
+		if droppedTopLevel[key] {
+			delete(config, key)
+		}
 	}
 	config["proxy-groups"] = groups
 	config["proxies"] = proxies
