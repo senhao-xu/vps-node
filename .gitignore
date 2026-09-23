@@ -16,3 +16,5 @@ agent_state.json
 
 .env
 *.log
+
+.workbuddy/

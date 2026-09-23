@@ -1,3 +1,7 @@
+# Normalize line endings: store LF in the repo and check out LF on every platform.
+# This keeps CRLF working trees (e.g. Windows) from showing up as whole-file diffs.
+* text=auto eol=lf
+
 # Trellis: append-only developer journals should merge cleanly across
 # parallel sessions/worktrees — each session only appends a new block, so
 # there is nothing to actually conflict on.
