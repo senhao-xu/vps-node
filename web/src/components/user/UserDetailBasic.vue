@@ -145,7 +145,7 @@ async function expireNow() {
 </script>
 
 <template>
-  <div class="card">
+  <div class="card basic-card">
     <h2 class="card-title">
       基本信息
     </h2>
@@ -275,7 +275,7 @@ async function expireNow() {
           <span class="masked">••••••••••••</span>
         </span>
       </div>
-      <div class="info-item">
+      <div class="info-item actions-item">
         <span class="info-label">操作</span>
         <span class="actions-row">
           <button
@@ -331,7 +331,13 @@ async function expireNow() {
 
 <style scoped>
 .subscription-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
   margin-bottom: var(--spacing-lg);
+  padding: var(--spacing-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
 }
 
 .subscription-row {
@@ -343,7 +349,32 @@ async function expireNow() {
 }
 
 .subscription-url {
-  max-width: min(480px, 100%);
+  max-width: min(520px, 100%);
+}
+
+.basic-card .info-label {
+  font-weight: 500;
+}
+
+@media (min-width: 701px) {
+  .basic-card .info-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--spacing-lg) var(--spacing-xl);
+  }
+}
+
+.actions-item {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--color-border);
+}
+
+.actions-item .actions-row {
+  margin-left: auto;
 }
 
 .status-row {
