@@ -10,8 +10,9 @@ Compose files:
 
 - `docker-compose.yml` — panel only, builds the image locally (default).
 - `docker-compose.ghcr.yml` — panel only, pulls the prebuilt image from GHCR (`ghcr.io/senhao-xu/vps-node-panel:latest`, override with `PANEL_IMAGE`); no local build.
-- `docker-compose.all-in-one.yml` — panel + agent on one host, builds locally.
-- `agent.docker-compose.yml` — agent only, for node servers.
+- `agent.docker-compose.yml` — agent only, for node servers. Start the panel first, create a Server and generate its Agent Key, then run this on the node.
+
+The panel is always started first: the Agent Key can only be issued by a running panel, so there is intentionally no one-shot panel+agent compose. Create the agent from the panel's Server detail page, which emits a ready-to-run install command.
 
 Example configuration files:
 
