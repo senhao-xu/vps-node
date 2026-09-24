@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "新增 CreateServerWithAgentKey 需要遵循 repo 的事务与写法约定"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "handleServerCreate 错误返回需沿用 writeErr/错误码约定"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端改动需满足构建/vet/测试质量要求"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "ServerFormDialog emit created 事件与对话框交互需符合组件约定"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "新增 CreateServerResult 类型与 API 返回类型需符合前端类型约定"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "改动跨 handler/repo/前端，需检查跨层数据契约一致性"}

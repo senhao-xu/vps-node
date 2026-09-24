@@ -151,6 +151,8 @@ export type ServerDetail = Server & {
   nodes: NodeBrief[]
 }
 
+export type CreateServerResult = Server & { agent_key: string }
+
 export type Dashboard = {
   users_total: number
   users_online: number

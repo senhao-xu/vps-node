@@ -268,7 +268,7 @@ Response `200`: paginated list of:
 { "name": "HK-01" }
 ```
 
-Response `201`: server DTO. `status` starts as `active`.
+Response `201`: server DTO plus `agent_key`, the plaintext Agent Key issued automatically on creation. `status` starts as `active`. The key uses the same mechanism as `POST /api/servers/:id/agent-key` and can be read back via `GET /api/servers/:id/agent-key`. No server revision is bumped (identity is not runtime config).
 
 ### GET /api/servers/:id
 

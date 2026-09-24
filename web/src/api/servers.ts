@@ -2,6 +2,7 @@ import { request } from './http'
 import type {
   AgentKeyResult,
   CreateServerInput,
+  CreateServerResult,
   Paged,
   Server,
   ServerDetail,
@@ -18,8 +19,8 @@ export function getServer(serverId: number): Promise<ServerDetail> {
   return request<ServerDetail>(`/api/servers/${serverId}`)
 }
 
-export function createServer(input: CreateServerInput): Promise<Server> {
-  return request<Server>('/api/servers', { method: 'POST', body: input })
+export function createServer(input: CreateServerInput): Promise<CreateServerResult> {
+  return request<CreateServerResult>('/api/servers', { method: 'POST', body: input })
 }
 
 export function updateServer(serverId: number, input: UpdateServerInput): Promise<Server> {

@@ -112,6 +112,10 @@ function onPageChange(nextPage: number, nextSize: number) {
   void load()
 }
 
+function onServerCreated(id: number) {
+  void router.push(`/servers/${id}`)
+}
+
 async function toggleStatus(server: ServerItem) {
   const next: ServerStatus = server.status === 'disabled' ? 'active' : 'disabled'
   statusUpdatingId.value = server.id
@@ -228,6 +232,7 @@ onMounted(() => {
       :open="showCreate"
       @close="showCreate = false"
       @saved="reload"
+      @created="onServerCreated"
     />
     <ServerFormDialog
       :open="editTarget !== null"

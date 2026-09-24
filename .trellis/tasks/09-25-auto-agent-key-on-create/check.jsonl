@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "校验后端实现满足质量门槛（测试、错误处理、命名）"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "校验事务写法与 agents/servers 写入的一致性"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "校验前端 typecheck/lint/build 与组件规范"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "校验是否复用既有 key 生成/命令展示逻辑而非重复实现"}

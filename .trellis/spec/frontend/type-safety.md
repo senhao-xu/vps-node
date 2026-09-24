@@ -29,7 +29,7 @@ const err = asApiError(payload); // type guard over unknown
 if (err) throw new ApiError(err.error.code, err.error.message);
 ```
 
-- Secrets: user tokens use `OneTimeSecret.vue` — plaintext shown exactly once after create/reset/rotate. The per-server **agent key** is different: it is retrievable at any time (`GET /api/servers/:id/agent-key`, decrypted from `key_enc`) and reset via `POST`, so the Server detail page shows/copies it directly. List/detail DTOs never contain secrets (`key_hash`/`key_enc` are excluded by the backend sweep test).
+- Secrets: user tokens use `OneTimeSecret.vue` — plaintext shown exactly once after create/reset/rotate. The per-server **agent key** is different: it is auto-issued on `POST /api/servers` (201 carries `agent_key`, typed as `CreateServerResult = Server & { agent_key: string }`), retrievable at any time (`GET /api/servers/:id/agent-key`, decrypted from `key_enc`) and reset via `POST`, so the Server detail page shows/copies it directly. List/detail DTOs never contain secrets (`key_hash`/`key_enc` are excluded by the backend sweep test).
 - Derived state: user `expired` display state is derived from `expires_at` client-side (`displayUserStatus`); stored `status` filter uses backend values.
 
 ---

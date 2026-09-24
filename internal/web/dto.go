@@ -161,6 +161,11 @@ type serverDTO struct {
 	CreatedAt     string  `json:"created_at"`
 }
 
+type serverCreateDTO struct {
+	serverDTO
+	AgentKey string `json:"agent_key"`
+}
+
 type serverDetailDTO struct {
 	serverDTO
 	Revision int64         `json:"revision"`

@@ -509,6 +509,36 @@ func TestServerAgentKeyLifecycle(t *testing.T) {
 	}
 }
 
+func TestServerCreateGeneratesAgentKey(t *testing.T) {
+	e := newTestEnv(t)
+	cookie := e.login(t)
+
+	resp, body := e.do(t, "POST", "/api/servers", map[string]any{"name": "s1"}, cookie)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("create server: %d %s", resp.StatusCode, body)
+	}
+	created := jsonMap(t, body)
+	agentKey, _ := created["agent_key"].(string)
+	if agentKey == "" {
+		t.Fatalf("create server must return a non-empty agent_key, got %s", body)
+	}
+	assertNoSecrets(t, body)
+	serverID := int64(created["id"].(float64))
+
+	resp, body = e.do(t, "GET", fmt.Sprintf("/api/servers/%d/agent-key", serverID), nil, cookie)
+	if resp.StatusCode != http.StatusOK || jsonMap(t, body)["agent_key"] != agentKey {
+		t.Fatalf("issued key must be readable right after creation: %d %s", resp.StatusCode, body)
+	}
+
+	if resp, body = e.doAgent(t, "POST", "/api/agent/heartbeat", validHB(), agentKey); resp.StatusCode != http.StatusOK {
+		t.Fatalf("issued key must authenticate: %d %s", resp.StatusCode, body)
+	}
+
+	if rev := e.revision(t, serverID); rev != 0 {
+		t.Fatalf("creating a server must not bump its revision, got %d", rev)
+	}
+}
+
 func TestServerDetailShowsAgentAndRevision(t *testing.T) {
 	e := newTestEnv(t)
 	cookie := e.login(t)

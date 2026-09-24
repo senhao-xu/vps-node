@@ -19,6 +19,7 @@ const props = withDefaults(
 const emit = defineEmits<{
   (e: 'close'): void
   (e: 'saved'): void
+  (e: 'created', id: number): void
 }>()
 
 const name = ref('')
@@ -52,10 +53,11 @@ async function submit() {
         name: name.value.trim(),
         status: status.value,
       })
+      emit('saved')
     } else {
-      await createServer({ name: name.value.trim() })
+      const created = await createServer({ name: name.value.trim() })
+      emit('created', created.id)
     }
-    emit('saved')
     emit('close')
   } catch (err) {
     error.value = errorMessage(err)

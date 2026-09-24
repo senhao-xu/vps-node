@@ -49,6 +49,33 @@ func (r *Repo) CreateServer(ctx context.Context, name, status string) (int64, er
 	return res.LastInsertId()
 }
 
+func (r *Repo) CreateServerWithAgentKey(ctx context.Context, name, status, keyHash string, keyEnc []byte) (int64, error) {
+	if status == "" {
+		status = ServerStatusActive
+	}
+	now := nowUnix()
+	var id int64
+	err := Tx(ctx, r.DB, func(tx *sql.Tx) error {
+		res, err := tx.ExecContext(ctx,
+			`INSERT INTO servers (name, status, created_at, updated_at) VALUES (?, ?, ?, ?)`,
+			name, status, now, now)
+		if err != nil {
+			return mapErr(err)
+		}
+		if id, err = res.LastInsertId(); err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx,
+			`INSERT INTO agents (server_id, key_hash, key_enc, version, created_at, updated_at) VALUES (?, ?, ?, '', ?, ?)`,
+			id, keyHash, keyEnc, now, now)
+		return mapErr(err)
+	})
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
 func (r *Repo) GetServer(ctx context.Context, id int64) (Server, error) {
 	row := r.DB.QueryRowContext(ctx, serverSelect+` WHERE id = ?`, id)
 	return scanServer(row.Scan)

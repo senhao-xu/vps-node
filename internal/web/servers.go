@@ -65,7 +65,17 @@ func (h *Handler) handleServerCreate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	id, err := h.repo.CreateServer(r.Context(), req.Name, repo.ServerStatusActive)
+	key, err := adminauth.NewToken()
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	keyEnc, err := secrets.Encrypt(h.appKey, []byte(key))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	id, err := h.repo.CreateServerWithAgentKey(r.Context(), req.Name, repo.ServerStatusActive, adminauth.HashToken(key), keyEnc)
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -75,7 +85,7 @@ func (h *Handler) handleServerCreate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusCreated, toServerDTO(s, 0, 0))
+	httpx.WriteJSON(w, http.StatusCreated, serverCreateDTO{serverDTO: toServerDTO(s, 0, 0), AgentKey: key})
 }
 
 func validateServerName(name string) error {
