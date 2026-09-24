@@ -314,7 +314,7 @@ Query (all optional, combinable): `server_id` (exact match), `protocol` (`shadow
 { "id": 1, "server_id": 1, "address": "hk01.example.com", "ipv6_enabled": false, "ipv6_address": "", "name": "HK-SS", "protocol": "shadowsocks", "port": 8388, "rate": 1, "tags": [], "status": "active", "server": { "id": 1, "name": "HK-1" }, "created_at": "..." }
 ```
 
-Every node DTO carries `server: { id, name }` referencing its owning server. `address` is the user-facing connection host used to render subscriptions. `rate` is the traffic multiplier (default `1`) and `tags` is a string array. `ipv6_enabled` (default `false`) advertises an extra IPv6 entry in subscriptions and `ipv6_address` is its IPv6-literal host; when empty or disabled the subscription renders only `address`.
+Every node DTO carries `server: { id, name }` referencing its owning server. `address` is the user-facing connection host used to render subscriptions. `rate` is the traffic multiplier (default `1`) and `tags` is a string array. `ipv6_enabled` (default `false`) advertises an extra IPv6 entry in subscriptions and `ipv6_address` is its connection host (an IPv6 literal or a domain resolving to AAAA); when empty or disabled the subscription renders only `address`.
 
 Protocol secrets are never exposed.
 
@@ -324,7 +324,7 @@ Protocol secrets are never exposed.
 { "server_id": 1, "address": "hk01.example.com", "ipv6_enabled": true, "ipv6_address": "2001:db8::1", "name": "HK-SS", "protocol": "shadowsocks", "port": 8388, "rate": 1.5, "tags": ["hk"], "settings": { "cipher": "2022-blake3-aes-128-gcm" } }
 ```
 
-`address` is required (1-255 characters). Node names are not unique per server (a copied node keeps its source name), but `port` must be unique among the server's `active` nodes; a duplicate active port returns `409 conflict`. `rate` is an optional positive traffic multiplier (default `1`); `tags` is an optional array of at most 20 non-empty strings of at most 32 characters. Invalid values return `422 validation`. `ipv6_enabled` is optional (default `false`); a non-empty `ipv6_address` must be an IPv6 literal (at most 255 characters), and enabling it without an address returns `422 validation`.
+`address` is required (1-255 characters). Node names are not unique per server (a copied node keeps its source name), but `port` must be unique among the server's `active` nodes; a duplicate active port returns `409 conflict`. `rate` is an optional positive traffic multiplier (default `1`); `tags` is an optional array of at most 20 non-empty strings of at most 32 characters. Invalid values return `422 validation`. `ipv6_enabled` is optional (default `false`); `ipv6_address` accepts a host of at most 255 characters (IPv6 literal or domain, mirroring `address`), and enabling it without an address returns `422 validation`.
 
 `settings` is the protocol settings object, validated against a per-protocol allowlist; unknown keys in a validated section return `422 validation`, and validated sections deep-merge leaf by leaf. The reserved free-form sections `tls_settings`, `network_settings`, `multiplex`, `utls` (vless) and `obfs_settings` (shadowsocks) accept arbitrary JSON objects: a supplied section replaces the stored one as a whole, is preserved verbatim, and is never rendered, so it is an extension placeholder rather than runtime configuration. Public values are stored in `nodes.protocol_settings`; private material is encrypted at rest by Panel and never echoed.
 

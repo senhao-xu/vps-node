@@ -225,16 +225,6 @@ function normaliseServerPort(raw: string | number | null): { present: boolean; v
   return { present: true, value: Number.isInteger(value) ? value : null }
 }
 
-function isIPv6Literal(value: string): boolean {
-  if (!value.includes(':')) return false
-  const halves = value.split('::')
-  if (halves.length > 2) return false
-  const groups = halves.flatMap((half) => (half ? half.split(':') : []))
-  if (groups.some((group) => !/^[0-9a-fA-F]{1,4}$/.test(group))) return false
-  if (halves.length === 1) return groups.length === 8
-  return groups.length < 8
-}
-
 const tagsPayload = computed(() => parseList(tags.value))
 
 const settingsPayload = computed<NodeSettingsInput | undefined>(() => {
@@ -298,7 +288,7 @@ const validationMessage = computed(() => {
   if (address.value.trim().length > 255) return '节点地址最长 255 个字符'
   const ipv6 = ipv6Address.value.trim()
   if (ipv6Enabled.value && !ipv6) return '启用 IPv6 入口后请填写 IPv6 地址'
-  if (ipv6 && !isIPv6Literal(ipv6)) return 'IPv6 地址格式不正确'
+  if (ipv6.length > 255) return 'IPv6 地址最长 255 个字符'
   const portValue = port.value
   if (portValue === null || !Number.isInteger(portValue) || portValue < 1 || portValue > 65535) {
     return '端口必须是 1-65535 的整数'
@@ -519,7 +509,7 @@ async function submit() {
             id="node-ipv6-address"
             v-model="ipv6Address"
             type="text"
-            placeholder="例如 2001:db8::1"
+            placeholder="例如 2001:db8::1 或 v6.example.com"
           >
           <p class="field-hint">
             启用后订阅会额外生成一条使用该 IPv6 地址的节点条目，端口与协议参数不变。

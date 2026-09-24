@@ -1180,25 +1180,31 @@ func TestNodeIPv6Entry(t *testing.T) {
 		t.Fatalf("ipv6 fields must be echoed: %s", body)
 	}
 
+	resp, body = e.do(t, "POST", "/api/nodes", map[string]any{
+		"server_id": serverID, "address": "hk01.example.com", "name": "enabled-without-address", "protocol": "shadowsocks", "port": 8389,
+		"ipv6_enabled": true, "settings": map[string]any{"cipher": "2022-blake3-aes-128-gcm"},
+	}, cookie)
+	if resp.StatusCode != http.StatusUnprocessableEntity || errorCode(t, body) != "validation" {
+		t.Fatalf("enabled without address must be 422 validation, got %d %s", resp.StatusCode, body)
+	}
+
 	for _, tc := range []struct {
 		name string
 		port int
-		ipv6 any
+		ipv6 string
 	}{
-		{"enabled-without-address", 8389, true},
-		{"ipv4-literal", 8390, "1.2.3.4"},
-		{"hostname", 8391, "v6.example.com"},
+		{"hostname", 8390, "v6.example.com"},
+		{"ipv4-literal", 8391, "1.2.3.4"},
 	} {
-		payload := map[string]any{
+		resp, body := e.do(t, "POST", "/api/nodes", map[string]any{
 			"server_id": serverID, "address": "hk01.example.com", "name": tc.name, "protocol": "shadowsocks", "port": tc.port,
-			"ipv6_enabled": true, "settings": map[string]any{"cipher": "2022-blake3-aes-128-gcm"},
+			"ipv6_enabled": true, "ipv6_address": tc.ipv6, "settings": map[string]any{"cipher": "2022-blake3-aes-128-gcm"},
+		}, cookie)
+		if resp.StatusCode != http.StatusCreated {
+			t.Fatalf("%s must be accepted, got %d %s", tc.name, resp.StatusCode, body)
 		}
-		if tc.name != "enabled-without-address" {
-			payload["ipv6_address"] = tc.ipv6
-		}
-		resp, body := e.do(t, "POST", "/api/nodes", payload, cookie)
-		if resp.StatusCode != http.StatusUnprocessableEntity || errorCode(t, body) != "validation" {
-			t.Fatalf("%s must be 422 validation, got %d %s", tc.name, resp.StatusCode, body)
+		if got := jsonMap(t, body)["ipv6_address"]; got != tc.ipv6 {
+			t.Fatalf("%s ipv6_address: got %v", tc.name, got)
 		}
 	}
 

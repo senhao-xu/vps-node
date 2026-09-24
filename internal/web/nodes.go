@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"net"
 	"net/http"
 	"strings"
 
@@ -215,10 +214,6 @@ func validateNodeIPv6(enabled bool, address string) error {
 	}
 	if len(address) > 255 {
 		return errValidation("ipv6_address must be at most 255 characters")
-	}
-	ip := net.ParseIP(address)
-	if ip == nil || ip.To4() != nil {
-		return errValidation("ipv6_address must be an IPv6 literal")
 	}
 	return nil
 }
