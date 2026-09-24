@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 2
-- **Last Active**: 2026-09-23
+- **Total Sessions**: 3
+- **Last Active**: 2026-09-24
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~94 | Active |
+| `journal-1.md` | ~115 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 3 | 2026-09-24 | 节点可选 IPv6 入口（订阅追加 v6 条目） | `b60efbd` | `main` |
 | 2 | 2026-09-23 | 节点编辑回显公开协议配置 | `2086dfb` | `main` |
 | 1 | 2026-09-22 | 访问站点统计：Agent 采集目标站点 + Panel 存储/展示 | `0fdb03d` | `main` |
 <!-- @@@/auto:session-history -->

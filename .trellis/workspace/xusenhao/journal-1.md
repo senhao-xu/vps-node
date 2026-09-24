@@ -92,3 +92,24 @@ GET /api/nodes/{id} 详情 DTO 新增 settings 字段回显公开协议配置（
 ### Status
 
 [OK] **Completed**
+
+
+## Session 3: 节点可选 IPv6 入口（订阅追加 v6 条目）
+
+**Date**: 2026-09-24
+**Task**: 节点可选 IPv6 入口（订阅追加 v6 条目）
+**Branch**: `main`
+
+### Summary
+
+节点新增 ipv6_enabled/ipv6_address（迁移 0004，纯加列）。启用后订阅（Clash/base64）由 subscription.expandIPv6 追加 {name}-v6 条目，端口/凭据/参数与主条目一致；单 inbound 不变，流量按 (user,node) 合并、visit 日志按 client_ip 区分地址族，agent 无需升级。含 repo/web/订阅/前端表单改动、docs/api-contract.md 最小 diff 与 spec §9。全部验证命令通过。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b60efbd` | (see git log) |
+
+### Status
+
+[OK] **Completed**
