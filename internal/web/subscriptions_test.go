@@ -262,6 +262,55 @@ func TestSubscriptionNegotiationAndLogging(t *testing.T) {
 	}
 }
 
+func TestSubscriptionIPv6EntryRendering(t *testing.T) {
+	e := newTestEnv(t)
+	cookie := e.login(t)
+	ctx := context.Background()
+	server := e.seedServer(t, "ipv6")
+	node, err := e.repo.CreateNode(ctx, repo.NewNode{
+		ServerID: server, Address: "hk01.example.com", IPv6Enabled: true, IPv6Address: "2001:db8::1",
+		Name: "hk-ss", Protocol: repo.ProtocolShadowsocks, Port: 443,
+		ProtocolSettings: `{"cipher":"2022-blake3-aes-128-gcm"}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	user := e.seedUser(t, "ipv6-user")
+	if err := e.repo.AuthorizeUserNode(ctx, user, node); err != nil {
+		t.Fatal(err)
+	}
+	resp, body := e.do(t, "POST", "/api/users/"+formatID(user)+"/subscription", nil, cookie)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatal(body)
+	}
+	link := extractPath(subscriptionURL(t, body))
+
+	render := func() string {
+		t.Helper()
+		resp, body := e.do(t, "GET", link+"?flag=general", nil, nil)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("subscription: %d %s", resp.StatusCode, body)
+		}
+		decoded, err := base64.StdEncoding.DecodeString(body)
+		if err != nil {
+			t.Fatalf("decode subscription: %v", err)
+		}
+		return string(decoded)
+	}
+
+	text := render()
+	if !strings.Contains(text, "hk01.example.com:443") || !strings.Contains(text, "[2001:db8::1]:443") || !strings.Contains(text, "hk-ss-v6") {
+		t.Fatalf("expected a primary and an IPv6 entry, got %q", text)
+	}
+
+	if err := e.repo.UpdateNodeAndBump(ctx, node, server, "hk01.example.com", "hk-ss", "2001:db8::1", false, 443, `{"cipher":"2022-blake3-aes-128-gcm"}`, nil, 1, "[]", nil); err != nil {
+		t.Fatal(err)
+	}
+	if text := render(); strings.Contains(text, "[2001:db8::1]:443") {
+		t.Fatalf("disabled IPv6 must not add an entry, got %q", text)
+	}
+}
+
 func formatID(id int64) string { return strconv.FormatInt(id, 10) }
 
 func extractPath(raw string) string {

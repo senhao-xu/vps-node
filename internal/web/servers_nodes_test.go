@@ -1160,3 +1160,72 @@ func TestNodeCopyReusesSourceAndStartsDisabled(t *testing.T) {
 		t.Fatalf("enable after freeing the port: %d %s", resp.StatusCode, body)
 	}
 }
+
+func TestNodeIPv6Entry(t *testing.T) {
+	e := newTestEnv(t)
+	cookie := e.login(t)
+	serverID := e.seedServer(t, "ipv6")
+
+	resp, body := e.do(t, "POST", "/api/nodes", map[string]any{
+		"server_id": serverID, "address": "hk01.example.com", "name": "hk-ss", "protocol": "shadowsocks", "port": 8388,
+		"ipv6_enabled": true, "ipv6_address": "2001:db8::1",
+		"settings": map[string]any{"cipher": "2022-blake3-aes-128-gcm"},
+	}, cookie)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("create with ipv6: %d %s", resp.StatusCode, body)
+	}
+	created := jsonMap(t, body)
+	nodeID := int64(created["id"].(float64))
+	if created["ipv6_enabled"] != true || created["ipv6_address"] != "2001:db8::1" {
+		t.Fatalf("ipv6 fields must be echoed: %s", body)
+	}
+
+	for _, tc := range []struct {
+		name string
+		port int
+		ipv6 any
+	}{
+		{"enabled-without-address", 8389, true},
+		{"ipv4-literal", 8390, "1.2.3.4"},
+		{"hostname", 8391, "v6.example.com"},
+	} {
+		payload := map[string]any{
+			"server_id": serverID, "address": "hk01.example.com", "name": tc.name, "protocol": "shadowsocks", "port": tc.port,
+			"ipv6_enabled": true, "settings": map[string]any{"cipher": "2022-blake3-aes-128-gcm"},
+		}
+		if tc.name != "enabled-without-address" {
+			payload["ipv6_address"] = tc.ipv6
+		}
+		resp, body := e.do(t, "POST", "/api/nodes", payload, cookie)
+		if resp.StatusCode != http.StatusUnprocessableEntity || errorCode(t, body) != "validation" {
+			t.Fatalf("%s must be 422 validation, got %d %s", tc.name, resp.StatusCode, body)
+		}
+	}
+
+	resp, body = e.do(t, "PUT", fmt.Sprintf("/api/nodes/%d", nodeID), map[string]any{"ipv6_address": "2001:db8::2"}, cookie)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("update ipv6 address: %d %s", resp.StatusCode, body)
+	}
+	updated := jsonMap(t, body)
+	if updated["ipv6_enabled"] != true || updated["ipv6_address"] != "2001:db8::2" {
+		t.Fatalf("partial update must keep ipv6_enabled: %s", body)
+	}
+
+	resp, body = e.do(t, "POST", fmt.Sprintf("/api/nodes/%d/copy", nodeID), nil, cookie)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("copy: %d %s", resp.StatusCode, body)
+	}
+	copied := jsonMap(t, body)
+	if copied["ipv6_enabled"] != true || copied["ipv6_address"] != "2001:db8::2" {
+		t.Fatalf("copy must reuse ipv6 fields: %s", body)
+	}
+
+	resp, body = e.do(t, "PUT", fmt.Sprintf("/api/nodes/%d", nodeID), map[string]any{"ipv6_enabled": false}, cookie)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("disable ipv6: %d %s", resp.StatusCode, body)
+	}
+	disabled := jsonMap(t, body)
+	if disabled["ipv6_enabled"] != false || disabled["ipv6_address"] != "2001:db8::2" {
+		t.Fatalf("disabling must keep the stored address: %s", body)
+	}
+}

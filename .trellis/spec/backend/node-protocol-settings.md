@@ -47,6 +47,7 @@ Reality generation response:
 | Hysteria2 `obfs.password` over 64 chars | `422 validation` |
 | Hysteria2 `hop_interval` not `start-end`, out of 1-65535, or start > end | `422 validation` |
 | Unknown protocol setting key (top-level, or nested inside a validated section) | `422 validation` |
+| `ipv6_enabled` true without `ipv6_address`, or `ipv6_address` not an IPv6 literal | `422 validation` |
 | Reserved free-form section (`tls_settings`/`network_settings`/`multiplex`/`utls`/`obfs_settings`) containing arbitrary keys | accepted, stored verbatim, inert |
 | Reality generation without admin session | `401 unauthorized` |
 
@@ -112,3 +113,10 @@ Start from stored values, merge only allowlisted supplied fields, validate the c
 - When a field is added to `nodeDTO` (e.g. `server: {id, name}`), EVERY query path that feeds it must populate it: `ListNodesPage`, `ListNodesByServer`, `ListNodesByIDs`, plus the create/update handlers. A path that skips population emits a zero-value object and silently violates the contract.
 - Prefer one shared SELECT helper (join `servers`, shared row scanner) across node list queries instead of per-method inline SQL.
 - Regression pattern: handler test asserts the field is present and non-zero for each endpoint family.
+
+## 9. Optional IPv6 Entry
+
+- `nodes.ipv6_enabled` (INTEGER 0/1) + `nodes.ipv6_address` (TEXT) are a **client-facing** pair: they only affect subscription output, never the sing-box inbound, so no agent/kernel change is involved and traffic stays merged per node (`Pair{UserID, NodeID}`); visit logs distinguish families via `client_ip`.
+- `internal/subscription.expandIPv6` is the single place that duplicates a node into `[primary, "{name}-v6"]`; it skips the extra entry when the address is empty or equals `address`. Both `RenderGeneral*` and `RenderClash*` iterate `expandNodes`, so a new subscription format must do the same or it silently drops the IPv6 entry.
+- The Clash proxy name must stay unique per rendered entry — the `-v6` suffix is what keeps `expandGroups` correct.
+- Adding a column to `nodes` needs `ALTER TABLE ... ADD COLUMN` (no table rebuild) plus an update to every explicit column list: `nodeSelect`, `nodeSelectWithServer`, `insertNodeExec`, `UpdateNodeSpec`, `UpdateNodeAndBump` (both UPDATE branches), `scanNode`, `scanNodeWithServerName`, and `ListSubscriptionNodes`. Missing one shows up as a Scan column-count error or a zero-value field, never as a loud failure.

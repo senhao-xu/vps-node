@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "逐条核对验证命令与禁止模式（无注释、无 any、secrets 不入 DTO/日志）"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "核对 v6 校验返回码与错误信封，且不得泄露 secret"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "核对 types.ts 与 Go DTO 同步、前端无 any/casts、边界校验"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "核对跨层 round-trip、空值/非法值边界与订阅消费方不重复定义契约"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "核对迁移幂等、列清单/Scan 对齐、unique 冲突语义未被破坏"}
+{"file": "docs/api-contract.md", "reason": "核对实现与 binding contract 的 diff 完全一致，无越界改动"}

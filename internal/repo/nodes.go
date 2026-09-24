@@ -11,6 +11,8 @@ type Node struct {
 	ID               int64
 	ServerID         int64
 	Address          string
+	IPv6Enabled      bool
+	IPv6Address      string
 	Name             string
 	Protocol         string
 	Port             int
@@ -36,6 +38,8 @@ type NodeFilter struct {
 type NewNode struct {
 	ServerID         int64
 	Address          string
+	IPv6Enabled      bool
+	IPv6Address      string
 	Name             string
 	Protocol         string
 	Port             int
@@ -56,9 +60,9 @@ const (
 	ProtocolAnyTLS      = "anytls"
 )
 
-const nodeSelect = `SELECT id, server_id, address, name, protocol, port, protocol_settings, rate, tags, secret_enc, status, created_at, updated_at FROM nodes`
+const nodeSelect = `SELECT id, server_id, address, ipv6_enabled, ipv6_address, name, protocol, port, protocol_settings, rate, tags, secret_enc, status, created_at, updated_at FROM nodes`
 
-const nodeSelectWithServer = `SELECT n.id, n.server_id, n.address, n.name, n.protocol, n.port, n.protocol_settings, n.rate, n.tags, n.secret_enc, n.status, n.created_at, n.updated_at, s.name
+const nodeSelectWithServer = `SELECT n.id, n.server_id, n.address, n.ipv6_enabled, n.ipv6_address, n.name, n.protocol, n.port, n.protocol_settings, n.rate, n.tags, n.secret_enc, n.status, n.created_at, n.updated_at, s.name
 	FROM nodes n JOIN servers s ON s.id = n.server_id`
 
 func insertNodeExec(ctx context.Context, q execer, n NewNode) (int64, error) {
@@ -76,9 +80,9 @@ func insertNodeExec(ctx context.Context, q execer, n NewNode) (int64, error) {
 	}
 	now := nowUnix()
 	res, err := q.ExecContext(ctx,
-		`INSERT INTO nodes (server_id, address, name, protocol, port, protocol_settings, rate, tags, secret_enc, status, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		n.ServerID, n.Address, n.Name, n.Protocol, n.Port, n.ProtocolSettings, n.Rate, n.Tags, n.SecretEnc, n.Status, now, now)
+		`INSERT INTO nodes (server_id, address, ipv6_enabled, ipv6_address, name, protocol, port, protocol_settings, rate, tags, secret_enc, status, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		n.ServerID, n.Address, ipv6EnabledInt(n.IPv6Enabled), n.IPv6Address, n.Name, n.Protocol, n.Port, n.ProtocolSettings, n.Rate, n.Tags, n.SecretEnc, n.Status, now, now)
 	if err != nil {
 		return 0, mapErr(err)
 	}
@@ -172,10 +176,10 @@ func (r *Repo) ListNodesByIDs(ctx context.Context, ids []int64) ([]Node, error) 
 	return collectNodesWithServerName(rows)
 }
 
-func (r *Repo) UpdateNodeSpec(ctx context.Context, id int64, address, name string, port int, settings string, secretEnc []byte, rate float64, tags string) error {
+func (r *Repo) UpdateNodeSpec(ctx context.Context, id int64, address, name, ipv6Address string, ipv6Enabled bool, port int, settings string, secretEnc []byte, rate float64, tags string) error {
 	_, err := r.DB.ExecContext(ctx,
-		`UPDATE nodes SET address = ?, name = ?, port = ?, protocol_settings = ?, secret_enc = ?, rate = ?, tags = ?, updated_at = ? WHERE id = ?`,
-		address, name, port, settings, secretEnc, rate, tags, nowUnix(), id)
+		`UPDATE nodes SET address = ?, ipv6_enabled = ?, ipv6_address = ?, name = ?, port = ?, protocol_settings = ?, secret_enc = ?, rate = ?, tags = ?, updated_at = ? WHERE id = ?`,
+		address, ipv6EnabledInt(ipv6Enabled), ipv6Address, name, port, settings, secretEnc, rate, tags, nowUnix(), id)
 	return mapErr(err)
 }
 
@@ -215,14 +219,23 @@ func collectNodesWithServerName(rows *sql.Rows) ([]Node, error) {
 	return nodes, rows.Err()
 }
 
+func ipv6EnabledInt(enabled bool) int {
+	if enabled {
+		return 1
+	}
+	return 0
+}
+
 func scanNode(scan func(dest ...any) error) (Node, error) {
 	var n Node
 	var secretEnc []byte
 	var createdAt, updatedAt int64
-	err := scan(&n.ID, &n.ServerID, &n.Address, &n.Name, &n.Protocol, &n.Port, &n.ProtocolSettings, &n.Rate, &n.Tags, &secretEnc, &n.Status, &createdAt, &updatedAt)
+	var ipv6Enabled int
+	err := scan(&n.ID, &n.ServerID, &n.Address, &ipv6Enabled, &n.IPv6Address, &n.Name, &n.Protocol, &n.Port, &n.ProtocolSettings, &n.Rate, &n.Tags, &secretEnc, &n.Status, &createdAt, &updatedAt)
 	if err != nil {
 		return Node{}, mapErr(err)
 	}
+	n.IPv6Enabled = ipv6Enabled != 0
 	n.SecretEnc = secretEnc
 	n.CreatedAt = toTime(createdAt)
 	n.UpdatedAt = toTime(updatedAt)
@@ -233,10 +246,12 @@ func scanNodeWithServerName(scan func(dest ...any) error) (Node, error) {
 	var n Node
 	var secretEnc []byte
 	var createdAt, updatedAt int64
-	err := scan(&n.ID, &n.ServerID, &n.Address, &n.Name, &n.Protocol, &n.Port, &n.ProtocolSettings, &n.Rate, &n.Tags, &secretEnc, &n.Status, &createdAt, &updatedAt, &n.ServerName)
+	var ipv6Enabled int
+	err := scan(&n.ID, &n.ServerID, &n.Address, &ipv6Enabled, &n.IPv6Address, &n.Name, &n.Protocol, &n.Port, &n.ProtocolSettings, &n.Rate, &n.Tags, &secretEnc, &n.Status, &createdAt, &updatedAt, &n.ServerName)
 	if err != nil {
 		return Node{}, mapErr(err)
 	}
+	n.IPv6Enabled = ipv6Enabled != 0
 	n.SecretEnc = secretEnc
 	n.CreatedAt = toTime(createdAt)
 	n.UpdatedAt = toTime(updatedAt)

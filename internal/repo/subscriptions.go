@@ -87,7 +87,7 @@ func (r *Repo) ResolveSubscription(ctx context.Context, tokenHash string) (User,
 }
 
 func (r *Repo) ListSubscriptionNodes(ctx context.Context, userID int64) ([]SubscriptionNode, error) {
-	rows, err := r.DB.QueryContext(ctx, `SELECT n.id, n.server_id, n.address, n.name, n.protocol, n.port, n.protocol_settings, n.secret_enc, n.status, n.created_at, n.updated_at
+	rows, err := r.DB.QueryContext(ctx, `SELECT n.id, n.server_id, n.address, n.ipv6_enabled, n.ipv6_address, n.name, n.protocol, n.port, n.protocol_settings, n.secret_enc, n.status, n.created_at, n.updated_at
 		FROM nodes n JOIN user_nodes un ON un.node_id = n.id JOIN servers s ON s.id = n.server_id
 		WHERE un.user_id = ? AND n.status = 'active' AND s.status = 'active' ORDER BY n.id`, userID)
 	if err != nil {
@@ -98,9 +98,11 @@ func (r *Repo) ListSubscriptionNodes(ctx context.Context, userID int64) ([]Subsc
 	for rows.Next() {
 		var n SubscriptionNode
 		var created, updated int64
-		if err := rows.Scan(&n.ID, &n.ServerID, &n.Address, &n.Name, &n.Protocol, &n.Port, &n.ProtocolSettings, &n.SecretEnc, &n.Status, &created, &updated); err != nil {
+		var ipv6Enabled int
+		if err := rows.Scan(&n.ID, &n.ServerID, &n.Address, &ipv6Enabled, &n.IPv6Address, &n.Name, &n.Protocol, &n.Port, &n.ProtocolSettings, &n.SecretEnc, &n.Status, &created, &updated); err != nil {
 			return nil, mapErr(err)
 		}
+		n.IPv6Enabled = ipv6Enabled != 0
 		n.CreatedAt, n.UpdatedAt = toTime(created), toTime(updated)
 		out = append(out, n)
 	}

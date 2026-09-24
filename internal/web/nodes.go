@@ -9,7 +9,9 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net"
 	"net/http"
+	"strings"
 
 	"vps-node/internal/httpx"
 	"vps-node/internal/repo"
@@ -61,14 +63,16 @@ func (h *Handler) handleNodeList(w http.ResponseWriter, r *http.Request) {
 }
 
 type createNodeRequest struct {
-	ServerID int64           `json:"server_id"`
-	Address  string          `json:"address"`
-	Name     string          `json:"name"`
-	Protocol string          `json:"protocol"`
-	Port     int             `json:"port"`
-	Rate     *float64        `json:"rate"`
-	Tags     *[]string       `json:"tags"`
-	Settings json.RawMessage `json:"settings"`
+	ServerID    int64           `json:"server_id"`
+	Address     string          `json:"address"`
+	IPv6Enabled bool            `json:"ipv6_enabled"`
+	IPv6Address string          `json:"ipv6_address"`
+	Name        string          `json:"name"`
+	Protocol    string          `json:"protocol"`
+	Port        int             `json:"port"`
+	Rate        *float64        `json:"rate"`
+	Tags        *[]string       `json:"tags"`
+	Settings    json.RawMessage `json:"settings"`
 }
 
 func (h *Handler) handleNodeCreate(w http.ResponseWriter, r *http.Request) {
@@ -91,6 +95,11 @@ func (h *Handler) handleNodeCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := validateNodeSpec(req.Address, req.Name, req.Protocol, req.Port); err != nil {
+		writeErr(w, err)
+		return
+	}
+	req.IPv6Address = strings.TrimSpace(req.IPv6Address)
+	if err := validateNodeIPv6(req.IPv6Enabled, req.IPv6Address); err != nil {
 		writeErr(w, err)
 		return
 	}
@@ -120,6 +129,8 @@ func (h *Handler) handleNodeCreate(w http.ResponseWriter, r *http.Request) {
 	id, err := h.repo.CreateNodeAndBump(r.Context(), repo.NewNode{
 		ServerID:         req.ServerID,
 		Address:          req.Address,
+		IPv6Enabled:      req.IPv6Enabled,
+		IPv6Address:      req.IPv6Address,
 		Name:             req.Name,
 		Protocol:         req.Protocol,
 		Port:             req.Port,
@@ -194,6 +205,24 @@ func validateNodeMeta(rate float64, tags []string) error {
 	return nil
 }
 
+func validateNodeIPv6(enabled bool, address string) error {
+	address = strings.TrimSpace(address)
+	if address == "" {
+		if enabled {
+			return errValidation("ipv6_address is required when ipv6_enabled is true")
+		}
+		return nil
+	}
+	if len(address) > 255 {
+		return errValidation("ipv6_address must be at most 255 characters")
+	}
+	ip := net.ParseIP(address)
+	if ip == nil || ip.To4() != nil {
+		return errValidation("ipv6_address must be an IPv6 literal")
+	}
+	return nil
+}
+
 func (h *Handler) handleNodeGet(w http.ResponseWriter, r *http.Request) {
 	id, err := pathID(r)
 	if err != nil {
@@ -234,13 +263,15 @@ func (h *Handler) handleNodeGet(w http.ResponseWriter, r *http.Request) {
 }
 
 type updateNodeRequest struct {
-	Address  *string         `json:"address"`
-	Name     *string         `json:"name"`
-	Port     *int            `json:"port"`
-	Rate     *float64        `json:"rate"`
-	Tags     *[]string       `json:"tags"`
-	Settings json.RawMessage `json:"settings"`
-	Status   *string         `json:"status"`
+	Address     *string         `json:"address"`
+	IPv6Enabled *bool           `json:"ipv6_enabled"`
+	IPv6Address *string         `json:"ipv6_address"`
+	Name        *string         `json:"name"`
+	Port        *int            `json:"port"`
+	Rate        *float64        `json:"rate"`
+	Tags        *[]string       `json:"tags"`
+	Settings    json.RawMessage `json:"settings"`
+	Status      *string         `json:"status"`
 }
 
 func (h *Handler) handleNodeUpdate(w http.ResponseWriter, r *http.Request) {
@@ -261,8 +292,15 @@ func (h *Handler) handleNodeUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	address, name, port := current.Address, current.Name, current.Port
+	ipv6Enabled, ipv6Address := current.IPv6Enabled, current.IPv6Address
 	if req.Address != nil {
 		address = *req.Address
+	}
+	if req.IPv6Enabled != nil {
+		ipv6Enabled = *req.IPv6Enabled
+	}
+	if req.IPv6Address != nil {
+		ipv6Address = strings.TrimSpace(*req.IPv6Address)
 	}
 	if req.Name != nil {
 		name = *req.Name
@@ -288,6 +326,10 @@ func (h *Handler) handleNodeUpdate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
+	if err := validateNodeIPv6(ipv6Enabled, ipv6Address); err != nil {
+		writeErr(w, err)
+		return
+	}
 	if err := validateNodeMeta(rate, tags); err != nil {
 		writeErr(w, err)
 		return
@@ -304,7 +346,7 @@ func (h *Handler) handleNodeUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.repo.UpdateNodeAndBump(r.Context(), id, current.ServerID, address, name, port, settingsJSON, secretEnc, rate, string(tagsJSON), req.Status); err != nil {
+	if err := h.repo.UpdateNodeAndBump(r.Context(), id, current.ServerID, address, name, ipv6Address, ipv6Enabled, port, settingsJSON, secretEnc, rate, string(tagsJSON), req.Status); err != nil {
 		if err == repo.ErrConflict {
 			writeErr(w, errConflict("a node with this port is already enabled on this server"))
 			return
@@ -362,6 +404,8 @@ func (h *Handler) handleNodeCopy(w http.ResponseWriter, r *http.Request) {
 	newID, err := h.repo.CreateNodeAndBump(r.Context(), repo.NewNode{
 		ServerID:         current.ServerID,
 		Address:          current.Address,
+		IPv6Enabled:      current.IPv6Enabled,
+		IPv6Address:      current.IPv6Address,
 		Name:             current.Name,
 		Protocol:         current.Protocol,
 		Port:             current.Port,

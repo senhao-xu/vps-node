@@ -50,6 +50,8 @@ export type NodeBrief = {
   id: number
   server_id: number
   address: string
+  ipv6_enabled: boolean
+  ipv6_address: string
   name: string
   protocol: Protocol
   port: number
@@ -313,6 +315,8 @@ export type UpdateServerInput = {
 export type CreateNodeInput = {
   server_id: number
   address: string
+  ipv6_enabled?: boolean
+  ipv6_address?: string
   name: string
   protocol: Protocol
   port: number
@@ -323,6 +327,8 @@ export type CreateNodeInput = {
 
 export type UpdateNodeInput = {
   address?: string
+  ipv6_enabled?: boolean
+  ipv6_address?: string
   name?: string
   port?: number
   rate?: number

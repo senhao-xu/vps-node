@@ -338,6 +338,52 @@ func TestNodeOwnershipConstraints(t *testing.T) {
 	}
 }
 
+func TestNodeIPv6RoundTrip(t *testing.T) {
+	r := newTestRepo(t)
+	ctx := context.Background()
+
+	serverID := mustCreateServer(t, r, "s1")
+	id, err := r.CreateNode(ctx, repo.NewNode{
+		ServerID:    serverID,
+		Address:     "hk01.example.com",
+		IPv6Enabled: true,
+		IPv6Address: "2001:db8::1",
+		Name:        "hk-ss",
+		Protocol:    repo.ProtocolShadowsocks,
+		Port:        8388,
+	})
+	if err != nil {
+		t.Fatalf("create node: %v", err)
+	}
+
+	n, err := r.GetNode(ctx, id)
+	if err != nil {
+		t.Fatalf("get node: %v", err)
+	}
+	if !n.IPv6Enabled || n.IPv6Address != "2001:db8::1" {
+		t.Fatalf("ipv6 fields lost on create: %+v", n)
+	}
+
+	byServer, err := r.ListNodesByServer(ctx, serverID)
+	if err != nil || len(byServer) != 1 {
+		t.Fatalf("list by server: %v %d", err, len(byServer))
+	}
+	if !byServer[0].IPv6Enabled || byServer[0].IPv6Address != "2001:db8::1" {
+		t.Fatalf("ipv6 fields lost in join select: %+v", byServer[0])
+	}
+
+	if err := r.UpdateNodeAndBump(ctx, id, serverID, "hk01.example.com", "hk-ss", "2001:db8::2", false, 8388, "{}", nil, 1, "[]", nil); err != nil {
+		t.Fatalf("update node: %v", err)
+	}
+	n, err = r.GetNode(ctx, id)
+	if err != nil {
+		t.Fatalf("get node after update: %v", err)
+	}
+	if n.IPv6Enabled || n.IPv6Address != "2001:db8::2" {
+		t.Fatalf("ipv6 fields lost on update: %+v", n)
+	}
+}
+
 func TestListNodesPageFilters(t *testing.T) {
 	r := newTestRepo(t)
 	ctx := context.Background()

@@ -87,17 +87,19 @@ type nodeRefDTO struct {
 }
 
 type nodeDTO struct {
-	ID        int64      `json:"id"`
-	ServerID  int64      `json:"server_id"`
-	Address   string     `json:"address"`
-	Name      string     `json:"name"`
-	Protocol  string     `json:"protocol"`
-	Port      int        `json:"port"`
-	Rate      float64    `json:"rate"`
-	Tags      []string   `json:"tags"`
-	Status    string     `json:"status"`
-	Server    nodeRefDTO `json:"server"`
-	CreatedAt string     `json:"created_at"`
+	ID          int64      `json:"id"`
+	ServerID    int64      `json:"server_id"`
+	Address     string     `json:"address"`
+	IPv6Enabled bool       `json:"ipv6_enabled"`
+	IPv6Address string     `json:"ipv6_address"`
+	Name        string     `json:"name"`
+	Protocol    string     `json:"protocol"`
+	Port        int        `json:"port"`
+	Rate        float64    `json:"rate"`
+	Tags        []string   `json:"tags"`
+	Status      string     `json:"status"`
+	Server      nodeRefDTO `json:"server"`
+	CreatedAt   string     `json:"created_at"`
 }
 
 type nodeDetailDTO struct {
@@ -110,17 +112,19 @@ type nodeDetailDTO struct {
 
 func toNodeDTO(n repo.Node) nodeDTO {
 	return nodeDTO{
-		ID:        n.ID,
-		ServerID:  n.ServerID,
-		Address:   n.Address,
-		Name:      n.Name,
-		Protocol:  n.Protocol,
-		Port:      n.Port,
-		Rate:      n.Rate,
-		Tags:      nodeTags(n.Tags),
-		Status:    n.Status,
-		Server:    nodeRefDTO{ID: n.ServerID, Name: n.ServerName},
-		CreatedAt: rfc3339(n.CreatedAt),
+		ID:          n.ID,
+		ServerID:    n.ServerID,
+		Address:     n.Address,
+		IPv6Enabled: n.IPv6Enabled,
+		IPv6Address: n.IPv6Address,
+		Name:        n.Name,
+		Protocol:    n.Protocol,
+		Port:        n.Port,
+		Rate:        n.Rate,
+		Tags:        nodeTags(n.Tags),
+		Status:      n.Status,
+		Server:      nodeRefDTO{ID: n.ServerID, Name: n.ServerName},
+		CreatedAt:   rfc3339(n.CreatedAt),
 	}
 }
 

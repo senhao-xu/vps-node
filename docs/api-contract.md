@@ -311,20 +311,20 @@ Rotates the agent token of the server's agent. Response `200`: `{ "agent_token":
 Query (all optional, combinable): `server_id` (exact match), `protocol` (`shadowsocks|vless|hysteria2|anytls`), `status` (`active|disabled`), `q` (case-insensitive substring match on node name), plus `page` / `page_size`. Invalid enum values return `400 invalid_request`. Paginated node DTOs:
 
 ```json
-{ "id": 1, "server_id": 1, "address": "hk01.example.com", "name": "HK-SS", "protocol": "shadowsocks", "port": 8388, "rate": 1, "tags": [], "status": "active", "server": { "id": 1, "name": "HK-1" }, "created_at": "..." }
+{ "id": 1, "server_id": 1, "address": "hk01.example.com", "ipv6_enabled": false, "ipv6_address": "", "name": "HK-SS", "protocol": "shadowsocks", "port": 8388, "rate": 1, "tags": [], "status": "active", "server": { "id": 1, "name": "HK-1" }, "created_at": "..." }
 ```
 
-Every node DTO carries `server: { id, name }` referencing its owning server. `address` is the user-facing connection host used to render subscriptions. `rate` is the traffic multiplier (default `1`) and `tags` is a string array.
+Every node DTO carries `server: { id, name }` referencing its owning server. `address` is the user-facing connection host used to render subscriptions. `rate` is the traffic multiplier (default `1`) and `tags` is a string array. `ipv6_enabled` (default `false`) advertises an extra IPv6 entry in subscriptions and `ipv6_address` is its IPv6-literal host; when empty or disabled the subscription renders only `address`.
 
 Protocol secrets are never exposed.
 
 ### POST /api/nodes
 
 ```json
-{ "server_id": 1, "address": "hk01.example.com", "name": "HK-SS", "protocol": "shadowsocks", "port": 8388, "rate": 1.5, "tags": ["hk"], "settings": { "cipher": "2022-blake3-aes-128-gcm" } }
+{ "server_id": 1, "address": "hk01.example.com", "ipv6_enabled": true, "ipv6_address": "2001:db8::1", "name": "HK-SS", "protocol": "shadowsocks", "port": 8388, "rate": 1.5, "tags": ["hk"], "settings": { "cipher": "2022-blake3-aes-128-gcm" } }
 ```
 
-`address` is required (1-255 characters). Node names are not unique per server (a copied node keeps its source name), but `port` must be unique among the server's `active` nodes; a duplicate active port returns `409 conflict`. `rate` is an optional positive traffic multiplier (default `1`); `tags` is an optional array of at most 20 non-empty strings of at most 32 characters. Invalid values return `422 validation`.
+`address` is required (1-255 characters). Node names are not unique per server (a copied node keeps its source name), but `port` must be unique among the server's `active` nodes; a duplicate active port returns `409 conflict`. `rate` is an optional positive traffic multiplier (default `1`); `tags` is an optional array of at most 20 non-empty strings of at most 32 characters. Invalid values return `422 validation`. `ipv6_enabled` is optional (default `false`); a non-empty `ipv6_address` must be an IPv6 literal (at most 255 characters), and enabling it without an address returns `422 validation`.
 
 `settings` is the protocol settings object, validated against a per-protocol allowlist; unknown keys in a validated section return `422 validation`, and validated sections deep-merge leaf by leaf. The reserved free-form sections `tls_settings`, `network_settings`, `multiplex`, `utls` (vless) and `obfs_settings` (shadowsocks) accept arbitrary JSON objects: a supplied section replaces the stored one as a whole, is preserved verbatim, and is never rendered, so it is an extension placeholder rather than runtime configuration. Public values are stored in `nodes.protocol_settings`; private material is encrypted at rest by Panel and never echoed.
 
@@ -355,11 +355,11 @@ Response `200`: node DTO plus `user_count`, `online_users`, `server: { id, name 
 
 ### PUT /api/nodes/:id
 
-Partial update of `address`, `name`, `port`, `rate`, `tags`, `settings`, `status`. Protocol settings are merged with stored settings section by section; omitted public fields and secrets remain unchanged, and `certificate`/`private_key` must be replaced as a pair. A supplied reserved free-form section (`tls_settings`/`network_settings`/`multiplex`/`utls`/`obfs_settings`) replaces its stored value as a whole. Response `200`: node DTO. Changes bump the owning server revision. Enabling a node whose port is already used by an active node on the same server returns `409 conflict`.
+Partial update of `address`, `ipv6_enabled`, `ipv6_address`, `name`, `port`, `rate`, `tags`, `settings`, `status`. Protocol settings are merged with stored settings section by section; omitted public fields and secrets remain unchanged, and `certificate`/`private_key` must be replaced as a pair. A supplied reserved free-form section (`tls_settings`/`network_settings`/`multiplex`/`utls`/`obfs_settings`) replaces its stored value as a whole. Response `200`: node DTO. Changes bump the owning server revision. Enabling a node whose port is already used by an active node on the same server returns `409 conflict`.
 
 ### POST /api/nodes/:id/copy
 
-Duplicates a node verbatim onto the same server: name, address, port, protocol, `protocol_settings` and encrypted secrets are copied as-is. The copy starts `disabled` so it may temporarily reuse the source port; enabling it later requires freeing the port (enforced by the partial unique index on `(server_id, port)` for active nodes). Response `201`: the new node DTO. Bumps the server revision.
+Duplicates a node verbatim onto the same server: name, address, `ipv6_enabled`, `ipv6_address`, port, protocol, `protocol_settings` and encrypted secrets are copied as-is. The copy starts `disabled` so it may temporarily reuse the source port; enabling it later requires freeing the port (enforced by the partial unique index on `(server_id, port)` for active nodes). Response `201`: the new node DTO. Bumps the server revision.
 
 ### DELETE /api/nodes/:id
 
@@ -473,6 +473,12 @@ The default endpoint is `/s/:token`. It supports
 `flag=general` for standard Base64-encoded protocol links and `flag=clash-meta` for YAML.
 Matching Clash/Mihomo user agents select Clash Meta automatically. Invalid credentials return
 `404`; unavailable users return `403`. Responses contain only eligible authorized nodes.
+
+A node with `ipv6_enabled` and a non-empty `ipv6_address` different from `address` renders a
+second entry named `{name}-v6` whose host is `ipv6_address`; `port`, protocol parameters and
+credentials are identical to the primary entry. Both entries share the node's single inbound, so
+traffic and visit logs stay attributed to that node (the visit `client_ip` distinguishes the
+families).
 
 ---
 

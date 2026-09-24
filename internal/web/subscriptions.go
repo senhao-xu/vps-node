@@ -176,7 +176,11 @@ func (h *Handler) handlePublicSubscription(w http.ResponseWriter, r *http.Reques
 		if (n.Protocol == repo.ProtocolHysteria2 || n.Protocol == repo.ProtocolAnyTLS) && (fmt.Sprint(tlsSettings["server_name"]) == "" || secret["certificate"] == nil || secret["private_key"] == nil) {
 			continue
 		}
-		nodes = append(nodes, subscription.Node{ID: n.ID, Name: n.Name, Protocol: n.Protocol, Address: n.Address, Port: n.Port, Settings: settings, Secret: secret})
+		ipv6Address := ""
+		if n.IPv6Enabled {
+			ipv6Address = n.IPv6Address
+		}
+		nodes = append(nodes, subscription.Node{ID: n.ID, Name: n.Name, Protocol: n.Protocol, Address: n.Address, IPv6Address: ipv6Address, Port: n.Port, Settings: settings, Secret: secret})
 	}
 	flag := r.URL.Query().Get("flag")
 	if flag == "" {

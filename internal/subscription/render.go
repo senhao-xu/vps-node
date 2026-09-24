@@ -155,18 +155,42 @@ rules:
 `
 
 type Node struct {
-	ID       int64
-	Name     string
-	Protocol string
-	Address  string
-	Port     int
-	Settings map[string]any
-	Secret   map[string]any
+	ID          int64
+	Name        string
+	Protocol    string
+	Address     string
+	IPv6Address string
+	Port        int
+	Settings    map[string]any
+	Secret      map[string]any
+}
+
+// expandIPv6 returns the render targets for a node: the node itself plus, when
+// an IPv6 address is configured, a second entry differing only in the
+// client-facing host and name. Both entries share the sing-box inbound, so
+// traffic and logs stay attributed to the same node.
+func expandIPv6(n Node) []Node {
+	if n.IPv6Address == "" || n.IPv6Address == n.Address {
+		return []Node{n}
+	}
+	v6 := n
+	v6.Address = n.IPv6Address
+	v6.Name = n.Name + "-v6"
+	v6.IPv6Address = ""
+	return []Node{n, v6}
+}
+
+func expandNodes(nodes []Node) []Node {
+	out := make([]Node, 0, len(nodes))
+	for _, n := range nodes {
+		out = append(out, expandIPv6(n)...)
+	}
+	return out
 }
 
 func RenderGeneral(appKey []byte, userUUID string, nodes []Node) (string, error) {
 	links := make([]string, 0, len(nodes))
-	for _, node := range nodes {
+	for _, node := range expandNodes(nodes) {
 		link, err := renderURI(appKey, userUUID, node)
 		if err != nil {
 			return "", err
@@ -181,7 +205,7 @@ func RenderGeneral(appKey []byte, userUUID string, nodes []Node) (string, error)
 // break the whole subscription.
 func RenderGeneralLinks(appKey []byte, userUUID string, nodes []Node, onSkip func(Node, error)) string {
 	links := make([]string, 0, len(nodes))
-	for _, node := range nodes {
+	for _, node := range expandNodes(nodes) {
 		link, err := renderURI(appKey, userUUID, node)
 		if err != nil {
 			if onSkip != nil {
@@ -199,7 +223,7 @@ func RenderGeneralLinks(appKey []byte, userUUID string, nodes []Node, onSkip fun
 func RenderClashFiltered(appKey []byte, userUUID, template string, nodes []Node, onSkip func(Node, error)) ([]byte, error) {
 	proxies := make([]map[string]any, 0, len(nodes))
 	names := map[string][]string{"all": {}}
-	for _, n := range nodes {
+	for _, n := range expandNodes(nodes) {
 		proxy, err := renderProxy(appKey, userUUID, n)
 		if err != nil {
 			if onSkip != nil {
@@ -280,7 +304,7 @@ var allowedTopLevel = map[string]bool{
 	"mixed-port": true, "allow-lan": true, "bind-address": true, "mode": true, "log-level": true, "ipv6": true,
 	"unified-delay": true, "tcp-concurrent": true, "find-process-mode": true,
 	"global-client-fingerprint": true, "dns": true, "proxy-groups": true, "proxies": true, "rules": true,
-	"rule-providers": true,
+	"rule-providers":  true,
 	"proxy-providers": true, "listeners": true, "tun": true, "external-controller": true,
 	"external-controller-tls": true, "secret": true, "authentication": true, "skip-auth-prefixes": true,
 	"script": true,
@@ -348,7 +372,7 @@ func hasForbidden(value any) bool {
 func RenderClash(appKey []byte, userUUID, template string, nodes []Node) ([]byte, error) {
 	proxies := make([]map[string]any, 0, len(nodes))
 	names := map[string][]string{"all": {}}
-	for _, n := range nodes {
+	for _, n := range expandNodes(nodes) {
 		proxy, err := renderProxy(appKey, userUUID, n)
 		if err != nil {
 			return nil, err

@@ -37,6 +37,8 @@ const emit = defineEmits<{
 
 const name = ref('')
 const address = ref('')
+const ipv6Enabled = ref(false)
+const ipv6Address = ref('')
 const port = ref<number | null>(null)
 const protocol = ref<Protocol>('shadowsocks')
 const status = ref<'active' | 'disabled'>('active')
@@ -85,6 +87,8 @@ watch(
     isEdit.value = props.node !== null
     name.value = props.node?.name ?? ''
     address.value = props.node?.address ?? ''
+    ipv6Enabled.value = props.node?.ipv6_enabled ?? false
+    ipv6Address.value = props.node?.ipv6_address ?? ''
     port.value = props.node?.port ?? null
     protocol.value = props.node?.protocol ?? 'shadowsocks'
     status.value = props.node?.status === 'disabled' ? 'disabled' : 'active'
@@ -221,6 +225,16 @@ function normaliseServerPort(raw: string | number | null): { present: boolean; v
   return { present: true, value: Number.isInteger(value) ? value : null }
 }
 
+function isIPv6Literal(value: string): boolean {
+  if (!value.includes(':')) return false
+  const halves = value.split('::')
+  if (halves.length > 2) return false
+  const groups = halves.flatMap((half) => (half ? half.split(':') : []))
+  if (groups.some((group) => !/^[0-9a-fA-F]{1,4}$/.test(group))) return false
+  if (halves.length === 1) return groups.length === 8
+  return groups.length < 8
+}
+
 const tagsPayload = computed(() => parseList(tags.value))
 
 const settingsPayload = computed<NodeSettingsInput | undefined>(() => {
@@ -282,6 +296,9 @@ const validationMessage = computed(() => {
   if (!name.value.trim()) return '请填写节点名称'
   if (!address.value.trim()) return '请填写节点地址'
   if (address.value.trim().length > 255) return '节点地址最长 255 个字符'
+  const ipv6 = ipv6Address.value.trim()
+  if (ipv6Enabled.value && !ipv6) return '启用 IPv6 入口后请填写 IPv6 地址'
+  if (ipv6 && !isIPv6Literal(ipv6)) return 'IPv6 地址格式不正确'
   const portValue = port.value
   if (portValue === null || !Number.isInteger(portValue) || portValue < 1 || portValue > 65535) {
     return '端口必须是 1-65535 的整数'
@@ -407,6 +424,8 @@ async function submit() {
       await updateNode(props.node.id, {
         name: name.value.trim(),
         address: address.value.trim(),
+        ipv6_enabled: ipv6Enabled.value,
+        ipv6_address: ipv6Address.value.trim(),
         port: port.value ?? undefined,
         rate: rate.value ?? undefined,
         tags: tagsPayload.value,
@@ -417,6 +436,8 @@ async function submit() {
       await createNode({
         server_id: props.serverId ?? serverChoice.value ?? 0,
         address: address.value.trim(),
+        ipv6_enabled: ipv6Enabled.value,
+        ipv6_address: ipv6Address.value.trim(),
         name: name.value.trim(),
         protocol: protocol.value,
         port: port.value ?? 0,
@@ -481,6 +502,27 @@ async function submit() {
           >
           <p class="field-hint">
             用户连接使用的域名或 IP，订阅链接按该地址生成。
+          </p>
+        </div>
+        <div class="field">
+          <div class="toggle-row">
+            <div class="toggle-row-text">
+              <span class="toggle-row-label">IPv6 入口</span>
+            </div>
+            <ToggleSwitch
+              v-model="ipv6Enabled"
+              label="启用 IPv6 入口"
+            />
+          </div>
+          <input
+            v-if="ipv6Enabled"
+            id="node-ipv6-address"
+            v-model="ipv6Address"
+            type="text"
+            placeholder="例如 2001:db8::1"
+          >
+          <p class="field-hint">
+            启用后订阅会额外生成一条使用该 IPv6 地址的节点条目，端口与协议参数不变。
           </p>
         </div>
         <div class="form-row">

@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "本任务跨 repo/web/dto/subscription/前端多层，先按该指南映射数据流与边界契约"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "新增列迁移必须遵守 ALTER/重建约束与幂等约定，避免子表级联陷阱"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "v6 地址校验错误码与错误信封需符合 400/422/409 矩阵"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端质量红线与必跑验证命令；binding contract 变更须最小 diff 并在报告中列出"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "NodeBrief/Create/Update 类型统一在 web/src/api/types.ts，禁止页面局部重复声明"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "NodeFormDialog 表单需复用 ToggleSwitch 等 ui 原语与共享 CSS，不新造控件"}
+{"file": "docs/api-contract.md", "reason": "binding contract：Nodes DTO 与订阅行为的最小 diff 依据"}

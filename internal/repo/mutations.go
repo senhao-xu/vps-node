@@ -297,12 +297,12 @@ func (r *Repo) CreateNodeAndBump(ctx context.Context, n NewNode) (int64, error) 
 	return id, nil
 }
 
-func (r *Repo) UpdateNodeAndBump(ctx context.Context, nodeID, serverID int64, address, name string, port int, settings string, secretEnc []byte, rate float64, tags string, status *string) error {
+func (r *Repo) UpdateNodeAndBump(ctx context.Context, nodeID, serverID int64, address, name, ipv6Address string, ipv6Enabled bool, port int, settings string, secretEnc []byte, rate float64, tags string, status *string) error {
 	return Tx(ctx, r.DB, func(tx *sql.Tx) error {
 		if status != nil {
 			res, err := tx.ExecContext(ctx,
-				`UPDATE nodes SET address = ?, name = ?, port = ?, protocol_settings = ?, secret_enc = ?, rate = ?, tags = ?, status = ?, updated_at = ? WHERE id = ?`,
-				address, name, port, settings, secretEnc, rate, tags, *status, nowUnix(), nodeID)
+				`UPDATE nodes SET address = ?, ipv6_enabled = ?, ipv6_address = ?, name = ?, port = ?, protocol_settings = ?, secret_enc = ?, rate = ?, tags = ?, status = ?, updated_at = ? WHERE id = ?`,
+				address, ipv6EnabledInt(ipv6Enabled), ipv6Address, name, port, settings, secretEnc, rate, tags, *status, nowUnix(), nodeID)
 			if err != nil {
 				return mapErr(err)
 			}
@@ -311,8 +311,8 @@ func (r *Repo) UpdateNodeAndBump(ctx context.Context, nodeID, serverID int64, ad
 			}
 		} else {
 			res, err := tx.ExecContext(ctx,
-				`UPDATE nodes SET address = ?, name = ?, port = ?, protocol_settings = ?, secret_enc = ?, rate = ?, tags = ?, updated_at = ? WHERE id = ?`,
-				address, name, port, settings, secretEnc, rate, tags, nowUnix(), nodeID)
+				`UPDATE nodes SET address = ?, ipv6_enabled = ?, ipv6_address = ?, name = ?, port = ?, protocol_settings = ?, secret_enc = ?, rate = ?, tags = ?, updated_at = ? WHERE id = ?`,
+				address, ipv6EnabledInt(ipv6Enabled), ipv6Address, name, port, settings, secretEnc, rate, tags, nowUnix(), nodeID)
 			if err != nil {
 				return mapErr(err)
 			}

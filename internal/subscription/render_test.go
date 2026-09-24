@@ -424,3 +424,57 @@ func TestRenderFilteredSkipsBrokenNodes(t *testing.T) {
 		t.Fatalf("expected node 7 skipped twice in total, got %v", skipped)
 	}
 }
+
+func TestRenderIPv6ExtraEntry(t *testing.T) {
+	appKey := make([]byte, 32)
+	node := testNode(t, "shadowsocks")
+	node.Address = "hk01.example.com"
+	node.IPv6Address = "2001:db8::1"
+
+	out, err := RenderClash(appKey, "user-uuid", DefaultClashMetaTemplate, []Node{node})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config map[string]any
+	if err := yaml.Unmarshal(out, &config); err != nil {
+		t.Fatal(err)
+	}
+	proxies := config["proxies"].([]any)
+	if len(proxies) != 2 {
+		t.Fatalf("expected a primary and an IPv6 proxy, got %v", proxies)
+	}
+	primary := proxies[0].(map[string]any)
+	extra := proxies[1].(map[string]any)
+	if primary["server"] != "hk01.example.com" || extra["server"] != "2001:db8::1" {
+		t.Fatalf("unexpected servers: %v / %v", primary["server"], extra["server"])
+	}
+	if extra["name"] != "node one-v6" || extra["port"] != primary["port"] || extra["password"] != primary["password"] {
+		t.Fatalf("IPv6 proxy must differ only by host and name: %v", extra)
+	}
+
+	encoded, err := RenderGeneral(appKey, "user-uuid", []Node{node})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(raw)
+	if strings.Count(text, "\n") != 1 || !strings.Contains(text, "hk01.example.com:443") || !strings.Contains(text, "[2001:db8::1]:443") {
+		t.Fatalf("expected two share links for both families, got %q", text)
+	}
+
+	node.IPv6Address = "hk01.example.com"
+	out, err = RenderClash(appKey, "user-uuid", DefaultClashMetaTemplate, []Node{node})
+	if err != nil {
+		t.Fatal(err)
+	}
+	config = map[string]any{}
+	if err := yaml.Unmarshal(out, &config); err != nil {
+		t.Fatal(err)
+	}
+	if got := config["proxies"].([]any); len(got) != 1 {
+		t.Fatalf("matching IPv6 address must not duplicate the entry, got %v", got)
+	}
+}
