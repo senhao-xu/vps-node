@@ -355,8 +355,8 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  padding: 8px 12px;
-  border: none;
+  padding: 7px 11px;
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: none;
   color: var(--color-text-secondary);
@@ -373,9 +373,10 @@ onMounted(() => {
 }
 
 .settings-nav-item.active {
-  color: var(--color-text);
-  background: var(--color-shell-active);
-  font-weight: 600;
+  border-color: var(--color-primary-border);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-weight: 650;
 }
 
 .settings-body .card {
