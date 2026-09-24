@@ -36,14 +36,15 @@ Codes: `invalid_request | unauthorized | forbidden | not_found | conflict | payl
 ## Auth Boundary (invariant)
 
 - `/api/admin/*` + business routes: DB-backed admin session cookie; guard in `requireAdmin`. Login limiter: in-memory per-IP+username lockout.
-- `/api/agent/*`: Bearer token hashed → `agents.token_hash` lookup; guard in `requireAgent` (register is the only unauthenticated agent route, via single-use server register token).
+- `/api/agent/*`: Bearer **agent key** hashed → `agents.key_hash` lookup; guard in `requireAgent`. There is no unauthenticated agent route (the one-time `POST /api/agent/register` flow was removed; the key is issued by an admin on the Server detail page). The panel derives `server_id` from the key; the agent asserts the `server_id` returned by heartbeat equals its configured `server_id` and exits on mismatch.
 - Neither boundary accepts the other's credentials — regression test `TestAdminAndAgentAuthScopesDoNotCross` must keep passing.
 
 ---
 
 ## Secret Handling
 
-- bcrypt: admin passwords, agent token hashes, user token hashes. Plaintext agent/user tokens returned exactly once (create/reset/rotate responses only).
+- bcrypt / SHA-256: admin passwords (bcrypt), user token hashes, agent key hash (`agents.key_hash`). Plaintext user tokens are returned exactly once (create/reset/rotate).
+- The agent key is **not** one-time: its SHA-256 is stored for auth lookup (`key_hash`) and its plaintext is stored AES-256-GCM-encrypted (`key_enc`, panel `app_key`) so an admin can re-read it at any time; `POST /api/servers/:id/agent-key` resets it and invalidates the previous key immediately.
 - AES-256-GCM (`internal/secrets`, key = config `app_key`): recoverable protocol secrets (`nodes.secret_enc` BLOB).
 - Shadowsocks per-user passwords are NOT stored: derived `ss-cred-v1` = base64(HMAC-SHA256(app_key, "ss-cred-v1:"+nodeID+":"+userUUID)) truncated to method key length. Deterministic; tested.
 - Never log: rendered sing-box payloads, tokens, passwords, decrypted secrets. Request logger records path only, not query strings.
@@ -61,5 +62,6 @@ serverID := AgentServerID(r.Context())
 
 ## Tests Required
 
-- Auth: login success/failure/lockout, cookie flags, logout invalidation, rotated agent token 401, cross-boundary 401.
+- Auth: login success/failure/lockout, cookie flags, logout invalidation, reset agent key 401, cross-boundary 401.
+- Agent key lifecycle: generate → GET reveals plaintext → reset invalidates the old key (401) → GET with no `key_enc` (migrated agent) returns `409 conflict`.
 - Envelope: every 4xx path asserts code + shape; agent payload tests assert unknown JSON fields stay ignored (`decodeJSON`, per the binding `api-contract.md`) and can never influence ownership or telemetry totals.

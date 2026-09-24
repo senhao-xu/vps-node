@@ -21,7 +21,7 @@ import (
 	kernelsingbox "vps-node/internal/kernel/singbox"
 )
 
-func seedProtocols(t *testing.T) (env *panelEnv, cookie *http.Cookie, registerToken string) {
+func seedProtocols(t *testing.T) (env *panelEnv, cookie *http.Cookie, agentKey string) {
 	t.Helper()
 	env = newPanelEnv(t)
 	cookie = env.login()
@@ -85,12 +85,12 @@ func seedProtocols(t *testing.T) (env *panelEnv, cookie *http.Cookie, registerTo
 		}, cookie)
 	}
 
-	_, out = env.do("POST", fmt.Sprintf("/api/servers/%d/register-token", serverID), nil, cookie)
-	registerToken, _ = out["register_token"].(string)
-	if registerToken == "" {
-		t.Fatal("expected register_token")
+	_, out = env.do("POST", fmt.Sprintf("/api/servers/%d/agent-key", serverID), nil, cookie)
+	agentKey, _ = out["agent_key"].(string)
+	if agentKey == "" {
+		t.Fatal("expected agent_key")
 	}
-	return env, cookie, registerToken
+	return env, cookie, agentKey
 }
 
 func e2eTLSMaterial(t *testing.T, host string, notBefore, notAfter time.Time) (string, string) {
@@ -109,25 +109,19 @@ func e2eTLSMaterial(t *testing.T, host string, notBefore, notAfter time.Time) (s
 	return string(cert), string(private)
 }
 
-func registerAgent(t *testing.T, env *panelEnv, registerToken string) *agentclient.Client {
+func registerAgent(t *testing.T, env *panelEnv, agentKey string) *agentclient.Client {
 	t.Helper()
 	client, err := agentclient.New(env.ts.URL)
 	if err != nil {
 		t.Fatalf("new agent client: %v", err)
 	}
-	resp, err := client.Register(context.Background(), agentclient.RegisterRequest{
-		RegisterToken: registerToken, Version: "0.1.0-test",
-	})
-	if err != nil {
-		t.Fatalf("register: %v", err)
-	}
-	client.SetToken(resp.AgentToken)
+	client.SetKey(agentKey)
 	return client
 }
 
-func fetchRenderedConfig(t *testing.T, env *panelEnv, registerToken string) (*agentclient.Client, *agentclient.ConfigResponse) {
+func fetchRenderedConfig(t *testing.T, env *panelEnv, agentKey string) (*agentclient.Client, *agentclient.ConfigResponse) {
 	t.Helper()
-	client := registerAgent(t, env, registerToken)
+	client := registerAgent(t, env, agentKey)
 	cfgResp, err := client.Config(context.Background(), 0)
 	if err != nil {
 		t.Fatalf("config poll: %v", err)

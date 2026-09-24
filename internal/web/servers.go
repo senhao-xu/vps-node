@@ -7,6 +7,7 @@ import (
 	"vps-node/internal/adminauth"
 	"vps-node/internal/httpx"
 	"vps-node/internal/repo"
+	"vps-node/internal/secrets"
 )
 
 var validServerStatuses = map[string]bool{
@@ -242,9 +243,7 @@ func (h *Handler) handleServerDelete(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{})
 }
 
-const registerTokenTTL = 24 * time.Hour
-
-func (h *Handler) handleServerRegisterToken(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleServerAgentKeyGet(w http.ResponseWriter, r *http.Request) {
 	id, err := pathID(r)
 	if err != nil {
 		writeErr(w, err)
@@ -254,48 +253,50 @@ func (h *Handler) handleServerRegisterToken(w http.ResponseWriter, r *http.Reque
 		writeErr(w, err)
 		return
 	}
-	token, err := adminauth.NewToken()
-	if err != nil {
-		writeErr(w, err)
-		return
-	}
-	expiresAt := time.Now().Add(registerTokenTTL)
-	if err := h.repo.SetServerRegisterTokenHash(r.Context(), id, adminauth.HashToken(token), &expiresAt); err != nil {
-		writeErr(w, err)
-		return
-	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{
-		"register_token": token,
-		"expires_at":     rfc3339(expiresAt),
-	})
-}
-
-func (h *Handler) handleServerAgentToken(w http.ResponseWriter, r *http.Request) {
-	id, err := pathID(r)
-	if err != nil {
-		writeErr(w, err)
-		return
-	}
 	agent, err := h.repo.GetAgentByServerID(r.Context(), id)
 	if err != nil {
 		if err == repo.ErrNotFound {
-			writeErr(w, errNotFound("no agent registered for this server"))
+			writeErr(w, errConflict("no agent key for this server; generate one first"))
 			return
 		}
 		writeErr(w, err)
 		return
 	}
-	token, err := adminauth.NewToken()
+	if len(agent.KeyEnc) == 0 {
+		writeErr(w, errConflict("agent key was not generated on this panel version; reset it first"))
+		return
+	}
+	plain, err := secrets.Decrypt(h.appKey, agent.KeyEnc)
+	if err != nil {
+		writeErr(w, errConflict("agent key cannot be decrypted; reset it first"))
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"agent_key": string(plain)})
+}
+
+func (h *Handler) handleServerAgentKeyGenerate(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r)
 	if err != nil {
 		writeErr(w, err)
 		return
 	}
-	if err := h.repo.RotateAgentTokenHash(r.Context(), agent.ID, adminauth.HashToken(token)); err != nil {
+	if _, err := h.repo.GetServer(r.Context(), id); err != nil {
 		writeErr(w, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{
-		"agent_token":  token,
-		"expires_hint": nil,
-	})
+	key, err := adminauth.NewToken()
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	keyEnc, err := secrets.Encrypt(h.appKey, []byte(key))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	if err := h.repo.UpsertAgentKey(r.Context(), id, adminauth.HashToken(key), keyEnc); err != nil {
+		writeErr(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"agent_key": key})
 }

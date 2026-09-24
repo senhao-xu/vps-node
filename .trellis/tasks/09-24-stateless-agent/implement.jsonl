@@ -1,0 +1,10 @@
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "SQLite migration + revision bump + batch idempotency invariants for 0005 migration and seq resume"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "error envelope, validation matrix, auth boundary and secrets handling for agent-key auth"}
+{"file": ".trellis/spec/backend/deploy-guidelines.md", "reason": "Docker/systemd deployment and secrets handling conventions for stateless agent artifacts"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "module layout conventions for new repo/web/config/agent changes"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "code standards, forbidden patterns, validation commands before commit"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "feature spans API, repo, agent runtime, UI and DB; check data-flow at layer boundaries"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "reuse adminauth.NewToken/HashToken and secrets.Encrypt rather than new crypto helpers"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "api/pages single-owner API types layout for agent-key UI changes"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "typed API payloads for AgentKeyResult and removing token result types"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "component patterns for the ServerDetailPage agent-key section"}

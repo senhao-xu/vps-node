@@ -6,7 +6,7 @@
 #   PANEL_VERSION=20260920 \
 #   PANEL_URL=https://panel.example.com \
 #   SERVER_ID=1 \
-#   REGISTER_TOKEN=... \
+#   AGENT_KEY=... \
 #   sh install-agent.sh
 #
 # PANEL_DOWNLOAD_BASE and PANEL_VERSION select the release tarball:
@@ -18,11 +18,10 @@ PANEL_DOWNLOAD_BASE="${PANEL_DOWNLOAD_BASE:-https://example.com/downloads/vps-no
 PANEL_VERSION="${PANEL_VERSION:-latest}"
 PANEL_URL="${PANEL_URL:-}"
 SERVER_ID="${SERVER_ID:-}"
-REGISTER_TOKEN="${REGISTER_TOKEN:-}"
+AGENT_KEY="${AGENT_KEY:-}"
 
 BIN_DIR=/usr/local/bin
 ETC_DIR=/etc/panel-agent
-STATE_DIR=/var/lib/panel-agent
 SERVICE=panel-agent.service
 
 case "$(uname -m)" in
@@ -56,18 +55,15 @@ if [ -f "$TMP/$SERVICE" ]; then
     install -m 0644 "$TMP/$SERVICE" "/etc/systemd/system/$SERVICE"
 fi
 
-id panel-agent >/dev/null 2>&1 || useradd --system --home-dir "$STATE_DIR" --shell /usr/sbin/nologin panel-agent
-mkdir -p "$ETC_DIR" "$STATE_DIR"
-chown panel-agent:panel-agent "$STATE_DIR"
-chmod 0750 "$STATE_DIR"
+id panel-agent >/dev/null 2>&1 || useradd --system --home-dir /nonexistent --shell /usr/sbin/nologin panel-agent
+mkdir -p "$ETC_DIR"
 
 if [ ! -f "$ETC_DIR/agent.yaml" ]; then
     echo "writing $ETC_DIR/agent.yaml"
     cat > "$ETC_DIR/agent.yaml" <<EOF
 panel_url: ${PANEL_URL:-https://panel.example.com}
-register_token: ${REGISTER_TOKEN:-paste-register-token-from-server-detail}
+agent_key: ${AGENT_KEY:-paste-agent-key-from-server-detail}
 server_id: ${SERVER_ID:-1}
-state_path: $STATE_DIR/state.json
 log_level: info
 heartbeat_interval: 30
 sync_interval: 30

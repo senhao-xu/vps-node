@@ -206,3 +206,20 @@ func (r *Repo) DeviceBatchCount(ctx context.Context, agentID, seq int64) (int64,
 	}
 	return count, true, nil
 }
+
+func (r *Repo) LastTrafficSeq(ctx context.Context, agentID int64) (int64, error) {
+	return r.lastBatchSeq(ctx, "traffic_batches", agentID)
+}
+
+func (r *Repo) LastDeviceSeq(ctx context.Context, agentID int64) (int64, error) {
+	return r.lastBatchSeq(ctx, "device_batches", agentID)
+}
+
+func (r *Repo) lastBatchSeq(ctx context.Context, table string, agentID int64) (int64, error) {
+	var seq int64
+	if err := r.DB.QueryRowContext(ctx,
+		`SELECT COALESCE(MAX(seq), 0) FROM `+table+` WHERE agent_id = ?`, agentID).Scan(&seq); err != nil {
+		return 0, mapErr(err)
+	}
+	return seq, nil
+}

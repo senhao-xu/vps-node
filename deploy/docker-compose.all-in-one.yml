@@ -33,18 +33,14 @@ services:
     environment:
       AGENT_PANEL_URL: http://panel:8080
       AGENT_SERVER_ID: "${AGENT_SERVER_ID:-}"
-      AGENT_REGISTER_TOKEN: "${AGENT_REGISTER_TOKEN:-}"
-      AGENT_TOKEN: "${AGENT_TOKEN:-}"
+      AGENT_KEY: "${AGENT_KEY:-}"
       AGENT_LOG_LEVEL: ${AGENT_LOG_LEVEL:-info}
     ports:
       - "${NODE_PORT:-8388}:8388/tcp"
       - "${NODE_PORT:-8388}:8388/udp"
-    volumes:
-      - agent-state:/var/lib/panel-agent
 
 volumes:
   panel-data:
-  agent-state:
 
 # Single-node all-in-one deployment (panel + its agent on one host).
 #
@@ -53,8 +49,8 @@ volumes:
 #      (PANEL_APP_KEY is optional — one is auto-generated on first boot)
 #   2. docker compose -f docker-compose.all-in-one.yml up -d panel
 #   3. Log in to http://<host>:${PANEL_PORT:-8080}, create the server (note its
-#      id N), create at least one node on port 8388, then generate a register token.
-#   4. Add AGENT_SERVER_ID=N and AGENT_REGISTER_TOKEN=<token> to .env
+#      id N), create at least one node on port 8388, then generate an Agent Key.
+#   4. Add AGENT_SERVER_ID=N and AGENT_KEY=<key> to .env
 #   5. docker compose -f docker-compose.all-in-one.yml up -d panel-agent
 #
 # Panel traffic stays on the compose-internal network (http://panel:8080);

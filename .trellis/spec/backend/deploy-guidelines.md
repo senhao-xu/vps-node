@@ -9,7 +9,8 @@
 - Panel image: multi-stage (npm ci → `go build -tags embed_ui` CGO_ENABLED=0 → `scratch`); SQLite lives on the `/data` named volume; HEALTHCHECK uses the `cmd/panel-healthcheck` helper (scratch has no curl/wget).
 - Agent image: `cmd/agent` built with `-tags with_quic,with_utls` (embedded sing-box as a Go library, pinned in `go.mod`), CGO off, `scratch` base with only CA certs. No external sing-box binary, config file, reload helper, or `SINGBOX_*` build args. Bump the embedded version with `go get github.com/sagernet/sing-box@<version> && go mod tidy`.
 - Secrets never baked into images: config/tokens via env (`.env` file, gitignored + dockerignored) or mounted yaml. `.dockerignore` must cover `*.yaml` with tokens, `.env.*`, `*.db*`, `.git`, `.trellis`.
-- Compose examples use required-var guards (`${VAR:?err}`) and soft defaults (`${VAR:-default}`) deliberately: panel can start before a register token exists.
+- Compose examples use required-var guards (`${VAR:?err}`) and soft defaults (`${VAR:-default}`) deliberately: the panel can start before an agent key exists. The agent needs only `AGENT_PANEL_URL`, `AGENT_SERVER_ID` and `AGENT_KEY`; generate the key on the Server detail page first.
+- The agent is stateless: no `VOLUME`, no `AGENT_STATE_PATH`, no `agent-state` volume, no writable state dir in the systemd unit. Identity, batch-sequence resume points and applied revision all live on the panel; recreating the container/process with the same env reconnects and resumes. Do not reintroduce a state file/volume.
 
 ## Container Process Model
 

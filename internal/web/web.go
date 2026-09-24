@@ -124,7 +124,6 @@ func intervalSeconds(d time.Duration, fallback int) int {
 }
 
 func (h *Handler) registerAgentRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("POST /api/agent/register", h.handleAgentRegister)
 	mux.HandleFunc("POST /api/agent/heartbeat", h.requireAgent(h.handleAgentHeartbeat))
 	mux.HandleFunc("GET /api/agent/config", h.requireAgent(h.handleAgentConfig))
 	mux.HandleFunc("POST /api/agent/traffic", h.requireAgent(h.handleAgentTraffic))
@@ -159,8 +158,8 @@ func (h *Handler) registerAdminRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/servers/{id}", h.requireAdmin(h.handleServerGet))
 	mux.HandleFunc("PUT /api/servers/{id}", h.requireAdmin(h.handleServerUpdate))
 	mux.HandleFunc("DELETE /api/servers/{id}", h.requireAdmin(h.handleServerDelete))
-	mux.HandleFunc("POST /api/servers/{id}/register-token", h.requireAdmin(h.handleServerRegisterToken))
-	mux.HandleFunc("POST /api/servers/{id}/agent-token", h.requireAdmin(h.handleServerAgentToken))
+	mux.HandleFunc("GET /api/servers/{id}/agent-key", h.requireAdmin(h.handleServerAgentKeyGet))
+	mux.HandleFunc("POST /api/servers/{id}/agent-key", h.requireAdmin(h.handleServerAgentKeyGenerate))
 	mux.HandleFunc("GET /api/servers/{id}/visits", h.requireAdmin(h.handleServerVisits))
 
 	mux.HandleFunc("GET /api/visits", h.requireAdmin(h.handleVisitList))

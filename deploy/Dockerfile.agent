@@ -19,6 +19,4 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 FROM scratch
 COPY --from=build /out/panel-agent /usr/local/bin/panel-agent
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
-ENV AGENT_STATE_PATH=/var/lib/panel-agent/state.json
-VOLUME /var/lib/panel-agent
 ENTRYPOINT ["/usr/local/bin/panel-agent"]

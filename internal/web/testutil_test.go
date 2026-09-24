@@ -268,7 +268,7 @@ func errorCode(t *testing.T, body string) string {
 
 func assertNoSecrets(t *testing.T, body string, extra ...string) {
 	t.Helper()
-	forbidden := append([]string{"token_hash", "password_hash", "password", "secret_enc", "register_token_hash", "private_key"}, extra...)
+	forbidden := append([]string{"token_hash", "password_hash", "password", "secret_enc", "key_hash", "key_enc", "private_key"}, extra...)
 	for _, f := range forbidden {
 		if bytes.Contains([]byte(body), []byte(f)) {
 			t.Fatalf("response body must not contain %q: %s", f, body)

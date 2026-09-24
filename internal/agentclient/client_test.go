@@ -17,7 +17,7 @@ func fastDelays(c *Client) {
 	c.maxDelay = 2 * time.Nanosecond
 }
 
-func TestRegisterAndPayloadShape(t *testing.T) {
+func TestHeartbeatSendsAgentKeyAndDecodesResumeSeqs(t *testing.T) {
 	var gotAuth string
 	var gotBody map[string]any
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -25,8 +25,8 @@ func TestRegisterAndPayloadShape(t *testing.T) {
 		_ = json.NewDecoder(r.Body).Decode(&gotBody)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"agent_id": 7, "agent_token": "agent-tok", "server_id": 3,
-			"heartbeat_interval_seconds": 30, "sync_interval_seconds": 30, "traffic_interval_seconds": 60,
+			"ok": true, "server_id": 3, "server_revision": 5, "heartbeat_interval_seconds": 30,
+			"traffic_seq": 7, "device_seq": 8, "visit_seq": 9,
 		})
 	}))
 	defer ts.Close()
@@ -36,19 +36,20 @@ func TestRegisterAndPayloadShape(t *testing.T) {
 		t.Fatalf("new client: %v", err)
 	}
 	fastDelays(c)
+	c.SetKey("agent-key")
 
-	resp, err := c.Register(context.Background(), RegisterRequest{RegisterToken: "reg-tok", Version: "0.1.0"})
+	resp, err := c.Heartbeat(context.Background(), HeartbeatRequest{Version: "0.1.0", CPUPercent: 1, MemoryPercent: 2, DiskPercent: 3, UptimeSeconds: 4})
 	if err != nil {
-		t.Fatalf("register: %v", err)
+		t.Fatalf("heartbeat: %v", err)
 	}
-	if resp.AgentID != 7 || resp.AgentToken != "agent-tok" || resp.ServerID != 3 || resp.HeartbeatIntervalSeconds != 30 {
-		t.Fatalf("unexpected register response %+v", resp)
+	if gotAuth != "Bearer agent-key" {
+		t.Fatalf("heartbeat must send the agent key as bearer, got %q", gotAuth)
 	}
-	if gotAuth != "" {
-		t.Fatalf("register must not send a bearer token, got %q", gotAuth)
+	if gotBody["version"] != "0.1.0" {
+		t.Fatalf("unexpected heartbeat body %v", gotBody)
 	}
-	if gotBody["register_token"] != "reg-tok" || gotBody["version"] != "0.1.0" {
-		t.Fatalf("unexpected register body %v", gotBody)
+	if resp.ServerID != 3 || resp.TrafficSeq != 7 || resp.DeviceSeq != 8 || resp.VisitSeq != 9 {
+		t.Fatalf("unexpected heartbeat response %+v", resp)
 	}
 }
 

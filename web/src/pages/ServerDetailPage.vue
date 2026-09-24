@@ -19,18 +19,17 @@ import {
   Users,
   Waypoints,
 } from 'lucide-vue-next'
-import { deleteServer, getServer, rotateAgentToken, createRegisterToken, updateServer } from '@/api/servers'
+import { deleteServer, getServer, getAgentKey, generateAgentKey, updateServer } from '@/api/servers'
 import { deleteNode } from '@/api/nodes'
 import { getServerVisits } from '@/api/visits'
 import { errorMessage } from '@/api/http'
-import type { AgentTokenResult, NodeBrief, RegisterTokenResult, ServerDetail, ServerStatus, Visit } from '@/api/types'
+import type { NodeBrief, ServerDetail, ServerStatus, Visit } from '@/api/types'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import DataTable, { type Column } from '@/components/DataTable.vue'
 import ErrorBanner from '@/components/ErrorBanner.vue'
 import TablePaginator from '@/components/TablePaginator.vue'
 import MetricBar from '@/components/MetricBar.vue'
 import NodeFormDialog from '@/components/NodeFormDialog.vue'
-import OneTimeSecret from '@/components/OneTimeSecret.vue'
 import ServerFormDialog from '@/components/ServerFormDialog.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import DetailNav, { type DetailNavItem } from '@/components/ui/DetailNav.vue'
@@ -55,10 +54,12 @@ const showEdit = ref(false)
 const showDeleteConfirm = ref(false)
 const deleting = ref(false)
 const statusUpdating = ref(false)
-const rotatingAgentToken = ref(false)
-const agentTokenResult = ref<AgentTokenResult | null>(null)
-const registerTokenResult = ref<RegisterTokenResult | null>(null)
-const generatingRegisterToken = ref(false)
+const agentKey = ref('')
+const agentKeyLoading = ref(false)
+const agentKeyError = ref('')
+const generatingAgentKey = ref(false)
+const showResetKeyConfirm = ref(false)
+const resettingAgentKey = ref(false)
 
 type InstallTab = 'binary' | 'docker'
 
@@ -70,12 +71,13 @@ const installTabItems: { value: InstallTab; label: string }[] = [
 
 const detailNavItems: DetailNavItem[] = [
   { id: 'overview', label: '运行概览', hint: '身份与承载状态', icon: ServerIcon },
-  { id: 'agent', label: 'Agent 管理', hint: '注册、凭证与安装', icon: Radio },
+  { id: 'agent', label: 'Agent 管理', hint: '凭证与安装', icon: Radio },
   { id: 'health', label: '系统指标', hint: '资源压力与运行时间', icon: HeartPulse },
   { id: 'nodes', label: '节点拓扑', hint: '协议与服务端口', icon: Waypoints },
   { id: 'activity', label: '访问活动', hint: '最近连接目标', icon: Activity },
 ]
 const { copied: commandCopied, copy } = useCopyFeedback()
+const { copied: keyCopied, copy: copyKey } = useCopyFeedback()
 
 const visits = ref<Visit[]>([])
 const visitTotal = ref(0)
@@ -122,8 +124,6 @@ function onVisitPageChange(nextPage: number, nextSize: number) {
 }
 
 const panelOrigin = window.location.origin
-const freshRegisterToken = computed(() => registerTokenResult.value?.register_token ?? '')
-
 const installNotes: Record<InstallTab, string> = {
   binary: 'install 脚本目前随 release tarball 分发，脚本地址需按实际发布渠道替换。',
   docker: '使用 host 网络模式，节点端口直接生效无需映射；镜像从 GitHub Container Registry（ghcr.io）拉取。',
@@ -131,8 +131,8 @@ const installNotes: Record<InstallTab, string> = {
 
 const activeInstallCommand = computed(() =>
   installTab.value === 'binary'
-    ? binaryInstallCommand(panelOrigin, server.value?.id ?? 0, freshRegisterToken.value)
-    : dockerInstallCommand(panelOrigin, server.value?.id ?? 0, freshRegisterToken.value),
+    ? binaryInstallCommand(panelOrigin, server.value?.id ?? 0, agentKey.value)
+    : dockerInstallCommand(panelOrigin, server.value?.id ?? 0, agentKey.value),
 )
 
 async function copyInstallCommand() {
@@ -262,46 +262,56 @@ async function toggleStatus() {
   }
 }
 
-async function rotateToken() {
+async function loadAgentKey() {
   const current = server.value
   if (!current) return
-  rotatingAgentToken.value = true
-  error.value = ''
+  agentKeyLoading.value = true
+  agentKeyError.value = ''
   try {
-    agentTokenResult.value = await rotateAgentToken(current.id)
+    agentKey.value = (await getAgentKey(current.id)).agent_key
   } catch (err) {
-    error.value = errorMessage(err)
+    agentKey.value = ''
+    if ((err as { status?: number }).status !== 409) {
+      agentKeyError.value = errorMessage(err)
+    }
   } finally {
-    rotatingAgentToken.value = false
+    agentKeyLoading.value = false
   }
 }
 
-async function generateRegisterToken() {
+async function generateAgentKeyNow() {
   const current = server.value
   if (!current) return
-  generatingRegisterToken.value = true
+  generatingAgentKey.value = true
+  agentKeyError.value = ''
   error.value = ''
   try {
-    registerTokenResult.value = await createRegisterToken(current.id)
+    agentKey.value = (await generateAgentKey(current.id)).agent_key
   } catch (err) {
     error.value = errorMessage(err)
   } finally {
-    generatingRegisterToken.value = false
+    generatingAgentKey.value = false
   }
 }
 
-async function autoGenerateRegisterToken() {
-  if (registerTokenResult.value || generatingRegisterToken.value) return
+async function confirmResetAgentKey() {
   const current = server.value
   if (!current) return
-  generatingRegisterToken.value = true
+  resettingAgentKey.value = true
+  agentKeyError.value = ''
+  error.value = ''
   try {
-    registerTokenResult.value = await createRegisterToken(current.id)
-  } catch {
-    registerTokenResult.value = null
+    agentKey.value = (await generateAgentKey(current.id)).agent_key
+    showResetKeyConfirm.value = false
+  } catch (err) {
+    error.value = errorMessage(err)
   } finally {
-    generatingRegisterToken.value = false
+    resettingAgentKey.value = false
   }
+}
+
+async function copyAgentKey() {
+  await copyKey(agentKey.value)
 }
 
 async function confirmDeleteServer() {
@@ -340,18 +350,17 @@ function onSaved() {
 }
 
 watch(serverId, () => {
-  agentTokenResult.value = null
-  registerTokenResult.value = null
+  agentKey.value = ''
   visitPage.value = 1
   void load().then(() => {
-    void autoGenerateRegisterToken()
+    void loadAgentKey()
   })
   void loadVisits()
 })
 
 onMounted(() => {
   void load().then(() => {
-    void autoGenerateRegisterToken()
+    void loadAgentKey()
   })
   void loadVisits()
 })
@@ -491,7 +500,7 @@ onMounted(() => {
               <div class="section-heading-copy">
                 <span class="section-kicker">Agent</span>
                 <h2>Agent 管理</h2>
-                <p>管理注册凭证、安装方式和运行端连接状态。</p>
+                <p>管理 Agent Key、安装方式和运行端连接状态。</p>
               </div>
             </div>
             <div class="card">
@@ -531,41 +540,65 @@ onMounted(() => {
                 v-else
                 class="text-secondary agent-missing"
               >
-                该服务器还没有注册 Agent。点击下方按钮生成一次性注册 Token，在服务器上运行 Agent 时使用。
+                该服务器还没有 Agent 连接。生成 Agent Key 并在节点上配置后即可接入。
               </p>
-              <div class="token-actions">
-                <button
-                  v-if="server.agent"
-                  type="button"
-                  class="btn secondary small"
-                  :disabled="rotatingAgentToken"
-                  @click="rotateToken"
+
+              <div class="agent-key-block">
+                <div class="install-head">
+                  <span class="install-title">Agent Key</span>
+                  <div class="token-actions">
+                    <button
+                      v-if="agentKey"
+                      type="button"
+                      class="btn secondary small"
+                      :disabled="generatingAgentKey"
+                      @click="showResetKeyConfirm = true"
+                    >
+                      <RefreshCw :size="14" />
+                      重置
+                    </button>
+                    <button
+                      v-else
+                      type="button"
+                      class="btn small"
+                      :disabled="generatingAgentKey"
+                      @click="generateAgentKeyNow"
+                    >
+                      {{ generatingAgentKey ? '生成中…' : '生成 Agent Key' }}
+                    </button>
+                  </div>
+                </div>
+                <ErrorBanner
+                  :message="agentKeyError"
+                  @dismiss="agentKeyError = ''"
+                />
+                <div
+                  v-if="agentKey"
+                  class="agent-key-value"
                 >
-                  {{ rotatingAgentToken ? '生成中…' : '轮换 Agent Token' }}
-                </button>
-                <button
-                  type="button"
-                  class="btn secondary small"
-                  :disabled="generatingRegisterToken"
-                  @click="generateRegisterToken"
+                  <code class="mono">{{ agentKey }}</code>
+                  <button
+                    type="button"
+                    class="btn link small"
+                    @click="copyAgentKey"
+                  >
+                    {{ keyCopied ? '已复制' : '复制' }}
+                  </button>
+                </div>
+                <p
+                  v-else-if="agentKeyLoading"
+                  class="install-hint"
                 >
-                  {{ generatingRegisterToken ? '生成中…' : (server.agent ? '重新生成注册 Token' : '生成注册 Token') }}
-                </button>
+                  正在读取 Agent Key…
+                </p>
+                <p
+                  v-else
+                  class="install-hint"
+                >
+                  尚未生成 Agent Key。生成后请填入 Agent 的 <code class="mono">agent_key</code> 配置或 <code class="mono">AGENT_KEY</code> 环境变量；重置会立即使旧 Key 失效。
+                </p>
               </div>
-              <OneTimeSecret
-                v-if="agentTokenResult"
-                class="secret-block"
-                label="新 Agent Token（旧 Token 已立即失效）"
-                :value="agentTokenResult.agent_token"
-                hint="仅显示这一次，请立即复制保存并更新 Agent 配置。"
-              />
-              <OneTimeSecret
-                v-if="registerTokenResult"
-                class="secret-block"
-                label="注册 Token"
-                :value="registerTokenResult.register_token"
-                :hint="`仅显示这一次，有效期至 ${formatDateTime(registerTokenResult.expires_at)}。`"
-              />
+
               <div class="install-block">
                 <div class="install-head">
                   <span class="install-title">Agent 安装</span>
@@ -577,16 +610,16 @@ onMounted(() => {
                   />
                 </div>
                 <p
-                  v-if="freshRegisterToken === ''"
+                  v-if="agentKey === ''"
                   class="install-hint"
                 >
-                  {{ generatingRegisterToken ? '正在生成注册 Token…' : '注册 Token 生成失败，请点击上方「生成注册 Token」重试。' }}
+                  {{ agentKeyLoading ? '正在读取 Agent Key…' : '生成 Agent Key 后，安装命令会自动内嵌该 Key。' }}
                 </p>
                 <p
                   v-else
                   class="install-hint ok"
                 >
-                  已自动内嵌注册 Token，有效期至 {{ registerTokenResult ? formatDateTime(registerTokenResult.expires_at) : '' }}。
+                  已内嵌 Agent Key；重置后请同步更新节点配置与命令。
                 </p>
                 <div class="install-code-head">
                   <span class="text-secondary">安装命令</span>
@@ -839,7 +872,7 @@ onMounted(() => {
                     Agent 最近一次心跳为 {{ formatRelative(server.agent.last_seen_at) }}，配置由面板统一下发。
                   </span>
                   <span v-else>
-                    生成注册 Token 并完成 Agent 安装后，运行指标和节点配置才会开始同步。
+                    生成 Agent Key 并完成 Agent 安装后，运行指标和节点配置才会开始同步。
                   </span>
                 </div>
               </div>
@@ -890,6 +923,17 @@ onMounted(() => {
       @cancel="deleteNodeTarget = null"
       @confirm="confirmDeleteNode"
     />
+
+    <ConfirmDialog
+      :open="showResetKeyConfirm"
+      title="重置 Agent Key"
+      :message="`确定重置服务器「${server?.name ?? ''}」的 Agent Key 吗？\n旧 Key 将立即失效，需要使用新 Key 更新节点上的 Agent 配置。`"
+      danger
+      confirm-text="重置"
+      :loading="resettingAgentKey"
+      @cancel="showResetKeyConfirm = false"
+      @confirm="confirmResetAgentKey"
+    />
   </section>
 </template>
 
@@ -924,6 +968,29 @@ onMounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: var(--spacing-sm);
+}
+
+.agent-key-block {
+  margin-top: var(--spacing-md);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--color-border);
+}
+
+.agent-key-value {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--color-surface-muted);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+}
+
+.agent-key-value code {
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
 }
 
 .secret-block {

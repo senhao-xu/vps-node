@@ -24,7 +24,7 @@ const (
 
 type Client struct {
 	base        string
-	token       string
+	key         string
 	hc          *http.Client
 	maxAttempts int
 	baseDelay   time.Duration
@@ -51,8 +51,8 @@ func New(baseURL string) (*Client, error) {
 	}, nil
 }
 
-func (c *Client) SetToken(token string) {
-	c.token = token
+func (c *Client) SetKey(key string) {
+	c.key = key
 }
 
 type APIError struct {
@@ -71,20 +71,6 @@ func (e *APIError) Retryable() bool {
 		e.Status >= 500
 }
 
-type RegisterRequest struct {
-	RegisterToken string `json:"register_token"`
-	Version       string `json:"version"`
-}
-
-type RegisterResponse struct {
-	AgentID                  int64  `json:"agent_id"`
-	AgentToken               string `json:"agent_token"`
-	ServerID                 int64  `json:"server_id"`
-	HeartbeatIntervalSeconds int    `json:"heartbeat_interval_seconds"`
-	SyncIntervalSeconds      int    `json:"sync_interval_seconds"`
-	TrafficIntervalSeconds   int    `json:"traffic_interval_seconds"`
-}
-
 type HeartbeatRequest struct {
 	Version        string  `json:"version"`
 	CPUPercent     float64 `json:"cpu_percent"`
@@ -96,8 +82,12 @@ type HeartbeatRequest struct {
 
 type HeartbeatResponse struct {
 	OK                       bool  `json:"ok"`
+	ServerID                 int64 `json:"server_id"`
 	ServerRevision           int64 `json:"server_revision"`
 	HeartbeatIntervalSeconds int   `json:"heartbeat_interval_seconds"`
+	TrafficSeq               int64 `json:"traffic_seq"`
+	DeviceSeq                int64 `json:"device_seq"`
+	VisitSeq                 int64 `json:"visit_seq"`
 }
 
 type UserNode struct {
@@ -187,14 +177,6 @@ type VisitAck struct {
 	Accepted bool  `json:"accepted"`
 	BatchSeq int64 `json:"batch_seq"`
 	Records  int64 `json:"records"`
-}
-
-func (c *Client) Register(ctx context.Context, req RegisterRequest) (*RegisterResponse, error) {
-	var out RegisterResponse
-	if err := c.do(ctx, http.MethodPost, "/api/agent/register", nil, req, &out); err != nil {
-		return nil, err
-	}
-	return &out, nil
 }
 
 func (c *Client) Heartbeat(ctx context.Context, req HeartbeatRequest) (*HeartbeatResponse, error) {
@@ -293,8 +275,8 @@ func (c *Client) attempt(ctx context.Context, method, full string, body []byte, 
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if c.token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.token)
+	if c.key != "" {
+		req.Header.Set("Authorization", "Bearer "+c.key)
 	}
 	resp, err := c.hc.Do(req)
 	if err != nil {

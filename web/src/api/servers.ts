@@ -1,9 +1,8 @@
 import { request } from './http'
 import type {
-  AgentTokenResult,
+  AgentKeyResult,
   CreateServerInput,
   Paged,
-  RegisterTokenResult,
   Server,
   ServerDetail,
   UpdateServerInput,
@@ -31,10 +30,10 @@ export async function deleteServer(serverId: number): Promise<void> {
   await request<unknown>(`/api/servers/${serverId}`, { method: 'DELETE' })
 }
 
-export function createRegisterToken(serverId: number): Promise<RegisterTokenResult> {
-  return request<RegisterTokenResult>(`/api/servers/${serverId}/register-token`, { method: 'POST' })
+export function getAgentKey(serverId: number): Promise<AgentKeyResult> {
+  return request<AgentKeyResult>(`/api/servers/${serverId}/agent-key`)
 }
 
-export function rotateAgentToken(serverId: number): Promise<AgentTokenResult> {
-  return request<AgentTokenResult>(`/api/servers/${serverId}/agent-token`, { method: 'POST' })
+export function generateAgentKey(serverId: number): Promise<AgentKeyResult> {
+  return request<AgentKeyResult>(`/api/servers/${serverId}/agent-key`, { method: 'POST' })
 }

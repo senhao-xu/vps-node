@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strconv"
 	"sync"
 	"testing"
@@ -84,12 +83,11 @@ func newTestLoop(t *testing.T, client *agentclient.Client, kernel Kernel, state 
 		state = &agentstate.State{}
 	}
 	return NewLoop(LoopOptions{
-		Config:    &config.Agent{Collection: config.Collection{Traffic: true}},
-		Client:    client,
-		State:     state,
-		StatePath: filepath.Join(t.TempDir(), "state.json"),
-		Kernel:    kernel,
-		Logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Config: &config.Agent{Collection: config.Collection{Traffic: true}},
+		Client: client,
+		State:  state,
+		Kernel: kernel,
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	})
 }
 
@@ -610,12 +608,11 @@ func TestTelemetryVisitReplayKeepsNewVisits(t *testing.T) {
 	kernel := &stubKernel{}
 	state := &agentstate.State{}
 	loop := NewLoop(LoopOptions{
-		Config:    &config.Agent{Collection: config.Collection{Traffic: true, Visits: true}},
-		Client:    client,
-		State:     state,
-		StatePath: filepath.Join(t.TempDir(), "state.json"),
-		Kernel:    kernel,
-		Logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Config: &config.Agent{Collection: config.Collection{Traffic: true, Visits: true}},
+		Client: client,
+		State:  state,
+		Kernel: kernel,
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	})
 	ctx := context.Background()
 
@@ -701,12 +698,11 @@ func TestTelemetryReportsVisits(t *testing.T) {
 	kernel := &stubKernel{}
 	state := &agentstate.State{}
 	loop := NewLoop(LoopOptions{
-		Config:    &config.Agent{Collection: config.Collection{Traffic: true, Visits: true}},
-		Client:    client,
-		State:     state,
-		StatePath: filepath.Join(t.TempDir(), "state.json"),
-		Kernel:    kernel,
-		Logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Config: &config.Agent{Collection: config.Collection{Traffic: true, Visits: true}},
+		Client: client,
+		State:  state,
+		Kernel: kernel,
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	})
 	ctx := context.Background()
 
@@ -726,5 +722,134 @@ func TestTelemetryReportsVisits(t *testing.T) {
 	}
 	if kernel.DrainVisits() != nil {
 		t.Fatal("drained visits must be cleared")
+	}
+}
+
+type stubMetrics struct{}
+
+func (stubMetrics) Collect() (Metrics, error) { return Metrics{}, nil }
+
+func newHeartbeatTestLoop(t *testing.T, serverID int64, state *agentstate.State, body map[string]any) *Loop {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/agent/heartbeat" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(body)
+	}))
+	t.Cleanup(srv.Close)
+
+	client, err := agentclient.New(srv.URL)
+	if err != nil {
+		t.Fatalf("client: %v", err)
+	}
+	loop := NewLoop(LoopOptions{
+		Config:  &config.Agent{AgentKey: "k", ServerID: serverID},
+		Client:  client,
+		State:   state,
+		Kernel:  &stubKernel{},
+		Metrics: stubMetrics{},
+		Logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	if err := loop.EnsureIdentity(context.Background()); err != nil {
+		t.Fatalf("ensure identity: %v", err)
+	}
+	return loop
+}
+
+func TestHeartbeatReconcilesResumeSeqs(t *testing.T) {
+	state := &agentstate.State{TrafficBatchSeq: 3, DeviceBatchSeq: 25, VisitBatchSeq: 5}
+	loop := newHeartbeatTestLoop(t, 4, state, map[string]any{
+		"ok": true, "server_id": 4, "server_revision": 2, "heartbeat_interval_seconds": 30,
+		"traffic_seq": 10, "device_seq": 20, "visit_seq": 30,
+	})
+
+	if _, err := loop.heartbeatPass(context.Background(), func() {}); err != nil {
+		t.Fatalf("heartbeat: %v", err)
+	}
+	if state.TrafficBatchSeq != 10 {
+		t.Fatalf("traffic seq must adopt the panel resume point, got %d", state.TrafficBatchSeq)
+	}
+	if state.DeviceBatchSeq != 25 {
+		t.Fatalf("device seq must not regress, got %d", state.DeviceBatchSeq)
+	}
+	if state.VisitBatchSeq != 30 {
+		t.Fatalf("visit seq must adopt the panel resume point, got %d", state.VisitBatchSeq)
+	}
+}
+
+func TestHeartbeatServerIDMismatchIsFatal(t *testing.T) {
+	loop := newHeartbeatTestLoop(t, 4, &agentstate.State{}, map[string]any{
+		"ok": true, "server_id": 99, "server_revision": 2, "heartbeat_interval_seconds": 30,
+	})
+
+	if _, err := loop.heartbeatPass(context.Background(), func() {}); err == nil {
+		t.Fatal("expected a fatal error when heartbeat server_id does not match config")
+	}
+}
+
+func TestEnsureIdentityRequiresAgentKey(t *testing.T) {
+	loop := NewLoop(LoopOptions{Config: &config.Agent{ServerID: 1}})
+	if err := loop.EnsureIdentity(context.Background()); err == nil {
+		t.Fatal("expected an error when agent_key is missing")
+	}
+}
+
+func TestAgentRestartResumesFromPanelSeq(t *testing.T) {
+	var mu sync.Mutex
+	var gotSeqs []int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/agent/heartbeat":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"ok": true, "server_id": 4, "server_revision": 1, "heartbeat_interval_seconds": 30,
+				"traffic_seq": 7, "device_seq": 0, "visit_seq": 0,
+			})
+		case "/api/agent/traffic":
+			var batch agentclient.TrafficBatch
+			_ = json.NewDecoder(r.Body).Decode(&batch)
+			mu.Lock()
+			gotSeqs = append(gotSeqs, batch.BatchSeq)
+			mu.Unlock()
+			_ = json.NewEncoder(w).Encode(agentclient.TrafficAck{Accepted: true, BatchSeq: batch.BatchSeq, Records: int64(len(batch.Records))})
+		case "/api/agent/devices":
+			var batch agentclient.DeviceBatch
+			_ = json.NewDecoder(r.Body).Decode(&batch)
+			_ = json.NewEncoder(w).Encode(agentclient.DeviceAck{Accepted: true, BatchSeq: batch.BatchSeq, Devices: int64(len(batch.Devices))})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	client, err := agentclient.New(srv.URL)
+	if err != nil {
+		t.Fatalf("client: %v", err)
+	}
+	kernel := &stubKernel{}
+	kernel.setSnapshot(kernelsingbox.Snapshot{Traffic: map[kernelsingbox.Pair]kernelsingbox.Traffic{
+		{UserID: 1, NodeID: 7}: {Upload: 100, Download: 200},
+	}})
+	loop := NewLoop(LoopOptions{
+		Config:  &config.Agent{AgentKey: "k", ServerID: 4, Collection: config.Collection{Traffic: true}},
+		Client:  client,
+		State:   &agentstate.State{},
+		Kernel:  kernel,
+		Metrics: stubMetrics{},
+		Logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	ctx := context.Background()
+	if _, err := loop.heartbeatPass(ctx, func() {}); err != nil {
+		t.Fatalf("heartbeat: %v", err)
+	}
+	loop.telemetryPass(ctx)
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(gotSeqs) != 1 || gotSeqs[0] != 8 {
+		t.Fatalf("restarted agent must resume above the panel seq, got %v", gotSeqs)
 	}
 }

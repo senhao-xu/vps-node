@@ -10,7 +10,6 @@ import (
 
 	"vps-node/internal/agentclient"
 	"vps-node/internal/agentruntime"
-	"vps-node/internal/agentstate"
 	"vps-node/internal/config"
 	kernelsingbox "vps-node/internal/kernel/singbox"
 	"vps-node/internal/logx"
@@ -52,11 +51,6 @@ func run() error {
 		return err
 	}
 
-	state, err := agentstate.Load(cfg.StatePath)
-	if err != nil {
-		return err
-	}
-
 	client, err := agentclient.New(cfg.PanelURL)
 	if err != nil {
 		return err
@@ -74,7 +68,6 @@ func run() error {
 
 	logger.Info("agent starting",
 		"panel_url", cfg.PanelURL,
-		"state_path", cfg.StatePath,
 		"heartbeat_interval", cfg.HeartbeatInterval.String(),
 		"sync_interval", cfg.SyncInterval.String(),
 		"traffic_interval", cfg.TrafficInterval.String(),
@@ -84,14 +77,12 @@ func run() error {
 		})
 
 	loop := agentruntime.NewLoop(agentruntime.LoopOptions{
-		Config:    cfg,
-		Client:    client,
-		State:     state,
-		StatePath: cfg.StatePath,
-		Kernel:    kernel,
-		Metrics:   agentruntime.NewMetricsCollector(),
-		Logger:    logger,
-		Version:   agentVersion,
+		Config:  cfg,
+		Client:  client,
+		Kernel:  kernel,
+		Metrics: agentruntime.NewMetricsCollector(),
+		Logger:  logger,
+		Version: agentVersion,
 	})
 	return loop.Run(ctx)
 }

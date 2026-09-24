@@ -7,22 +7,17 @@ services:
     environment:
       AGENT_PANEL_URL: "${AGENT_PANEL_URL:?set AGENT_PANEL_URL, e.g. https://panel.example.com}"
       AGENT_SERVER_ID: "${AGENT_SERVER_ID:?set AGENT_SERVER_ID to the server id shown in the panel}"
-      AGENT_REGISTER_TOKEN: ${AGENT_REGISTER_TOKEN:-}
-      AGENT_TOKEN: ${AGENT_TOKEN:-}
+      AGENT_KEY: "${AGENT_KEY:?set AGENT_KEY from the Server detail page}"
       AGENT_LOG_LEVEL: ${AGENT_LOG_LEVEL:-info}
     ports:
       - "${NODE_PORT:-8388}:8388/tcp"
       - "${NODE_PORT:-8388}:8388/udp"
-    volumes:
-      - agent-state:/var/lib/panel-agent
 
-volumes:
-  agent-state:
-
-# The agent image is self-contained: the agent binary embeds sing-box (built with
-# -tags with_quic,with_utls) and runs it in-process, applying each config revision without a
-# helper process. Agent identity lives in the agent-state volume; deleting it forces
-# re-registration.
+# The agent image is self-contained and stateless: the agent binary embeds sing-box
+# (built with -tags with_quic,with_utls) and runs it in-process, applying each config
+# revision without a helper process or persistent volume. Identity, batch sequence
+# resume points and the applied revision all live on the panel, so the container can
+# be recreated at any time with only AGENT_KEY and AGENT_SERVER_ID.
 #
 # Port mapping notes:
 # - The example publishes one port for a single shadowsocks/hysteria2 node

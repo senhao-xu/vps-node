@@ -243,7 +243,7 @@ func writeAgentConfig(t *testing.T, content string) string {
 func TestLoadAgentFromFile(t *testing.T) {
 	path := writeAgentConfig(t, `
 panel_url: https://panel.example.com
-token: secret-token
+agent_key: secret-key
 server_id: 3
 log_level: warn
 heartbeat_interval: 15
@@ -255,7 +255,7 @@ traffic_interval: 120
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if cfg.PanelURL != "https://panel.example.com" || cfg.ServerID != 3 || cfg.LogLevel != "warn" {
+	if cfg.PanelURL != "https://panel.example.com" || cfg.AgentKey != "secret-key" || cfg.ServerID != 3 || cfg.LogLevel != "warn" {
 		t.Fatalf("unexpected cfg: %+v", cfg)
 	}
 	if cfg.HeartbeatInterval.Seconds() != 15 || cfg.SyncInterval.Seconds() != 45 || cfg.TrafficInterval.Seconds() != 120 {
@@ -264,7 +264,7 @@ traffic_interval: 120
 }
 
 func TestLoadAgentDefaults(t *testing.T) {
-	path := writeAgentConfig(t, "panel_url: https://p.example.com\ntoken: t\nserver_id: 1\n")
+	path := writeAgentConfig(t, "panel_url: https://p.example.com\nagent_key: k\nserver_id: 1\n")
 
 	cfg, err := config.LoadAgent(path)
 	if err != nil {
@@ -276,15 +276,15 @@ func TestLoadAgentDefaults(t *testing.T) {
 }
 
 func TestLoadAgentEnvOverrides(t *testing.T) {
-	path := writeAgentConfig(t, "panel_url: https://p.example.com\ntoken: t\nserver_id: 1\n")
+	path := writeAgentConfig(t, "panel_url: https://p.example.com\nagent_key: k\nserver_id: 1\n")
 	t.Setenv("AGENT_SERVER_ID", "9")
-	t.Setenv("AGENT_TOKEN", "env-token")
+	t.Setenv("AGENT_KEY", "env-key")
 
 	cfg, err := config.LoadAgent(path)
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if cfg.ServerID != 9 || cfg.Token != "env-token" {
+	if cfg.ServerID != 9 || cfg.AgentKey != "env-key" {
 		t.Fatalf("unexpected env override: %+v", cfg)
 	}
 }
@@ -294,8 +294,13 @@ func TestLoadAgentMissingFields(t *testing.T) {
 		t.Fatal("expected error for missing agent config file")
 	}
 
-	path := writeAgentConfig(t, "panel_url: https://p.example.com\ntoken: t\nserver_id: 0\n")
+	path := writeAgentConfig(t, "panel_url: https://p.example.com\nagent_key: k\nserver_id: 0\n")
 	if _, err := config.LoadAgent(path); err == nil {
 		t.Fatal("expected error for zero server_id")
+	}
+
+	path = writeAgentConfig(t, "panel_url: https://p.example.com\nserver_id: 1\n")
+	if _, err := config.LoadAgent(path); err == nil {
+		t.Fatal("expected error for missing agent_key")
 	}
 }

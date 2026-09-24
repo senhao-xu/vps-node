@@ -27,8 +27,6 @@ const (
 	defaultTrafficInterval   = 60 * time.Second
 	minAgentInterval         = 5 * time.Second
 
-	defaultAgentStatePath = "agent_state.json"
-
 	defaultSweepInterval = time.Hour
 	minSweepInterval     = time.Second
 
@@ -120,10 +118,8 @@ type Collection struct {
 
 type Agent struct {
 	PanelURL          string
-	Token             string
-	RegisterToken     string
+	AgentKey          string
 	ServerID          int64
-	StatePath         string
 	LogLevel          string
 	HeartbeatInterval time.Duration
 	SyncInterval      time.Duration
@@ -150,10 +146,8 @@ type panelFile struct {
 
 type agentFile struct {
 	PanelURL             string `yaml:"panel_url"`
-	Token                string `yaml:"token"`
-	RegisterToken        string `yaml:"register_token"`
+	AgentKey             string `yaml:"agent_key"`
 	ServerID             int64  `yaml:"server_id"`
-	StatePath            string `yaml:"state_path"`
 	LogLevel             string `yaml:"log_level"`
 	HeartbeatIntervalSec int    `yaml:"heartbeat_interval"`
 	SyncIntervalSec      int    `yaml:"sync_interval"`
@@ -299,7 +293,6 @@ func LoadAgent(path string) (*Agent, error) {
 		HeartbeatInterval: defaultHeartbeatInterval,
 		SyncInterval:      defaultSyncInterval,
 		TrafficInterval:   defaultTrafficInterval,
-		StatePath:         defaultAgentStatePath,
 		Collection:        Collection{Traffic: true, Visits: true},
 	}
 
@@ -313,12 +306,8 @@ func LoadAgent(path string) (*Agent, error) {
 			return nil, fmt.Errorf("parse agent config: %w", err)
 		}
 		cfg.PanelURL = strings.TrimSpace(af.PanelURL)
-		cfg.Token = strings.TrimSpace(af.Token)
-		cfg.RegisterToken = strings.TrimSpace(af.RegisterToken)
+		cfg.AgentKey = strings.TrimSpace(af.AgentKey)
 		cfg.ServerID = af.ServerID
-		if af.StatePath != "" {
-			cfg.StatePath = strings.TrimSpace(af.StatePath)
-		}
 		if af.LogLevel != "" {
 			cfg.LogLevel = af.LogLevel
 		}
@@ -342,11 +331,8 @@ func LoadAgent(path string) (*Agent, error) {
 	if v := os.Getenv("AGENT_PANEL_URL"); v != "" {
 		cfg.PanelURL = v
 	}
-	if v := os.Getenv("AGENT_TOKEN"); v != "" {
-		cfg.Token = v
-	}
-	if v := os.Getenv("AGENT_REGISTER_TOKEN"); v != "" {
-		cfg.RegisterToken = v
+	if v := os.Getenv("AGENT_KEY"); v != "" {
+		cfg.AgentKey = v
 	}
 	if v := os.Getenv("AGENT_SERVER_ID"); v != "" {
 		n, err := strconv.ParseInt(v, 10, 64)
@@ -354,9 +340,6 @@ func LoadAgent(path string) (*Agent, error) {
 			return nil, fmt.Errorf("AGENT_SERVER_ID: %w", err)
 		}
 		cfg.ServerID = n
-	}
-	if v := os.Getenv("AGENT_STATE_PATH"); v != "" {
-		cfg.StatePath = v
 	}
 	if v := os.Getenv("AGENT_LOG_LEVEL"); v != "" {
 		cfg.LogLevel = v
@@ -387,14 +370,11 @@ func LoadAgent(path string) (*Agent, error) {
 	if cfg.PanelURL == "" {
 		return nil, fmt.Errorf("panel_url is required")
 	}
-	if cfg.Token == "" && cfg.RegisterToken == "" {
-		return nil, fmt.Errorf("token or register_token is required")
+	if cfg.AgentKey == "" {
+		return nil, fmt.Errorf("agent_key is required")
 	}
 	if cfg.ServerID < 1 {
 		return nil, fmt.Errorf("server_id must be >= 1")
-	}
-	if cfg.StatePath == "" {
-		return nil, fmt.Errorf("state_path is required")
 	}
 	if err := validateLogLevel(cfg.LogLevel); err != nil {
 		return nil, err

@@ -7,18 +7,17 @@ import (
 )
 
 type Server struct {
-	ID                     int64
-	Name                   string
-	Status                 string
-	CPUPercent             float64
-	MemoryPercent          float64
-	DiskPercent            float64
-	UptimeSeconds          int64
-	AgentVersion           string
-	LastSeenAt             *time.Time
-	RegisterTokenExpiresAt *time.Time
-	CreatedAt              time.Time
-	UpdatedAt              time.Time
+	ID            int64
+	Name          string
+	Status        string
+	CPUPercent    float64
+	MemoryPercent float64
+	DiskPercent   float64
+	UptimeSeconds int64
+	AgentVersion  string
+	LastSeenAt    *time.Time
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
 
 const (
@@ -28,7 +27,7 @@ const (
 )
 
 const serverSelect = `SELECT id, name, status, cpu_percent, memory_percent, disk_percent, uptime_seconds,
-		     agent_version, last_seen_at, register_token_expires_at, created_at, updated_at
+		     agent_version, last_seen_at, created_at, updated_at
 		     FROM servers`
 
 func getServerExec(ctx context.Context, q execer, id int64) (Server, error) {
@@ -93,11 +92,6 @@ func collectServers(rows *sql.Rows) ([]Server, error) {
 	return servers, rows.Err()
 }
 
-func (r *Repo) GetServerByRegisterTokenHash(ctx context.Context, tokenHash string) (Server, error) {
-	row := r.DB.QueryRowContext(ctx, serverSelect+` WHERE register_token_hash = ?`, tokenHash)
-	return scanServer(row.Scan)
-}
-
 func (r *Repo) UpdateServer(ctx context.Context, id int64, name, status string) error {
 	_, err := r.DB.ExecContext(ctx,
 		`UPDATE servers SET name = ?, status = ?, updated_at = ? WHERE id = ?`,
@@ -107,13 +101,6 @@ func (r *Repo) UpdateServer(ctx context.Context, id int64, name, status string) 
 
 func (r *Repo) SetServerStatus(ctx context.Context, id int64, status string) error {
 	_, err := r.DB.ExecContext(ctx, `UPDATE servers SET status = ?, updated_at = ? WHERE id = ?`, status, nowUnix(), id)
-	return mapErr(err)
-}
-
-func (r *Repo) SetServerRegisterTokenHash(ctx context.Context, id int64, tokenHash string, expiresAt *time.Time) error {
-	_, err := r.DB.ExecContext(ctx,
-		`UPDATE servers SET register_token_hash = ?, register_token_expires_at = ?, updated_at = ? WHERE id = ?`,
-		tokenHash, timeArg(expiresAt), nowUnix(), id)
 	return mapErr(err)
 }
 
@@ -132,15 +119,14 @@ func (r *Repo) DeleteServer(ctx context.Context, id int64) error {
 
 func scanServer(scan func(dest ...any) error) (Server, error) {
 	var s Server
-	var lastSeenAt, registerTokenExpiresAt sql.NullInt64
+	var lastSeenAt sql.NullInt64
 	var createdAt, updatedAt int64
 	err := scan(&s.ID, &s.Name, &s.Status, &s.CPUPercent, &s.MemoryPercent, &s.DiskPercent,
-		&s.UptimeSeconds, &s.AgentVersion, &lastSeenAt, &registerTokenExpiresAt, &createdAt, &updatedAt)
+		&s.UptimeSeconds, &s.AgentVersion, &lastSeenAt, &createdAt, &updatedAt)
 	if err != nil {
 		return Server{}, mapErr(err)
 	}
 	s.LastSeenAt = toTimePtr(lastSeenAt)
-	s.RegisterTokenExpiresAt = toTimePtr(registerTokenExpiresAt)
 	s.CreatedAt = toTime(createdAt)
 	s.UpdatedAt = toTime(updatedAt)
 	return s, nil

@@ -16,128 +16,74 @@ func (e *testEnv) doAgent(t *testing.T, method, path string, body any, token str
 	return e.doWithHeader(t, method, path, body, "Authorization", "Bearer "+token)
 }
 
-func (e *testEnv) registerAgent(t *testing.T, cookie *http.Cookie, serverID int64, version string) string {
+func (e *testEnv) agentKey(t *testing.T, cookie *http.Cookie, serverID int64) string {
 	t.Helper()
-	resp, body := e.do(t, "POST", fmt.Sprintf("/api/servers/%d/register-token", serverID), nil, cookie)
+	resp, body := e.do(t, "POST", fmt.Sprintf("/api/servers/%d/agent-key", serverID), nil, cookie)
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("register-token: %d %s", resp.StatusCode, body)
+		t.Fatalf("agent-key generate: %d %s", resp.StatusCode, body)
 	}
-	regToken := jsonMap(t, body)["register_token"].(string)
-
-	resp, body = e.doAgent(t, "POST", "/api/agent/register",
-		map[string]any{"register_token": regToken, "version": version}, "")
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("agent register: %d %s", resp.StatusCode, body)
+	key, _ := jsonMap(t, body)["agent_key"].(string)
+	if key == "" {
+		t.Fatalf("expected agent_key, got %s", body)
 	}
-	payload := jsonMap(t, body)
-	token, _ := payload["agent_token"].(string)
-	if token == "" {
-		t.Fatalf("expected agent_token, got %s", body)
-	}
-	if int64(payload["server_id"].(float64)) != serverID {
-		t.Fatalf("expected server_id %d, got %s", serverID, body)
-	}
-	for _, key := range []string{"agent_id", "heartbeat_interval_seconds", "sync_interval_seconds", "traffic_interval_seconds"} {
-		if _, ok := payload[key].(float64); !ok {
-			t.Fatalf("expected %s in register response, got %s", key, body)
-		}
-	}
-	return token
+	return key
 }
 
-func TestAgentRegisterSingleUse(t *testing.T) {
+func TestAgentKeyLifecycle(t *testing.T) {
 	e := newTestEnv(t)
 	cookie := e.login(t)
 	serverID := e.seedServer(t, "s1")
 
-	resp, body := e.doAgent(t, "POST", "/api/agent/heartbeat",
-		map[string]any{"version": "1.0.0", "cpu_percent": 1.0, "memory_percent": 1.0, "disk_percent": 1.0, "uptime_seconds": 1}, "")
+	resp, body := e.doAgent(t, "POST", "/api/agent/heartbeat", validHB(), "")
 	if resp.StatusCode != http.StatusUnauthorized || errorCode(t, body) != "unauthorized" {
-		t.Fatalf("missing token must be 401, got %d %s", resp.StatusCode, body)
+		t.Fatalf("missing key must be 401, got %d %s", resp.StatusCode, body)
 	}
 
-	resp, body = e.do(t, "POST", "/api/agent/register", map[string]any{"register_token": "bogus"}, nil)
+	resp, body = e.doAgent(t, "POST", "/api/agent/heartbeat", validHB(), "bogus")
 	if resp.StatusCode != http.StatusUnauthorized || errorCode(t, body) != "unauthorized" {
-		t.Fatalf("bogus register token must be 401, got %d %s", resp.StatusCode, body)
+		t.Fatalf("bogus key must be 401, got %d %s", resp.StatusCode, body)
 	}
 
-	token := e.registerAgent(t, cookie, serverID, "1.0.0")
+	key := e.agentKey(t, cookie, serverID)
 
-	resp, body = e.doAgent(t, "POST", "/api/agent/heartbeat", validHB(), token)
+	resp, body = e.do(t, "GET", fmt.Sprintf("/api/servers/%d/agent-key", serverID), nil, cookie)
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("heartbeat with registered token must work: %d %s", resp.StatusCode, body)
+		t.Fatalf("agent-key read: %d %s", resp.StatusCode, body)
+	}
+	if got := jsonMap(t, body)["agent_key"]; got != key {
+		t.Fatalf("stored key must be retrievable, got %v want %s", got, key)
 	}
 
-	regResp, regBody := e.do(t, "POST", fmt.Sprintf("/api/servers/%d/register-token", serverID), nil, cookie)
-	if regResp.StatusCode != http.StatusOK {
-		t.Fatalf("second register-token: %d %s", regResp.StatusCode, regBody)
-	}
-	resp, body = e.doAgent(t, "POST", "/api/agent/register",
-		map[string]any{"register_token": jsonMap(t, regBody)["register_token"], "version": "1.0.0"}, "")
+	resp, body = e.doAgent(t, "POST", "/api/agent/heartbeat", validHB(), key)
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("fresh register token must work: %d %s", resp.StatusCode, body)
-	}
-	newToken := jsonMap(t, body)["agent_token"].(string)
-	if newToken == "" {
-		t.Fatalf("re-registration must return a new agent token, got %s", body)
+		t.Fatalf("heartbeat with agent key must work: %d %s", resp.StatusCode, body)
 	}
 
-	resp, body = e.doAgent(t, "POST", "/api/agent/heartbeat", validHB(), token)
+	newKey := e.agentKey(t, cookie, serverID)
+	if newKey == key {
+		t.Fatal("reset must issue a new key")
+	}
+	resp, body = e.doAgent(t, "POST", "/api/agent/heartbeat", validHB(), key)
 	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("re-registration must rotate the agent token (old token 401), got %d %s", resp.StatusCode, body)
+		t.Fatalf("old key must be 401 after reset, got %d %s", resp.StatusCode, body)
 	}
-	resp, body = e.doAgent(t, "POST", "/api/agent/heartbeat", validHB(), newToken)
+	resp, body = e.doAgent(t, "POST", "/api/agent/heartbeat", validHB(), newKey)
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("heartbeat with rotated token must work: %d %s", resp.StatusCode, body)
+		t.Fatalf("new key must work after reset, got %d %s", resp.StatusCode, body)
 	}
 }
 
-func TestAgentRegisterTokenCannotBeReused(t *testing.T) {
+func TestAgentKeyGetConflictsWithoutStoredKey(t *testing.T) {
 	e := newTestEnv(t)
 	cookie := e.login(t)
 	serverID := e.seedServer(t, "s1")
+	if _, err := e.repo.CreateAgent(context.Background(), serverID, "legacy-hash", "1.0.0"); err != nil {
+		t.Fatalf("create agent: %v", err)
+	}
 
-	resp, body := e.do(t, "POST", fmt.Sprintf("/api/servers/%d/register-token", serverID), nil, cookie)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("register-token: %d %s", resp.StatusCode, body)
-	}
-	regToken := jsonMap(t, body)["register_token"].(string)
-
-	register := func(tok string) int {
-		r, _ := e.doAgent(t, "POST", "/api/agent/register",
-			map[string]any{"register_token": tok, "version": "1.0.0"}, "")
-		return r.StatusCode
-	}
-	if code := register(regToken); code != http.StatusOK {
-		t.Fatalf("first use of register token must succeed, got %d", code)
-	}
-	if code := register(regToken); code != http.StatusUnauthorized {
-		t.Fatalf("second use of the same register token must be 401, got %d", code)
-	}
-}
-
-func TestAgentTokenRotationInvalidatesOld(t *testing.T) {
-	e := newTestEnv(t)
-	cookie := e.login(t)
-	serverID := e.seedServer(t, "s1")
-	token := e.registerAgent(t, cookie, serverID, "1.0.0")
-
-	resp, body := e.do(t, "POST", fmt.Sprintf("/api/servers/%d/agent-token", serverID), nil, cookie)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("agent-token rotation: %d %s", resp.StatusCode, body)
-	}
-	newToken := jsonMap(t, body)["agent_token"].(string)
-
-	hb := func(tok string) int {
-		resp, _ := e.doAgent(t, "POST", "/api/agent/heartbeat",
-			map[string]any{"version": "1.0.0", "cpu_percent": 1.0, "memory_percent": 1.0, "disk_percent": 1.0, "uptime_seconds": 1}, tok)
-		return resp.StatusCode
-	}
-	if code := hb(token); code != http.StatusUnauthorized {
-		t.Fatalf("old agent token must be 401 after rotation, got %d", code)
-	}
-	if code := hb(newToken); code != http.StatusOK {
-		t.Fatalf("new agent token must work, got %d", code)
+	resp, body := e.do(t, "GET", fmt.Sprintf("/api/servers/%d/agent-key", serverID), nil, cookie)
+	if resp.StatusCode != http.StatusConflict || errorCode(t, body) != "conflict" {
+		t.Fatalf("key without key_enc must be 409, got %d %s", resp.StatusCode, body)
 	}
 }
 
@@ -150,7 +96,7 @@ func TestAgentServerIDDerivedFromCredentialNotBody(t *testing.T) {
 	serverB := e.seedServer(t, "b")
 	nodeA := e.seedNode(t, serverA, "a1", 443)
 	nodeB := e.seedNode(t, serverB, "b1", 8443)
-	tokenA := e.registerAgent(t, cookie, serverA, "1.0.0")
+	tokenA := e.agentKey(t, cookie, serverA)
 
 	u1 := e.seedUser(t, "u1")
 	if err := e.repo.AuthorizeUserNode(ctx, u1, nodeA); err != nil {
@@ -243,8 +189,8 @@ func TestAgentVisitIngestion(t *testing.T) {
 	serverB := e.seedServer(t, "b")
 	nodeA := e.seedNode(t, serverA, "a1", 443)
 	nodeB := e.seedNode(t, serverB, "b1", 443)
-	tokenA := e.registerAgent(t, cookie, serverA, "1.0.0")
-	tokenB := e.registerAgent(t, cookie, serverB, "1.0.0")
+	tokenA := e.agentKey(t, cookie, serverA)
+	tokenB := e.agentKey(t, cookie, serverB)
 
 	u1 := e.seedUser(t, "u1")
 	u2 := e.seedUser(t, "u2")
@@ -383,7 +329,7 @@ func TestAgentHeartbeatUpdatesServerMetrics(t *testing.T) {
 	e := newTestEnv(t)
 	cookie := e.login(t)
 	serverID := e.seedServer(t, "s1")
-	token := e.registerAgent(t, cookie, serverID, "1.0.0")
+	token := e.agentKey(t, cookie, serverID)
 
 	resp, body := e.doAgent(t, "POST", "/api/agent/heartbeat", map[string]any{
 		"version": "2.0.0", "cpu_percent": 23.5, "memory_percent": 52.0, "disk_percent": 41.0, "uptime_seconds": 123456,
@@ -460,8 +406,8 @@ func TestAgentConfigCurrentAndPayload(t *testing.T) {
 	}, cookie)
 	nodeB := int64(jsonMap(t, body)["id"].(float64))
 
-	tokenA := e.registerAgent(t, cookie, serverA, "1.0.0")
-	tokenB := e.registerAgent(t, cookie, serverB, "1.0.0")
+	tokenA := e.agentKey(t, cookie, serverA)
+	tokenB := e.agentKey(t, cookie, serverB)
 
 	u1 := e.seedUser(t, "u1")
 	u2 := e.seedUser(t, "u2")
@@ -647,8 +593,8 @@ func TestAgentTrafficIngestion(t *testing.T) {
 	serverB := e.seedServer(t, "b")
 	nodeA := e.seedNode(t, serverA, "a1", 443)
 	nodeB := e.seedNode(t, serverB, "b1", 443)
-	tokenA := e.registerAgent(t, cookie, serverA, "1.0.0")
-	tokenB := e.registerAgent(t, cookie, serverB, "1.0.0")
+	tokenA := e.agentKey(t, cookie, serverA)
+	tokenB := e.agentKey(t, cookie, serverB)
 
 	u1 := e.seedUser(t, "u1")
 	u2 := e.seedUser(t, "u2")
@@ -783,7 +729,7 @@ func TestAgentDevicesSnapshot(t *testing.T) {
 	serverB := e.seedServer(t, "b")
 	nodeA := e.seedNode(t, serverA, "a1", 443)
 	nodeB := e.seedNode(t, serverB, "b1", 443)
-	tokenA := e.registerAgent(t, cookie, serverA, "1.0.0")
+	tokenA := e.agentKey(t, cookie, serverA)
 
 	u1 := e.seedUser(t, "u1")
 	if err := e.repo.AuthorizeUserNode(ctx, u1, nodeA); err != nil {

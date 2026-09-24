@@ -246,7 +246,7 @@ func TestSetUserNodesIdempotent(t *testing.T) {
 	}
 }
 
-func TestAgentOwnershipAndRotation(t *testing.T) {
+func TestAgentOwnershipAndKey(t *testing.T) {
 	r := newTestRepo(t)
 	ctx := context.Background()
 
@@ -262,12 +262,12 @@ func TestAgentOwnershipAndRotation(t *testing.T) {
 		t.Fatalf("expected conflict: one agent per server, got %v", err)
 	}
 	if _, err := r.CreateAgent(ctx, server2, "agent-hash-1", ""); !errors.Is(err, repo.ErrConflict) {
-		t.Fatalf("expected conflict: duplicate token hash, got %v", err)
+		t.Fatalf("expected conflict: duplicate key hash, got %v", err)
 	}
 
-	agent, err := r.GetAgentByTokenHash(ctx, "agent-hash-1")
+	agent, err := r.GetAgentByKeyHash(ctx, "agent-hash-1")
 	if err != nil {
-		t.Fatalf("get by token hash: %v", err)
+		t.Fatalf("get by key hash: %v", err)
 	}
 	if agent.ServerID != server1 {
 		t.Fatalf("expected server %d, got %d", server1, agent.ServerID)
@@ -287,14 +287,29 @@ func TestAgentOwnershipAndRotation(t *testing.T) {
 		t.Fatalf("unexpected agent after heartbeat: %+v", agent)
 	}
 
-	if err := r.RotateAgentTokenHash(ctx, agentID, "agent-hash-new"); err != nil {
-		t.Fatalf("rotate: %v", err)
+	if err := r.UpsertAgentKey(ctx, server1, "agent-hash-new", []byte{1, 2, 3}); err != nil {
+		t.Fatalf("upsert key: %v", err)
 	}
-	if _, err := r.GetAgentByTokenHash(ctx, "agent-hash-1"); !errors.Is(err, repo.ErrNotFound) {
-		t.Fatalf("expected old token invalid, got %v", err)
+	if _, err := r.GetAgentByKeyHash(ctx, "agent-hash-1"); !errors.Is(err, repo.ErrNotFound) {
+		t.Fatalf("expected old key invalid, got %v", err)
 	}
-	if _, err := r.GetAgentByTokenHash(ctx, "agent-hash-new"); err != nil {
-		t.Fatalf("expected new token valid, got %v", err)
+	agent, err = r.GetAgentByKeyHash(ctx, "agent-hash-new")
+	if err != nil {
+		t.Fatalf("expected new key valid, got %v", err)
+	}
+	if string(agent.KeyEnc) != string([]byte{1, 2, 3}) {
+		t.Fatalf("key_enc must round-trip, got %v", agent.KeyEnc)
+	}
+	if agent.Version != "1.1.0" || agent.LastSeenAt == nil {
+		t.Fatalf("key upsert must preserve version/last_seen, got %+v", agent)
+	}
+
+	server3 := mustCreateServer(t, r, "s3")
+	if err := r.UpsertAgentKey(ctx, server3, "agent-hash-3", []byte{9}); err != nil {
+		t.Fatalf("upsert key for new server: %v", err)
+	}
+	if _, err := r.GetAgentByKeyHash(ctx, "agent-hash-3"); err != nil {
+		t.Fatalf("expected upsert to create an agent: %v", err)
 	}
 }
 
@@ -811,6 +826,46 @@ func TestBatchIdempotencyTracking(t *testing.T) {
 	exists, _ = r.DeviceBatchExists(ctx, agentID, 7)
 	if !exists {
 		t.Fatal("expected device batch present")
+	}
+}
+
+func TestLastBatchSeqs(t *testing.T) {
+	r := newTestRepo(t)
+	ctx := context.Background()
+
+	serverID := mustCreateServer(t, r, "s1")
+	agentID, err := r.CreateAgent(ctx, serverID, "agent-hash", "")
+	if err != nil {
+		t.Fatalf("create agent: %v", err)
+	}
+
+	if seq, err := r.LastTrafficSeq(ctx, agentID); err != nil || seq != 0 {
+		t.Fatalf("empty traffic seq = %d %v, want 0", seq, err)
+	}
+	if seq, err := r.LastDeviceSeq(ctx, agentID); err != nil || seq != 0 {
+		t.Fatalf("empty device seq = %d %v, want 0", seq, err)
+	}
+	if seq, err := r.LastVisitSeq(ctx, agentID); err != nil || seq != 0 {
+		t.Fatalf("empty visit seq = %d %v, want 0", seq, err)
+	}
+
+	if _, _, err := r.IngestVisitBatch(ctx, agentID, 4, serverID, nil); err != nil {
+		t.Fatalf("ingest visit batch: %v", err)
+	}
+	if err := r.RecordTrafficBatch(ctx, agentID, 7); err != nil {
+		t.Fatalf("record traffic batch: %v", err)
+	}
+	if err := r.RecordDeviceBatch(ctx, agentID, 9); err != nil {
+		t.Fatalf("record device batch: %v", err)
+	}
+	if seq, _ := r.LastTrafficSeq(ctx, agentID); seq != 7 {
+		t.Fatalf("traffic seq = %d, want 7", seq)
+	}
+	if seq, _ := r.LastDeviceSeq(ctx, agentID); seq != 9 {
+		t.Fatalf("device seq = %d, want 9", seq)
+	}
+	if seq, _ := r.LastVisitSeq(ctx, agentID); seq != 4 {
+		t.Fatalf("visit seq = %d, want 4", seq)
 	}
 }
 

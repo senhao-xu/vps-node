@@ -33,8 +33,8 @@ func TestMigrateIdempotent(t *testing.T) {
 	if err := d.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations`).Scan(&count); err != nil {
 		t.Fatalf("count migrations: %v", err)
 	}
-	if count != 4 {
-		t.Fatalf("expected 4 applied migrations, got %d", count)
+	if count != 5 {
+		t.Fatalf("expected 5 applied migrations, got %d", count)
 	}
 
 	for _, table := range []string{
@@ -50,6 +50,84 @@ func TestMigrateIdempotent(t *testing.T) {
 		if err != nil {
 			t.Fatalf("table %s missing: %v", table, err)
 		}
+	}
+}
+
+func tableColumns(t *testing.T, d *db.DB, table string) map[string]bool {
+	t.Helper()
+	rows, err := d.QueryContext(context.Background(), `PRAGMA table_info(`+table+`)`)
+	if err != nil {
+		t.Fatalf("table_info %s: %v", table, err)
+	}
+	defer rows.Close()
+	cols := map[string]bool{}
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notnull, pk int
+		var dflt any
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			t.Fatalf("scan table_info %s: %v", table, err)
+		}
+		cols[name] = true
+	}
+	return cols
+}
+
+func TestStatelessAgentSchema(t *testing.T) {
+	d := openTestDB(t)
+	ctx := context.Background()
+
+	agentCols := tableColumns(t, d, "agents")
+	if !agentCols["key_hash"] || !agentCols["key_enc"] {
+		t.Fatalf("agents must expose key_hash/key_enc, got %v", agentCols)
+	}
+	if agentCols["token_hash"] {
+		t.Fatalf("agents.token_hash must be renamed, got %v", agentCols)
+	}
+	serverCols := tableColumns(t, d, "servers")
+	if serverCols["register_token_hash"] || serverCols["register_token_expires_at"] {
+		t.Fatalf("servers register-token columns must be dropped, got %v", serverCols)
+	}
+
+	if _, err := d.ExecContext(ctx, `INSERT INTO servers (id, name, created_at, updated_at) VALUES (1, 's1', 1, 1)`); err != nil {
+		t.Fatalf("seed server: %v", err)
+	}
+	if _, err := d.ExecContext(ctx, `INSERT INTO agents (server_id, key_hash, key_enc, created_at, updated_at) VALUES (1, 'h', X'0102', 1, 1)`); err != nil {
+		t.Fatalf("insert agent: %v", err)
+	}
+	var hash string
+	var enc []byte
+	if err := d.QueryRowContext(ctx, `SELECT key_hash, key_enc FROM agents WHERE server_id = 1`).Scan(&hash, &enc); err != nil {
+		t.Fatalf("read agent key: %v", err)
+	}
+	if hash != "h" || len(enc) != 2 {
+		t.Fatalf("unexpected agent key row hash=%q enc=%v", hash, enc)
+	}
+	if _, err := d.ExecContext(ctx, `INSERT INTO traffic_batches (agent_id, seq, received_at) VALUES (1, 1, 1)`); err != nil {
+		t.Fatalf("insert batch: %v", err)
+	}
+	if _, err := d.ExecContext(ctx, `DELETE FROM servers WHERE id = 1`); err != nil {
+		t.Fatalf("delete server: %v", err)
+	}
+	var agents, batches int
+	if err := d.QueryRowContext(ctx, `SELECT COUNT(*) FROM agents`).Scan(&agents); err != nil {
+		t.Fatalf("count agents: %v", err)
+	}
+	if err := d.QueryRowContext(ctx, `SELECT COUNT(*) FROM traffic_batches`).Scan(&batches); err != nil {
+		t.Fatalf("count batches: %v", err)
+	}
+	if agents != 0 || batches != 0 {
+		t.Fatalf("agent cascade must survive the rebuild, agents=%d batches=%d", agents, batches)
+	}
+
+	rows, err := d.QueryContext(ctx, `PRAGMA foreign_key_check`)
+	if err != nil {
+		t.Fatalf("foreign_key_check: %v", err)
+	}
+	defer rows.Close()
+	if rows.Next() {
+		t.Fatal("foreign_key_check reported violations after migration")
 	}
 }
 

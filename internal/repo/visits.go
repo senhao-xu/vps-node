@@ -96,6 +96,10 @@ func (r *Repo) IngestVisitBatch(ctx context.Context, agentID, seq, serverID int6
 	return count, duplicate, err
 }
 
+func (r *Repo) LastVisitSeq(ctx context.Context, agentID int64) (int64, error) {
+	return r.lastBatchSeq(ctx, "visit_batches", agentID)
+}
+
 func (r *Repo) VisitBatchCount(ctx context.Context, agentID, seq int64) (int64, bool, error) {
 	var count int64
 	err := r.DB.QueryRowContext(ctx,

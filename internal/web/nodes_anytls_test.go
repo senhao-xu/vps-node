@@ -122,7 +122,7 @@ func TestAnyTLSUpdatePreservesSecretAndAgentConfig(t *testing.T) {
 	if err := e.repo.AuthorizeUserNode(ctx, userID, nodeID); err != nil {
 		t.Fatalf("authorize: %v", err)
 	}
-	token := e.registerAgent(t, cookie, serverID, "1.0.0")
+	token := e.agentKey(t, cookie, serverID)
 	resp, body = e.doAgent(t, "GET", "/api/agent/config?version=0", nil, token)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("agent config: %d %s", resp.StatusCode, body)

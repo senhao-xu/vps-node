@@ -202,14 +202,8 @@ export type Settings = {
 
 export type Subscription = { configured: boolean; url: string | null }
 
-export type RegisterTokenResult = {
-  register_token: string
-  expires_at: string
-}
-
-export type AgentTokenResult = {
-  agent_token: string
-  expires_hint: null
+export type AgentKeyResult = {
+  agent_key: string
 }
 
 export type RealityKeypair = {

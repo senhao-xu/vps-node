@@ -54,7 +54,7 @@ make build-embed              # npm ci + npm run build + go build -tags embed_ui
 
 ### Agent
 
-1. In the Panel web UI: **Servers → Server detail → Generate register token** (one-time, hashed at rest).
+1. In the Panel web UI: **Servers → Server detail → Agent Key → 生成 Agent Key**. The key is shown at any time and can be reset; only its SHA-256 hash is used for authentication.
 2. On the VPS (no separate sing-box install needed — it is embedded in the agent):
 
 ```sh
@@ -62,29 +62,28 @@ PANEL_DOWNLOAD_BASE=https://example.com/downloads/vps-node \
 PANEL_VERSION=20260920 \
 PANEL_URL=https://panel.example.com \
 SERVER_ID=1 \
-REGISTER_TOKEN=<token-from-server-detail> \
+AGENT_KEY=<key-from-server-detail> \
 sh install-agent.sh
 ```
 
-`deploy/install-agent.sh` is idempotent: detects amd64/arm64/386, installs `/usr/local/bin/panel-agent`, writes `/etc/panel-agent/agent.yaml` only if absent, creates the `panel-agent` user and enables the hardened `panel-agent.service`. Registration happens on first start; the returned agent token (plaintext once) is persisted to the state file with mode 0600 — delete the state file to re-register.
+`deploy/install-agent.sh` is idempotent: detects amd64/arm64/386, installs `/usr/local/bin/panel-agent`, writes `/etc/panel-agent/agent.yaml` only if absent, creates the `panel-agent` user and enables the hardened `panel-agent.service`.
 
-Re-registration with a fresh register token rotates the agent token; the old one stops working immediately. Rotating later without re-registering is the **Agent token** action on the Server detail page.
+The agent is **stateless**: it keeps no local file, so the container/process can be recreated at any time with only the panel URL, server id and Agent Key. Identity, batch-sequence resume points and the applied revision all live on the panel; the agent forces a config re-apply on every start and adopts the panel-reported sequence numbers on its first heartbeat. Resetting the Agent Key on the Server detail page invalidates the old key immediately — update the node config afterwards.
 
 ### Agent config reference
 
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `panel_url` | – (required) | Panel base URL; use HTTPS in production |
-| `token` / `register_token` | – (one required) | existing agent token, or one-time registration token |
-| `server_id` | – (required) | must match the server the token belongs to (cross-check only; the Panel derives ownership from the token) |
-| `state_path` | `agent_state.json` | identity + applied revision + batch sequences (0600, atomic replace) |
+| `agent_key` | – (required) | long-lived per-server Agent Key (Server detail page) |
+| `server_id` | – (required) | must match the server the key belongs to (cross-check only; the Panel derives ownership from the key) |
 | `log_level` | `info` | `debug`…`error` |
 | `heartbeat_interval` | `30s` | metrics + liveness; panel response can retune it |
 | `sync_interval` | `30s` | config poll cadence (a newer-revision heartbeat triggers an extra poll) |
 | `traffic_interval` | `60s` | traffic/device report cadence |
 | `collection.traffic` | `true` | agent-side traffic collection switch |
 
-All keys have `AGENT_*` environment equivalents (e.g. `AGENT_PANEL_URL`, `AGENT_REGISTER_TOKEN`). Per-user traffic is counted in-process by the embedded sing-box connection tracker; there is no external sing-box binary or config file to manage.
+All keys have `AGENT_*` environment equivalents (e.g. `AGENT_PANEL_URL`, `AGENT_KEY`). Per-user traffic is counted in-process by the embedded sing-box connection tracker; there is no external sing-box binary or config file to manage.
 
 ## Docker deployment
 
@@ -131,11 +130,11 @@ It defaults to `ghcr.io/senhao-xu/vps-node-panel:latest` (override with `PANEL_I
 
 ```sh
 cd deploy
-cp .env.example .env      # set AGENT_PANEL_URL, AGENT_SERVER_ID and one of the tokens
+cp .env.example .env      # set AGENT_PANEL_URL, AGENT_SERVER_ID and AGENT_KEY
 docker compose -f agent.docker-compose.yml up -d
 ```
 
-The agent registers on first start and stores its identity in the `agent-state` volume (`/var/lib/panel-agent/state.json`); delete that volume to re-register. The agent forces a config re-apply at startup, so a restart reloads the Panel-rendered config into the embedded sing-box instance and brings the nodes back up without any manual step — there is no separate sing-box container, binary, or config volume. Publish one port pair (`tcp`+`udp`) per node, e.g. `8388:8388/tcp` and `8388:8388/udp` (override the host side with `NODE_PORT`); with many nodes consider `network_mode: host`. Ports ≤1024 additionally require root (the container runs as root by default).
+The agent is stateless and mounts **no volume**: recreate the container at any time with the same env and it reconnects. It forces a config re-apply at startup, so a restart reloads the Panel-rendered config into the embedded sing-box instance and brings the nodes back up without any manual step — there is no separate sing-box container, binary, config volume, or state volume. Publish one port pair (`tcp`+`udp`) per node, e.g. `8388:8388/tcp` and `8388:8388/udp` (override the host side with `NODE_PORT`); with many nodes consider `network_mode: host`. Ports ≤1024 additionally require root (the container runs as root by default).
 
 ### Run: All-in-one (panel + agent on one host)
 
@@ -143,8 +142,8 @@ The agent registers on first start and stores its identity in the `agent-state` 
 cd deploy
 cp .env.example .env      # fill in the panel vars; up -d panel first, then the agent vars
 docker compose -f docker-compose.all-in-one.yml up -d panel
-# create the server (note its id N), a node on port 8388, then a register token in the UI
-# add AGENT_SERVER_ID=N and AGENT_REGISTER_TOKEN=<token> to .env
+# create the server (note its id N), a node on port 8388, then an Agent Key in the UI
+# add AGENT_SERVER_ID=N and AGENT_KEY=<key> to .env
 docker compose -f docker-compose.all-in-one.yml up -d panel-agent
 ```
 
@@ -159,14 +158,14 @@ The agent binary with the embedded sing-box runtime is about **38 MB** on linux/
 ### Upgrades
 
 - **Panel**: `git pull && make docker-panel && docker compose up -d` — the image is replaced, the `panel-data` volume is untouched; roll back by re-deploying the previous image (no data migration either way).
-- **Agent**: `git pull && make docker-agent && docker compose -f agent.docker-compose.yml up -d`. The state volume (identity, applied revision, batch sequences) survives; traffic idempotency is preserved across upgrades. The embedded sing-box version is pinned in `go.mod`; bump it with `go get github.com/sagernet/sing-box@<version> && go mod tidy` and rebuild.
+- **Agent**: `git pull && make docker-agent && docker compose -f agent.docker-compose.yml up -d`. The agent keeps no local state, so the recreated container reconnects with the same Agent Key and resumes sequence numbers from the panel; traffic idempotency is preserved across upgrades. The embedded sing-box version is pinned in `go.mod`; bump it with `go get github.com/sagernet/sing-box@<version> && go mod tidy` and rebuild.
 
 ### Notes and caveats
 
 - The runtime base is `scratch`: no shell, no busybox. Debug with direct execs of the agent binary, `docker cp`, or `docker top` (processes are visible from the host).
 - The agent embeds sing-box in-process, so it forks no children and leaks no zombies; `init: true` in the compose files is harmless and remains recommended for general process hygiene.
 - The agent reads host-style `/proc` metrics (`cpu`, `meminfo`, `uptime`), so reported CPU/memory percentages reflect the host, not the cgroup limit.
-- Container env defaults mirror `deploy/agent.example.yaml`: `AGENT_STATE_PATH=/var/lib/panel-agent/state.json`. Env overrides the YAML file, so bind-mounting an `agent.yaml` into this image only works for keys not pinned by these envs.
+- The agent container has no writable state path: all persistent data (identity, sequence resume points, applied revision) lives on the panel, so only the env vars in `deploy/agent.example.yaml` are needed. Env overrides the YAML file, so bind-mounting an `agent.yaml` into this image only works for keys not pinned by these envs.
 
 ### systemd vs Docker
 
@@ -183,7 +182,7 @@ Both paths are fully supported and produce identical panel-side behavior (same a
 
 ## Data collection model
 
-- **Traffic** is reported as per-interval **deltas** per (user, node), computed from the embedded sing-box connection tracker's per-`(user,node)` cumulative byte counters (read from inbound = upload, write to inbound = download). Every batch carries a monotonically increasing `batch_seq` per kind; the Panel treats `(agent, batch_seq)` as the idempotency key, so resend-on-uncertainty never double counts. Unconfirmed deltas stay pending and are retried with the same frozen payload (so a lost ack is deduplicated), while a permanently rejected batch (non-retryable 4xx, e.g. a `recorded_at` that aged out of the acceptance window during a long panel outage) is requeued under a fresh sequence instead of blocking the queue; sequence numbers are persisted only after a confirmed ack.
+- **Traffic** is reported as per-interval **deltas** per (user, node), computed from the embedded sing-box connection tracker's per-`(user,node)` cumulative byte counters (read from inbound = upload, write to inbound = download). Every batch carries a monotonically increasing `batch_seq` per kind; the Panel treats `(agent, batch_seq)` as the idempotency key, so resend-on-uncertainty never double counts. Unconfirmed deltas stay pending and are retried with the same frozen payload (so a lost ack is deduplicated), while a permanently rejected batch (non-retryable 4xx, e.g. a `recorded_at` that aged out of the acceptance window during a long panel outage) is requeued under a fresh sequence instead of blocking the queue. Sequence numbers are agent-memory only: each heartbeat returns the panel's `MAX(seq)` per stream, the agent adopts `max(local, resume)`, and a restarted agent therefore resumes above every sequence the panel already saw (the panel is the single source of truth for idempotency).
 - **Devices** are full-replacement snapshots per report; the Panel replaces the server's `online_devices` set transactionally and refreshes each user's `online_count`/`last_online_at`.
 - **Visits** record the destination a user reached through a node: the requested host/port, `tcp`/`udp` network, and the client source IP. The agent reads sing-box `metadata.Destination` (the client-requested address; **no sniffing** is enabled, so a client that requests a bare IP is recorded as that IP), keeps a bounded in-memory queue (10000 entries, oldest dropped and counted on overflow), and reports them in the same idempotent `batch_seq` style as traffic. The Panel stores each record in `visit_records` and upserts a per-UTC-day `visit_daily_domains` aggregate used for "most visited" summaries. Visits never carry byte counters — traffic accounting stays on its own channel.
 - **Attribution**: connections are attributed in-process from sing-box inbound metadata — the inbound tag (`vless-<id>` / `shadowsocks-<id>` / `hysteria2-<id>`) selects the node and the inbound user name (`u-<user_id>`, the name the Panel renders into sing-box) selects the user. Connections without reliable attribution are excluded from reports and counted in agent logs — missing fields are never inferred.
@@ -197,9 +196,9 @@ Both paths are fully supported and produce identical panel-side behavior (same a
 | Scope | Mechanism | Routes |
 | --- | --- | --- |
 | Admin | HttpOnly session cookie `panel_session` (SameSite=Lax), bcrypt-hashed passwords | `/api/admin/*`, `/api/users/*`, `/api/servers/*`, `/api/nodes/*`, `/api/dashboard`, `/api/settings` |
-| Agent | `Authorization: Bearer <agent_token>`; token stored hashed; rotation invalidates instantly | `/api/agent/*` |
+| Agent | `Authorization: Bearer <agent_key>`; key stored hashed (`key_hash`) and encrypted at rest (`key_enc`, panel `app_key`) for reveal; reset invalidates instantly | `/api/agent/*` |
 
-The two scopes share no middleware and no token space. Agent `server_id` is always derived server-side from the token; body-supplied IDs are only validated for ownership. Plaintext tokens/registration tokens are returned exactly once at creation/rotation. Full contract: [`docs/api-contract.md`](docs/api-contract.md).
+The two scopes share no middleware and no token space. Agent `server_id` is always derived server-side from the key; body-supplied IDs are only validated for ownership. The Agent Key is revealed on the Server detail page and returned by the agent-key endpoints. Full contract: [`docs/api-contract.md`](docs/api-contract.md).
 
 ## Retention
 
@@ -226,14 +225,14 @@ Module layout:
 
 ```text
 cmd/panel            panel binary (API + embedded UI)
-cmd/agent            agent binary (register/heartbeat/sync/telemetry loop)
+cmd/agent            agent binary (heartbeat/sync/telemetry loop)
 internal/web         panel HTTP handlers (admin + agent)
 internal/repo        SQLite repositories and transactions
 internal/singbox     config renderer + credential derivation contract
 internal/kernel/singbox embedded sing-box runtime + per-user connection tracker (agent side)
 internal/agentclient typed agent→panel HTTP client (retry/backoff, idempotent batches)
 internal/agentruntime agent-side loop: config sync, telemetry deltas, metrics
-internal/agentstate  agent state file (identity, revision, batch seqs)
+internal/agentstate  in-memory agent state (batch seqs; no file IO)
 internal/webui       web/dist embedding (build tag embed_ui)
 internal/e2e         end-to-end smoke test + embedded sing-box integration tests
 deploy/              systemd units, example configs, installer, Dockerfiles + compose files

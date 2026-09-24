@@ -16,7 +16,7 @@ Single Go module at repo root (`module vps-node`), Go 1.25, stdlib `net/http` + 
 vps-node/
 ├── cmd/
 │   ├── panel/main.go        # wiring: config → db → repos → web.Handler → janitor → webui
-│   └── agent/main.go        # wiring: config → agentstate → agentclient → agentruntime loop
+│   └── agent/main.go        # wiring: config → in-memory agentstate → agentclient → agentruntime loop
 ├── internal/
 │   ├── config/              # YAML + env overrides (PANEL_*/AGENT_*); optional app_key (32-byte hex), auto-generated into settings table on first boot (env > yaml > database)
 │   ├── db/                  # sqlite open (WAL, FK ON), embedded migration runner, migrations/*.sql
@@ -28,7 +28,7 @@ vps-node/
 │   ├── singbox/             # pure renderer: Node+eligible users → sing-box inbound JSON (singbox-render-v1)
 │   ├── agentclient/         # typed agent→panel HTTP client (retry/backoff/jitter)
 │   ├── agentruntime/        # applier (check→atomic replace→optional reload), metrics, clash collector, loop
-│   ├── agentstate/          # 0600 JSON state file: identity, applied revision, batch seqs
+│   ├── agentstate/          # in-memory agent state (batch seqs; no file IO; agent is stateless)
 │   ├── janitor/             # retention/storage-cap cleanup goroutine
 │   ├── httpx/               # logging middleware, panic recovery, /healthz, JSON helpers
 │   ├── logx/                # slog factory

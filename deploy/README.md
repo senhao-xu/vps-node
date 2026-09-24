@@ -1,6 +1,6 @@
 # Deploy
 
-- `panel.service` / `panel-agent.service` — hardened systemd units (non-root users, `ProtectSystem=strict`, minimal `ReadWritePaths`). The agent unit grants `CAP_NET_BIND_SERVICE` so embedded sing-box can listen on ports ≤1024.
+- `panel.service` / `panel-agent.service` — hardened systemd units (non-root users, `ProtectSystem=strict`). The agent unit grants `CAP_NET_BIND_SERVICE` so embedded sing-box can listen on ports ≤1024.
 - `install-agent.sh` — idempotent agent installer (arch detection, release tarball download, config bootstrap, systemd enable). See the root README for usage.
 - `release-agent` Makefile target builds linux amd64/arm64/386 tarballs containing `panel-agent`, `panel-agent.service` and `install-agent.sh`.
 

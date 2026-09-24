@@ -323,7 +323,7 @@ func TestNodeProtocolParamsRoundTrip(t *testing.T) {
 	if err := e.repo.AuthorizeUserNode(ctx, userID, nodeID); err != nil {
 		t.Fatalf("authorize: %v", err)
 	}
-	token := e.registerAgent(t, cookie, serverID, "1.0.0")
+	token := e.agentKey(t, cookie, serverID)
 	resp, body = e.doAgent(t, "GET", "/api/agent/config?version=0", nil, token)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("agent config: %d %s", resp.StatusCode, body)
@@ -458,64 +458,54 @@ func TestNodeSettingsUpdatePreservesRealitySecret(t *testing.T) {
 	}
 }
 
-func TestServerRegisterAndAgentTokenLifecycle(t *testing.T) {
+func TestServerAgentKeyLifecycle(t *testing.T) {
 	e := newTestEnv(t)
 	cookie := e.login(t)
 
 	serverID := e.seedServer(t, "s1")
 
-	resp, body := e.do(t, "POST", fmt.Sprintf("/api/servers/%d/agent-token", serverID), nil, cookie)
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("agent rotation without agent must be 404, got %d %s", resp.StatusCode, body)
+	resp, body := e.do(t, "GET", fmt.Sprintf("/api/servers/%d/agent-key", serverID), nil, cookie)
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("key read before generation must be 409, got %d %s", resp.StatusCode, body)
 	}
 
-	resp, body = e.do(t, "POST", fmt.Sprintf("/api/servers/%d/register-token", serverID), nil, cookie)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("register-token: %d %s", resp.StatusCode, body)
-	}
-	first := jsonMap(t, body)
-	regToken1, _ := first["register_token"].(string)
-	if regToken1 == "" {
-		t.Fatalf("expected register token, got %s", body)
-	}
-	if _, err := time.Parse(time.RFC3339, first["expires_at"].(string)); err != nil {
-		t.Fatalf("expected expires_at, got %s", body)
+	key1 := e.agentKey(t, cookie, serverID)
+	if key1 == "" {
+		t.Fatal("expected a generated agent key")
 	}
 
 	var storedHash string
-	if err := e.db.QueryRowContext(context.Background(), `SELECT register_token_hash FROM servers WHERE id = ?`, serverID).Scan(&storedHash); err != nil || storedHash == "" {
-		t.Fatalf("register token hash must be stored: %v", err)
+	var storedEnc []byte
+	if err := e.db.QueryRowContext(context.Background(), `SELECT key_hash, key_enc FROM agents WHERE server_id = ?`, serverID).Scan(&storedHash, &storedEnc); err != nil {
+		t.Fatalf("agent key must be stored: %v", err)
 	}
-	if storedHash == regToken1 {
-		t.Fatal("register token must be stored as hash")
+	if storedHash == key1 || storedHash != adminauth.HashToken(key1) {
+		t.Fatal("agent key must be stored as sha256 hash")
 	}
-
-	resp, body = e.do(t, "POST", fmt.Sprintf("/api/servers/%d/register-token", serverID), nil, cookie)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("register-token 2: %d %s", resp.StatusCode, body)
-	}
-	regToken2 := jsonMap(t, body)["register_token"].(string)
-	if found, err := e.repo.GetServerByRegisterTokenHash(context.Background(), adminauth.HashToken(regToken1)); err == nil && found.ID == serverID {
-		t.Fatal("old register token must be invalidated")
-	}
-	if _, err := e.repo.GetServerByRegisterTokenHash(context.Background(), adminauth.HashToken(regToken2)); err != nil {
-		t.Fatalf("new register token must resolve: %v", err)
+	plain, err := secrets.Decrypt(e.appKey, storedEnc)
+	if err != nil || string(plain) != key1 {
+		t.Fatalf("agent key must be encrypted with the panel app key: %v", err)
 	}
 
-	if _, err := e.repo.CreateAgent(context.Background(), serverID, "agent-hash", "1.0.0"); err != nil {
-		t.Fatalf("create agent: %v", err)
+	resp, body = e.do(t, "GET", fmt.Sprintf("/api/servers/%d/agent-key", serverID), nil, cookie)
+	if resp.StatusCode != http.StatusOK || jsonMap(t, body)["agent_key"] != key1 {
+		t.Fatalf("stored key must be readable: %d %s", resp.StatusCode, body)
 	}
 
-	resp, body = e.do(t, "POST", fmt.Sprintf("/api/servers/%d/agent-token", serverID), nil, cookie)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("agent rotation: %d %s", resp.StatusCode, body)
+	key2 := e.agentKey(t, cookie, serverID)
+	if key2 == key1 {
+		t.Fatal("reset must issue a new key")
 	}
-	rotated := jsonMap(t, body)
-	if rotated["agent_token"] == "" {
-		t.Fatalf("expected agent_token, got %s", body)
+	if resp, body = e.doAgent(t, "POST", "/api/agent/heartbeat", validHB(), key1); resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("old key must be invalid after reset, got %d %s", resp.StatusCode, body)
 	}
-	if _, ok := rotated["expires_hint"]; !ok {
-		t.Fatalf("expected expires_hint key, got %s", body)
+	if resp, body = e.doAgent(t, "POST", "/api/agent/heartbeat", validHB(), key2); resp.StatusCode != http.StatusOK {
+		t.Fatalf("new key must authenticate, got %d %s", resp.StatusCode, body)
+	}
+
+	resp, body = e.do(t, "GET", "/api/servers/99999/agent-key", nil, cookie)
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("key read for unknown server must be 404, got %d %s", resp.StatusCode, body)
 	}
 }
 
@@ -1034,7 +1024,7 @@ func TestNodeReservedSettingsSectionsAreOpaqueAndInert(t *testing.T) {
 	if err := e.repo.AuthorizeUserNode(ctx, userID, nodeID); err != nil {
 		t.Fatalf("authorize: %v", err)
 	}
-	token := e.registerAgent(t, cookie, serverID, "1.0.0")
+	token := e.agentKey(t, cookie, serverID)
 	resp, body = e.doAgent(t, "GET", "/api/agent/config?version=0", nil, token)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("reserved sections must not break rendering: %d %s", resp.StatusCode, body)

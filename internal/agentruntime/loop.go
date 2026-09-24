@@ -3,6 +3,7 @@ package agentruntime
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"sort"
@@ -28,14 +29,13 @@ type Kernel interface {
 }
 
 type Loop struct {
-	cfg       *config.Agent
-	client    *agentclient.Client
-	state     *agentstate.State
-	statePath string
-	kernel    Kernel
-	metrics   MetricsSource
-	logger    *slog.Logger
-	version   string
+	cfg     *config.Agent
+	client  *agentclient.Client
+	state   *agentstate.State
+	kernel  Kernel
+	metrics MetricsSource
+	logger  *slog.Logger
+	version string
 
 	mu                sync.Mutex
 	lastSeen          map[kernelsingbox.Pair]kernelsingbox.Traffic
@@ -56,14 +56,13 @@ type MetricsSource interface {
 }
 
 type LoopOptions struct {
-	Config    *config.Agent
-	Client    *agentclient.Client
-	State     *agentstate.State
-	StatePath string
-	Kernel    Kernel
-	Metrics   MetricsSource
-	Logger    *slog.Logger
-	Version   string
+	Config  *config.Agent
+	Client  *agentclient.Client
+	State   *agentstate.State
+	Kernel  Kernel
+	Metrics MetricsSource
+	Logger  *slog.Logger
+	Version string
 }
 
 func NewLoop(o LoopOptions) *Loop {
@@ -73,11 +72,13 @@ func NewLoop(o LoopOptions) *Loop {
 	if o.Config == nil {
 		o.Config = &config.Agent{}
 	}
+	if o.State == nil {
+		o.State = &agentstate.State{}
+	}
 	return &Loop{
 		cfg:        o.Config,
 		client:     o.Client,
 		state:      o.State,
-		statePath:  o.StatePath,
 		kernel:     o.Kernel,
 		metrics:    o.Metrics,
 		logger:     o.Logger,
@@ -96,8 +97,7 @@ func (l *Loop) Run(ctx context.Context) error {
 	if err := l.EnsureIdentity(ctx); err != nil {
 		return err
 	}
-	l.logger.Info("agent identity ready",
-		"agent_id", l.state.AgentID, "server_id", l.state.ServerID)
+	l.logger.Info("agent identity ready", "server_id", l.state.ServerID)
 
 	syncNow := make(chan struct{}, 1)
 	nudge := func() {
@@ -107,7 +107,9 @@ func (l *Loop) Run(ctx context.Context) error {
 		}
 	}
 
-	l.heartbeatPass(ctx, nudge)
+	if _, err := l.heartbeatPass(ctx, nudge); err != nil {
+		return err
+	}
 	l.syncPass(ctx)
 	l.telemetryPass(ctx)
 
@@ -127,7 +129,13 @@ func (l *Loop) Run(ctx context.Context) error {
 			l.logger.Info("agent stopped")
 			return nil
 		case <-hbTicker.C:
-			interval := l.heartbeatPass(ctx, nudge)
+			interval, err := l.heartbeatPass(ctx, nudge)
+			if err != nil {
+				if l.kernel != nil {
+					_ = l.kernel.Stop()
+				}
+				return err
+			}
 			if interval > 0 && interval != l.cfg.HeartbeatInterval {
 				l.cfg.HeartbeatInterval = interval
 				hbTicker.Reset(interval)
@@ -143,57 +151,15 @@ func (l *Loop) Run(ctx context.Context) error {
 }
 
 func (l *Loop) EnsureIdentity(ctx context.Context) error {
-	if l.cfg.Token != "" && l.state.AgentToken != "" && l.state.AgentToken != l.cfg.Token {
-		l.logger.Info("config token changed; resetting stored agent identity")
-		*l.state = agentstate.State{}
+	if l.cfg.AgentKey == "" {
+		return errors.New("no agent key available: set agent_key in the agent config")
 	}
-
 	if l.state.ServerID != 0 && l.state.ServerID != l.cfg.ServerID {
 		*l.state = agentstate.State{}
-		l.logger.Warn("stored server_id does not match config; resetting state")
 	}
-
-	if l.state.AgentToken != "" || l.cfg.Token != "" {
-		token := l.state.AgentToken
-		if token == "" {
-			token = l.cfg.Token
-			l.state.AgentToken = token
-		}
-		l.client.SetToken(token)
-		l.saveState()
-		return nil
-	}
-
-	if l.cfg.RegisterToken == "" {
-		return errors.New("no agent token available: set token or register_token in the agent config")
-	}
-
-	resp, err := l.client.Register(ctx, agentclient.RegisterRequest{
-		RegisterToken: l.cfg.RegisterToken,
-		Version:       l.version,
-	})
-	if err != nil {
-		return err
-	}
-	if resp.ServerID != l.cfg.ServerID {
-		return errors.New("register_token resolved to a different server; refusing to bind (check server_id in the agent config)")
-	}
-	l.state.AgentID = resp.AgentID
-	l.state.AgentToken = resp.AgentToken
-	l.state.ServerID = resp.ServerID
-	l.state.AppliedRevision = 0
-	l.state.TrafficBatchSeq = 0
-	l.state.DeviceBatchSeq = 0
-	l.state.VisitBatchSeq = 0
-	l.client.SetToken(resp.AgentToken)
-	l.saveState()
-	l.logger.Info("agent registered", "agent_id", resp.AgentID, "server_id", resp.ServerID)
+	l.state.ServerID = l.cfg.ServerID
+	l.client.SetKey(l.cfg.AgentKey)
 	return nil
-}
-func (l *Loop) saveState() {
-	if err := agentstate.Save(l.statePath, l.state); err != nil {
-		l.logger.Error("persist agent state failed", "error", err)
-	}
 }
 
 func (l *Loop) SyncOnce(ctx context.Context) {
@@ -204,14 +170,14 @@ func (l *Loop) TelemetryOnce(ctx context.Context) {
 	l.telemetryPass(ctx)
 }
 
-func (l *Loop) heartbeatPass(ctx context.Context, nudge func()) time.Duration {
+func (l *Loop) heartbeatPass(ctx context.Context, nudge func()) (time.Duration, error) {
 	if l.metrics == nil {
-		return 0
+		return 0, nil
 	}
 	m, err := l.metrics.Collect()
 	if err != nil {
 		l.logger.Warn("collect system metrics failed", "error", err)
-		return 0
+		return 0, nil
 	}
 	l.mu.Lock()
 	lastErr := l.lastApplyError
@@ -227,15 +193,33 @@ func (l *Loop) heartbeatPass(ctx context.Context, nudge func()) time.Duration {
 	})
 	if err != nil {
 		l.logger.Warn("heartbeat failed", "error", err)
-		return 0
+		return 0, nil
 	}
+	if resp.ServerID != l.cfg.ServerID {
+		return 0, fmt.Errorf("heartbeat reports server_id %d but config expects %d; refusing to bind", resp.ServerID, l.cfg.ServerID)
+	}
+	l.reconcileSeq(resp)
 	if resp.ServerRevision > l.state.AppliedRevision {
 		nudge()
 	}
 	if resp.HeartbeatIntervalSeconds > 0 {
-		return time.Duration(resp.HeartbeatIntervalSeconds) * time.Second
+		return time.Duration(resp.HeartbeatIntervalSeconds) * time.Second, nil
 	}
-	return 0
+	return 0, nil
+}
+
+func (l *Loop) reconcileSeq(resp *agentclient.HeartbeatResponse) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if resp.TrafficSeq > l.state.TrafficBatchSeq {
+		l.state.TrafficBatchSeq = resp.TrafficSeq
+	}
+	if resp.DeviceSeq > l.state.DeviceBatchSeq {
+		l.state.DeviceBatchSeq = resp.DeviceSeq
+	}
+	if resp.VisitSeq > l.state.VisitBatchSeq {
+		l.state.VisitBatchSeq = resp.VisitSeq
+	}
 }
 
 func (l *Loop) syncPass(ctx context.Context) {
@@ -278,7 +262,6 @@ func (l *Loop) syncPass(ctx context.Context) {
 	l.forceApply = false
 	l.mu.Unlock()
 	l.state.AppliedRevision = resp.Revision
-	l.saveState()
 	l.logger.Info("sing-box config applied", "revision", resp.Revision, "renderer", resp.RendererVersion)
 }
 
@@ -359,7 +342,6 @@ func (l *Loop) flushTraffic(ctx context.Context, now time.Time) {
 		l.state.TrafficBatchSeq = batches[idx-1].BatchSeq
 		l.inflightIdx = idx
 		l.mu.Unlock()
-		l.saveState()
 		l.logger.Info("traffic reported", "batch_seq", ack.BatchSeq, "records", ack.Records)
 	}
 
@@ -382,7 +364,6 @@ func (l *Loop) requeueTrafficBatch(batch agentclient.TrafficBatch) {
 		l.state.TrafficBatchSeq = batch.BatchSeq
 	}
 	l.mu.Unlock()
-	l.saveState()
 }
 
 func buildTrafficBatches(pending map[kernelsingbox.Pair]kernelsingbox.Traffic, base int64, now time.Time) []agentclient.TrafficBatch {
@@ -439,7 +420,6 @@ func (l *Loop) flushDevices(ctx context.Context, devices []kernelsingbox.Device,
 				l.deviceInflight = nil
 				l.deviceInflightIdx = 0
 				l.mu.Unlock()
-				l.saveState()
 				l.logger.Warn("device snapshot permanently rejected; the latest snapshot will be resent",
 					"batch_seq", batches[idx].BatchSeq, "error", err)
 				return
@@ -456,7 +436,6 @@ func (l *Loop) flushDevices(ctx context.Context, devices []kernelsingbox.Device,
 		l.state.DeviceBatchSeq = batches[idx-1].BatchSeq
 		l.deviceInflightIdx = idx
 		l.mu.Unlock()
-		l.saveState()
 		l.logger.Info("devices reported", "batch_seq", ack.BatchSeq, "devices", ack.Devices)
 	}
 
@@ -541,7 +520,6 @@ func (l *Loop) flushVisits(ctx context.Context, visits []kernelsingbox.Visit) {
 				l.visitInflight = nil
 				l.visitInflightIdx = 0
 				l.mu.Unlock()
-				l.saveState()
 				l.logger.Warn("visit batch permanently rejected; new visits will be reported under a fresh sequence",
 					"batch_seq", batches[idx].BatchSeq, "error", err)
 				return
@@ -558,7 +536,6 @@ func (l *Loop) flushVisits(ctx context.Context, visits []kernelsingbox.Visit) {
 		l.state.VisitBatchSeq = batches[idx-1].BatchSeq
 		l.visitInflightIdx = idx
 		l.mu.Unlock()
-		l.saveState()
 		l.logger.Info("visits reported", "batch_seq", ack.BatchSeq, "records", ack.Records)
 	}
 

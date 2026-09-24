@@ -16,7 +16,7 @@ Single source of truth for Panel Admin API, Panel Agent API, and the Vue fronten
 | Scope  | Mechanism                                              | Applies to      |
 | ------ | ------------------------------------------------------ | --------------- |
 | admin  | HttpOnly session cookie `panel_session`, SameSite=Lax  | `/api/admin/*`, `/api/users/*`, `/api/servers/*`, `/api/nodes/*`, `/api/visits`, `/api/dashboard`, `/api/settings` |
-| agent  | `Authorization: Bearer <agent_token>`                  | `/api/agent/*`  |
+| agent  | `Authorization: Bearer <agent_key>`                    | `/api/agent/*`  |
 
 - Admin and Agent APIs share no middleware and no token space.
 - Unauthenticated requests return `401` with error code `unauthorized`.
@@ -33,7 +33,7 @@ Every non-2xx response:
 | HTTP | code              | Meaning                                   |
 | ---- | ----------------- | ----------------------------------------- |
 | 400  | `invalid_request` | Malformed body, bad enum, bad pagination  |
-| 401  | `unauthorized`    | Missing/invalid session or agent token    |
+| 401  | `unauthorized`    | Missing/invalid session or agent key       |
 | 403  | `forbidden`       | Authenticated but not allowed             |
 | 404  | `not_found`       | Unknown resource                          |
 | 409  | `conflict`        | Unique constraint, duplicate, stale state |
@@ -290,19 +290,13 @@ Response `200`: server DTO. Setting `status: "disabled"` stops config sync for t
 
 Response `200`: `{}`. Panel marks the server deleted, removes agent, nodes, `user_nodes` referencing its nodes and its online devices; traffic records are retained until retention cleanup.
 
-### POST /api/servers/:id/register-token
+### GET /api/servers/:id/agent-key
 
-Generates a one-time registration token for agent bootstrap. Response `200`:
+Returns the long-lived Agent Key of the server. Response `200`: `{ "agent_key": "<plaintext>" }`. The key is stored as a SHA-256 hash for authentication and encrypted with the panel `app_key` for reveal. Returns `409 conflict` when the server has no retrievable key yet (migrated agent without `key_enc`, or no agent binding) — generate/reset it first. `404 not_found` when the server does not exist.
 
-```json
-{ "register_token": "plaintext-once", "expires_at": "2026-09-21T00:00:00Z" }
-```
+### POST /api/servers/:id/agent-key
 
-Only the hash is stored. Generating a new token invalidates the previous one.
-
-### POST /api/servers/:id/agent-token
-
-Rotates the agent token of the server's agent. Response `200`: `{ "agent_token": "plaintext-once", "expires_hint": null }`. Old agent token invalid immediately.
+Generates or resets the server's Agent Key. Response `200`: `{ "agent_key": "<plaintext>" }`. The previous key is invalid immediately, so the node's agent config must be updated after a reset. No server revision is bumped (identity is not runtime config).
 
 ## Nodes
 
@@ -484,25 +478,9 @@ families).
 
 # Agent API
 
-All Agent endpoints require `Authorization: Bearer <agent_token>` (except `register`, which uses a registration token). The agent's `server_id` is **always derived from the token server-side**; request bodies never carry a trusted `server_id`.
+All Agent endpoints require `Authorization: Bearer <agent_key>`. The agent's `server_id` is **always derived from the key server-side**; request bodies never carry a trusted `server_id`. The agent is stateless: no bootstrap/register endpoint exists, and all resume state is returned by the panel.
 
 Production traffic must use HTTPS with certificate verification.
-
-## POST /api/agent/register
-
-One-time bootstrap. Body:
-
-```json
-{ "register_token": "plaintext-once", "version": "1.0.0" }
-```
-
-Panel resolves the server from the registration token hash, creates (or replaces) the agent binding, and returns:
-
-```json
-{ "agent_id": 7, "agent_token": "plaintext-once", "server_id": 1, "heartbeat_interval_seconds": 30, "sync_interval_seconds": 30, "traffic_interval_seconds": 60 }
-```
-
-Re-registering an already-bound server rotates the agent token. Invalid/expired registration token → `401 unauthorized`.
 
 ## POST /api/agent/heartbeat
 
@@ -515,8 +493,10 @@ Re-registering an already-bound server rotates the agent token. Invalid/expired 
 Response `200`:
 
 ```json
-{ "ok": true, "server_revision": 1024, "heartbeat_interval_seconds": 30 }
+{ "ok": true, "server_id": 1, "server_revision": 1024, "heartbeat_interval_seconds": 30, "traffic_seq": 12, "device_seq": 4, "visit_seq": 30 }
 ```
+
+`server_id` is the credential-derived server id: the agent asserts it equals its configured `server_id` and refuses to bind on mismatch. `traffic_seq` / `device_seq` / `visit_seq` are the panel's `MAX(seq)` per batch stream for this agent; the agent adopts `max(local, resume)` so a restarted (memory-only) agent resumes above every sequence already recorded and idempotency is preserved.
 
 Panel stores `last_seen_at`, metrics and version, and marks the server online. A server is `offline` when `now - last_seen_at > server_offline_after_seconds` (configurable, default 60s).
 
@@ -641,10 +621,10 @@ A duplicate `batch_seq` returns the previously accepted count without re-storing
 
 # Ownership Rules (binding for all stages)
 
-1. Agent `server_id` is derived exclusively from the agent token or registration token. Body-supplied `server_id` values are ignored for authorization.
+1. Agent `server_id` is derived exclusively from the agent key. Body-supplied `server_id` values are ignored for authorization.
 2. Every `user_id` or `node_id` referenced in an agent payload is validated to belong to the agent's server; violations reject the whole batch atomically.
-3. Admin endpoints require an admin session; agent endpoints require an agent bearer token. Neither accepts the other's credentials.
-4. Plaintext secrets (user token, agent token, registration token, protocol secrets) appear in responses only once, at creation/rotation; thereafter only hashes or ciphertext are stored and never returned or logged.
+3. Admin endpoints require an admin session; agent endpoints require an agent bearer key. Neither accepts the other's credentials.
+4. Plaintext secrets (user token, protocol secrets) appear in responses only once, at creation/rotation; thereafter only hashes or ciphertext are stored and never returned or logged. The Agent Key is the exception: it is stored hashed (`key_hash`) and encrypted (`key_enc`) for authentication and admin reveal, and is only returned by the agent-key endpoints.
 5. Server revision increments monotonically on any admin change affecting a server's config (user eligibility, user_nodes, node CRUD, server status).
 6. Heartbeat is the only liveness source. Traffic/device reports must not affect server online status.
 7. Deletion semantics: user deletion cascades `user_nodes` and its online devices; server deletion cascades agent, nodes, authorizations and online devices; traffic records and visit records survive until retention cleanup.

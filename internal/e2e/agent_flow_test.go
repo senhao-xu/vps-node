@@ -3,8 +3,6 @@ package e2e
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -66,42 +64,35 @@ func TestAgentEndToEndFlow(t *testing.T) {
 	cookie := env.login()
 	_, nodeID, userID := env.seedScenario(cookie)
 
-	_, out := env.do("POST", "/api/servers/1/register-token", nil, cookie)
-	registerToken, _ := out["register_token"].(string)
-	if registerToken == "" {
-		t.Fatal("expected register_token")
+	_, out := env.do("POST", "/api/servers/1/agent-key", nil, cookie)
+	agentKey, _ := out["agent_key"].(string)
+	if agentKey == "" {
+		t.Fatal("expected agent_key")
 	}
 
-	statePath := filepath.Join(t.TempDir(), "agent-state.json")
-	state, err := agentstate.Load(statePath)
-	if err != nil {
-		t.Fatalf("load state: %v", err)
-	}
+	state := &agentstate.State{}
 	client, err := agentclient.New(env.ts.URL)
 	if err != nil {
 		t.Fatalf("new agent client: %v", err)
 	}
+	client.SetKey(agentKey)
 
 	kernel := &stubKernel{}
 	loop := agentruntime.NewLoop(agentruntime.LoopOptions{
 		Config: &config.Agent{
-			PanelURL:      env.ts.URL,
-			RegisterToken: registerToken,
-			ServerID:      1,
-			StatePath:     statePath,
-			Collection:    config.Collection{Traffic: true, Visits: true},
+			PanelURL:   env.ts.URL,
+			AgentKey:   agentKey,
+			ServerID:   1,
+			Collection: config.Collection{Traffic: true, Visits: true},
 		},
-		Client: client, State: state, StatePath: statePath,
+		Client: client, State: state,
 		Kernel: kernel, Metrics: nil, Version: "0.1.0-test",
 	})
 	if err := loop.EnsureIdentity(context.Background()); err != nil {
-		t.Fatalf("register: %v", err)
+		t.Fatalf("ensure identity: %v", err)
 	}
-	if state.AgentToken == "" || state.ServerID != 1 {
-		t.Fatalf("unexpected identity after register: %+v", state)
-	}
-	if st, err := os.Stat(statePath); err != nil || st.Mode().Perm() != 0o600 {
-		t.Fatalf("state file must exist with 0600, got %v %v", st, err)
+	if state.ServerID != 1 {
+		t.Fatalf("unexpected identity: %+v", state)
 	}
 	hb, err := client.Heartbeat(context.Background(), agentclient.HeartbeatRequest{
 		Version: "0.1.0-test", CPUPercent: 12.5, MemoryPercent: 40, DiskPercent: 55, UptimeSeconds: 98765,

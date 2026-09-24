@@ -17,7 +17,7 @@
 ### 3. Contracts (schema conventions)
 - INTEGER unix-second timestamps everywhere; byte counters as INTEGER.
 - Ownership FKs: `nodes.server_id`, `agents.server_id` UNIQUE (Server 1:1 Agent), `user_nodes(user_id,node_id)` PK.
-- `agents.token_hash` UNIQUE; `servers.register_token_hash` single-use (cleared after use).
+- `agents.key_hash` UNIQUE (agent key auth lookup) + `agents.key_enc` BLOB (AES-256-GCM via `app_key`, for reveal). The former `agents.token_hash` and `servers.register_token_hash`/`register_token_expires_at` were dropped in migration `0005_stateless_agent.sql`; legacy rows survive with `key_enc` NULL and must be reset via the agent-key endpoint.
 - `traffic_records` intentionally has NO FKs to users/nodes/servers — history survives parent deletion until retention cleanup. `online_devices` (current state, not history) cascades on user/node/server deletion.
 - Idempotency markers: `traffic_batches` / `device_batches` PK `(agent_id, seq)`.
 - `server_revisions`: per-server monotonic counter, the ONLY config-change signal for agents.
@@ -75,3 +75,14 @@ repo.IngestTrafficBatch(ctx, agentID, seq, records)
 - To change a parent table (e.g. `users` in 0004): back up child rows → drop children → rebuild parent → recreate children byte-equivalent (columns, PK, CASCADE FKs, UNIQUE constraints, ALL indexes) → reinsert children → all in the same migration tx.
 - Always add a migration test asserting: dependent rows survive, `PRAGMA foreign_key_check` is clean, cascade semantics still work post-migration, and recreated indexes exist (`sqlite_master` check).
 - Never rely on column order (`SELECT *` / bare `INSERT INTO t VALUES`) — rebuilds may reorder columns.
+
+---
+
+## Convention: Agent batch sequence is panel-owned (stateless agent)
+
+The agent persists **no** local state (`state_path` was removed). Batch sequence numbers are agent-memory only; the panel is the single source of truth.
+
+- Resume point = `COALESCE(MAX(seq), 0)` of the agent's `traffic_batches` / `device_batches` / `visit_batches` rows (PK `(agent_id, seq)` makes this an index lookup). `handleAgentHeartbeat` returns `traffic_seq` / `device_seq` / `visit_seq`; the agent adopts `local = max(local, resume)` on every heartbeat.
+- Because the agent restarts at 0 and clamps up to the panel max, it can never re-issue a `seq` the panel already stored, so `(agent_id, seq)` dedup stays correct across restarts. An in-flight batch (local already ahead of the panel max) is protected by the `max`, so a retry reuses the same `seq` and is deduplicated.
+- Do NOT add per-agent seq columns; derive on read. The janitor deletes oldest markers first, so `MAX(seq)` only ever moves forward.
+- `AppliedRevision` is intentionally not persisted nor tracked server-side: the agent `forceApply`s the full config on every start.

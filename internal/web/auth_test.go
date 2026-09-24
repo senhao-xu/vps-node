@@ -1,7 +1,6 @@
 package web_test
 
 import (
-	"fmt"
 	"net/http"
 	"testing"
 
@@ -168,19 +167,9 @@ func TestAdminAndAgentAuthScopesDoNotCross(t *testing.T) {
 	cookie := e.login(t)
 	serverID := e.seedServer(t, "s1")
 
-	resp, body := e.do(t, "POST", fmt.Sprintf("/api/servers/%d/register-token", serverID), nil, cookie)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("register-token: %d %s", resp.StatusCode, body)
-	}
-	regToken := jsonMap(t, body)["register_token"].(string)
-	resp, body = e.doAgent(t, "POST", "/api/agent/register",
-		map[string]any{"register_token": regToken, "version": "1.0.0"}, "")
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("agent register: %d %s", resp.StatusCode, body)
-	}
-	agentToken := jsonMap(t, body)["agent_token"].(string)
+	agentKey := e.agentKey(t, cookie, serverID)
 
-	resp, body = e.do(t, "GET", "/api/agent/config?version=0", nil, cookie)
+	resp, body := e.do(t, "GET", "/api/agent/config?version=0", nil, cookie)
 	if resp.StatusCode != http.StatusUnauthorized || errorCode(t, body) != "unauthorized" {
 		t.Fatalf("admin cookie must not grant agent config access, got %d %s", resp.StatusCode, body)
 	}
@@ -190,11 +179,11 @@ func TestAdminAndAgentAuthScopesDoNotCross(t *testing.T) {
 		t.Fatalf("admin cookie must not grant agent heartbeat access, got %d %s", resp.StatusCode, body)
 	}
 
-	resp, body = e.doAgent(t, "GET", "/api/users", nil, agentToken)
+	resp, body = e.doAgent(t, "GET", "/api/users", nil, agentKey)
 	if resp.StatusCode != http.StatusUnauthorized || errorCode(t, body) != "unauthorized" {
 		t.Fatalf("agent token must not grant admin user list access, got %d %s", resp.StatusCode, body)
 	}
-	resp, body = e.doAgent(t, "GET", "/api/admin/me", nil, agentToken)
+	resp, body = e.doAgent(t, "GET", "/api/admin/me", nil, agentKey)
 	if resp.StatusCode != http.StatusUnauthorized || errorCode(t, body) != "unauthorized" {
 		t.Fatalf("agent token must not grant admin me access, got %d %s", resp.StatusCode, body)
 	}
