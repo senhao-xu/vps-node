@@ -39,9 +39,9 @@ function toggle() {
 <style scoped>
 .toggle {
   position: relative;
-  flex: none;
   width: 36px;
   height: 20px;
+  flex: none;
   padding: 2px;
   border: none;
   border-radius: var(--radius-full);
@@ -51,7 +51,7 @@ function toggle() {
 }
 
 .toggle.on {
-  background: var(--color-success);
+  background: var(--color-primary);
 }
 
 .toggle:disabled {
@@ -63,9 +63,9 @@ function toggle() {
   display: block;
   width: 16px;
   height: 16px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   background: var(--color-toggle-knob);
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-sm);
   transition: transform 0.15s ease;
 }
 

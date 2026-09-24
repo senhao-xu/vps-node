@@ -37,21 +37,22 @@ function select(value: T) {
 <style scoped>
 .segmented {
   display: inline-flex;
-  padding: 2px;
   gap: 2px;
+  padding: 2px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  background: var(--color-muted-soft);
+  background: var(--color-surface-muted);
 }
 
 .segment {
-  padding: 4px 12px;
+  min-height: 26px;
+  padding: 3px 10px;
   border: none;
   border-radius: var(--radius-xs);
   background: transparent;
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
   transition: background 0.15s ease, color 0.15s ease;
@@ -62,7 +63,8 @@ function select(value: T) {
 }
 
 .segment.active {
-  background: var(--color-primary);
-  color: var(--color-on-primary);
+  background: var(--color-surface);
+  color: var(--color-primary);
+  box-shadow: var(--shadow-sm);
 }
 </style>

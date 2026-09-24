@@ -389,6 +389,7 @@ onMounted(() => {
         :sort-key="sortKey"
         :sort-dir="sortDir"
         :total-count="total"
+        aria-label="节点列表"
         @update:selected="selectedIds = $event.map(Number)"
         @sort="onSort"
       >

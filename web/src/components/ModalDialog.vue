@@ -118,23 +118,22 @@ onBeforeUnmount(() => {
 .overlay {
   position: fixed;
   inset: 0;
-  background: var(--color-overlay);
+  z-index: 100;
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding: 64px var(--spacing-md) var(--spacing-lg);
-  z-index: 100;
   overflow-y: auto;
-  backdrop-filter: blur(3px);
+  padding: 56px var(--spacing-md) var(--spacing-lg);
+  background: var(--color-overlay);
 }
 
 .dialog {
   max-width: 100%;
-  background: var(--color-surface);
+  overflow: hidden;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-dialog);
+  background: var(--color-surface);
   box-shadow: var(--shadow-dialog);
-  overflow: hidden;
   outline: none;
 }
 
@@ -143,51 +142,57 @@ onBeforeUnmount(() => {
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--spacing-md);
-  padding: 24px 24px 12px;
+  padding: 18px 20px 10px;
+}
+
+.dialog-heading {
+  min-width: 0;
 }
 
 .dialog-title {
   margin: 0;
   font-size: var(--font-size-lg);
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
+  line-height: 1.35;
 }
 
 .dialog-subtitle {
-  margin: var(--spacing-xs) 0 0;
-  font-size: var(--font-size-sm);
+  margin: 3px 0 0;
   color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
 }
 
 .close {
-  background: var(--color-muted-soft);
-  border: none;
-  color: var(--color-text-secondary);
-  cursor: pointer;
   display: inline-flex;
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   flex: none;
   align-items: center;
   justify-content: center;
   padding: 0;
-  border-radius: 50%;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
   transition: color 0.15s ease, background 0.15s ease;
 }
 
 .close:hover {
+  border-color: var(--color-border);
+  background: var(--color-surface-muted);
   color: var(--color-text);
-  background: var(--color-border);
 }
 
 .dialog-body {
-  padding: 12px 24px;
+  padding: 10px 20px;
 }
 
 .dialog-footer {
   display: flex;
   justify-content: flex-end;
   gap: var(--spacing-sm);
-  padding: 12px 24px 24px;
+  padding: 10px 20px 18px;
 }
 
 @media (max-width: 560px) {

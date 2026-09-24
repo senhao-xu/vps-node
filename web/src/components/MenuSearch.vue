@@ -1,16 +1,14 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { navigationItems, type NavigationItem } from '@/router/navigation'
 import {
-  Globe,
-  LayoutDashboard,
-  Server,
-  Settings,
-  Users,
-  Waypoints,
-  type LucideIcon,
-} from 'lucide-vue-next'
-import { useScrollLock } from '@/components/ui/composables'
+  isTopDialog,
+  pushDialog,
+  removeDialog,
+  useFocusTrap,
+  useScrollLock,
+} from '@/components/ui/composables'
 
 const props = defineProps<{
   open: boolean
@@ -20,47 +18,35 @@ const emit = defineEmits<{
   (e: 'close'): void
 }>()
 
-interface MenuItem {
-  to: string
-  label: string
-  keywords: string
-  icon: LucideIcon
-}
-
-const menuItems: MenuItem[] = [
-  { to: '/', label: '仪表盘', keywords: 'dashboard yibiaopan home', icon: LayoutDashboard },
-  { to: '/users', label: '用户', keywords: 'users yonghu', icon: Users },
-  { to: '/servers', label: '服务器', keywords: 'servers fuwuqi', icon: Server },
-  { to: '/nodes', label: '节点', keywords: 'nodes jiedian', icon: Waypoints },
-  { to: '/visits', label: '访问记录', keywords: 'visits fangwen jilu sites', icon: Globe },
-  { to: '/settings', label: '设置', keywords: 'settings shezhi', icon: Settings },
-]
-
 const router = useRouter()
 const query = ref('')
 const activeIndex = ref(0)
-const inputRef = ref<HTMLInputElement | null>(null)
-
+const paletteRef = ref<HTMLElement | null>(null)
 const isOpen = computed(() => props.open)
+const dialogId = Symbol('menu-search')
+
 useScrollLock(isOpen)
+useFocusTrap(paletteRef, isOpen)
 
 const filtered = computed(() => {
   const q = query.value.trim().toLowerCase()
-  if (!q) return menuItems
-  return menuItems.filter((item) => {
-    const haystack = `${item.label} ${item.keywords}`.toLowerCase()
+  if (!q) return navigationItems
+  return navigationItems.filter((item) => {
+    const haystack = (item.label + ' ' + item.keywords).toLowerCase()
     return q.split(/\s+/).every((part) => haystack.includes(part))
   })
 })
 
 watch(
   () => props.open,
-  async (open) => {
-    if (!open) return
-    query.value = ''
-    activeIndex.value = 0
-    await nextTick()
-    inputRef.value?.focus()
+  (open) => {
+    if (open) {
+      pushDialog(dialogId)
+      query.value = ''
+      activeIndex.value = 0
+    } else {
+      removeDialog(dialogId)
+    }
   },
 )
 
@@ -68,7 +54,7 @@ watch(filtered, () => {
   activeIndex.value = 0
 })
 
-function go(item: MenuItem) {
+function go(item: NavigationItem) {
   emit('close')
   void router.push(item.to)
 }
@@ -85,10 +71,16 @@ function onKeydown(event: KeyboardEvent) {
     const item = filtered.value[activeIndex.value]
     if (item) go(item)
   } else if (event.key === 'Escape') {
+    if (!isTopDialog(dialogId)) return
     event.preventDefault()
+    event.stopPropagation()
     emit('close')
   }
 }
+
+onBeforeUnmount(() => {
+  removeDialog(dialogId)
+})
 </script>
 
 <template>
@@ -97,16 +89,17 @@ function onKeydown(event: KeyboardEvent) {
       v-if="props.open"
       class="palette-overlay"
       @mousedown.self="emit('close')"
-      @keydown="onKeydown"
     >
       <div
+        ref="paletteRef"
         class="palette"
         role="dialog"
         aria-modal="true"
         aria-label="菜单搜索"
+        tabindex="-1"
+        @keydown="onKeydown"
       >
         <input
-          ref="inputRef"
           v-model="query"
           type="text"
           class="palette-input"
@@ -116,6 +109,7 @@ function onKeydown(event: KeyboardEvent) {
         <div
           class="palette-list"
           role="listbox"
+          aria-label="页面"
         >
           <button
             v-for="(item, index) in filtered"
@@ -155,27 +149,29 @@ function onKeydown(event: KeyboardEvent) {
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding: 96px var(--spacing-md) var(--spacing-lg);
+  padding: 84px var(--spacing-md) var(--spacing-lg);
   background: var(--color-overlay);
 }
 
 .palette {
   width: min(440px, 100%);
-  background: var(--color-surface);
+  overflow: hidden;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-dialog);
+  background: var(--color-surface);
   box-shadow: var(--shadow-dialog);
-  overflow: hidden;
+  outline: none;
 }
 
 .palette-input {
   width: 100%;
+  min-height: 48px;
+  padding: 12px var(--spacing-md);
   border: none;
   border-bottom: 1px solid var(--color-border);
   border-radius: 0;
-  padding: 14px var(--spacing-md);
-  font-size: var(--font-size-md);
   background: var(--color-surface);
+  font-size: var(--font-size-md);
 }
 
 .palette-list {
@@ -189,7 +185,7 @@ function onKeydown(event: KeyboardEvent) {
   align-items: center;
   gap: var(--spacing-sm);
   width: 100%;
-  padding: 9px 10px;
+  padding: 8px 10px;
   border: none;
   border-radius: var(--radius-sm);
   background: none;
@@ -201,18 +197,19 @@ function onKeydown(event: KeyboardEvent) {
 
 .palette-item.active {
   background: var(--color-primary-soft);
+  color: var(--color-primary);
 }
 
 .palette-icon {
   flex: none;
-  color: var(--color-text-secondary);
+  color: currentColor;
 }
 
 .palette-empty {
   margin: 0;
   padding: var(--spacing-lg);
-  text-align: center;
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
+  text-align: center;
 }
 </style>

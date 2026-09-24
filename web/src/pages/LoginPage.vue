@@ -71,7 +71,7 @@ async function submit() {
     </div>
     <div class="login-wrap">
       <div class="login-heading">
-        <span class="brand-mark">V</span>
+        <span class="brand-mark">VN</span>
         <h1 class="login-title">
           VPS Node
         </h1>
@@ -133,12 +133,12 @@ async function submit() {
 <style scoped>
 .login-page {
   position: relative;
-  min-height: 100vh;
   display: flex;
+  min-height: 100vh;
   align-items: center;
   justify-content: center;
   padding: var(--spacing-lg);
-  background: var(--color-surface-muted);
+  background: var(--color-bg);
 }
 
 .theme-switch {
@@ -148,60 +148,72 @@ async function submit() {
 }
 
 .login-wrap {
-  width: min(420px, 100%);
   display: flex;
+  width: min(390px, 100%);
   flex-direction: column;
-  gap: var(--spacing-lg);
+  gap: var(--spacing-md);
 }
 
 .login-heading {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: var(--spacing-xs);
+  justify-content: center;
+  gap: 10px;
 }
 
 .brand-mark {
-  display: inline-block;
-  width: 36px;
-  height: 36px;
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
   border-radius: var(--radius-sm);
   background: var(--color-primary);
   color: var(--color-on-primary);
-  font-size: 19px;
-  font-weight: 700;
-  line-height: 36px;
-  text-align: center;
+  font-size: var(--font-size-xs);
+  font-weight: 800;
 }
 
 .login-title {
   margin: 0;
   font-size: var(--font-size-xl);
-  font-weight: 700;
-  letter-spacing: -0.03em;
+  font-weight: 800;
+  letter-spacing: 0;
 }
 
 .login-sub {
   margin: 0;
+  padding-left: 10px;
+  border-left: 1px solid var(--color-border);
   font-size: var(--font-size-sm);
 }
 
 .login-form {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-md);
-  padding: 24px;
+  gap: 14px;
+  padding: 20px;
 }
 
 .login-card-title {
   margin: 0;
   font-size: var(--font-size-lg);
-  font-weight: 600;
-  letter-spacing: -0.02em;
+  font-weight: 700;
+  letter-spacing: 0;
 }
 
 .login-card-desc {
-  margin: calc(-1 * var(--spacing-sm)) 0 0;
+  margin: -8px 0 0;
   font-size: var(--font-size-sm);
+}
+
+.login-form .btn {
+  width: 100%;
+}
+
+@media (max-width: 480px) {
+  .login-page {
+    align-items: flex-start;
+    padding: 76px 12px 24px;
+  }
 }
 </style>

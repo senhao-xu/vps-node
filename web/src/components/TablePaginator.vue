@@ -102,7 +102,8 @@ function changePageSize(size: number) {
   align-items: center;
   justify-content: space-between;
   gap: var(--spacing-md);
-  padding-top: var(--spacing-md);
+  padding-top: 12px;
+  color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
   flex-wrap: wrap;
 }
@@ -110,7 +111,7 @@ function changePageSize(size: number) {
 .right {
   display: inline-flex;
   align-items: center;
-  gap: var(--spacing-lg);
+  gap: var(--spacing-md);
 }
 
 .size {
@@ -121,42 +122,44 @@ function changePageSize(size: number) {
 }
 
 .size select {
-  min-height: 32px;
-  padding: 3px 26px 3px 8px;
-  font-size: var(--font-size-sm);
+  min-height: 30px;
+  padding: 2px 25px 2px 8px;
   background-position: right 6px center;
+  font-size: var(--font-size-sm);
 }
 
 .page-info {
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
   font-weight: 500;
   white-space: nowrap;
-  font-variant-numeric: tabular-nums;
 }
 
 .pager {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
 }
 
 .page-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 32px;
-  height: 32px;
-  padding: 0 6px;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 5px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-surface);
-  color: var(--color-text);
-  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
 .page-btn:hover:not(:disabled) {
-  background: var(--color-muted-soft);
+  border-color: var(--color-primary-border);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
 }
 
 .page-btn:disabled {
@@ -165,6 +168,15 @@ function changePageSize(size: number) {
 }
 
 @media (max-width: 640px) {
+  .paginator,
+  .right {
+    width: 100%;
+  }
+
+  .right {
+    justify-content: space-between;
+  }
+
   .size {
     display: none;
   }

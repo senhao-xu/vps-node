@@ -74,7 +74,7 @@ onBeforeUnmount(() => {
   position: relative;
   display: inline-flex;
   align-items: center;
-  width: min(280px, 100%);
+  width: min(260px, 100%);
 }
 
 .search-icon {
@@ -87,6 +87,7 @@ onBeforeUnmount(() => {
 .search-input input {
   width: 100%;
   padding-left: 30px;
+  background: var(--color-surface);
 }
 
 @media (max-width: 700px) {

@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Activity, Cpu, Plus, Server, ServerOff, Waypoints } from 'lucide-vue-next'
+import { Activity, Plus, Server, ServerOff } from 'lucide-vue-next'
 import { deleteServer, listServers, updateServer } from '@/api/servers'
-import { getDashboard } from '@/api/dashboard'
 import { errorMessage } from '@/api/http'
-import type { Dashboard, Paged, Server as ServerItem, ServerStatus } from '@/api/types'
+import type { Paged, Server as ServerItem, ServerStatus } from '@/api/types'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import DataTable, { type Column } from '@/components/DataTable.vue'
 import ErrorBanner from '@/components/ErrorBanner.vue'
@@ -14,11 +13,13 @@ import ServerFormDialog from '@/components/ServerFormDialog.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import OverflowMenu, { type OverflowMenuItem } from '@/components/ui/OverflowMenu.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
-import StatCard from '@/components/ui/StatCard.vue'
+import MetricStrip, { type MetricStripItem } from '@/components/ui/MetricStrip.vue'
 import { formatDateTime, formatRelative } from '@/utils/format'
 import { serverStatusInfo } from '@/utils/labels'
+import { useOverviewStore } from '@/stores/overview'
 
 const router = useRouter()
+const overview = useOverviewStore()
 
 const items = ref<ServerItem[]>([])
 const total = ref(0)
@@ -26,7 +27,6 @@ const page = ref(1)
 const pageSize = ref(20)
 const loading = ref(false)
 const error = ref('')
-const overview = ref<Dashboard | null>(null)
 
 const showCreate = ref(false)
 const editTarget = ref<ServerItem | null>(null)
@@ -44,17 +44,32 @@ const columns: Column[] = [
   { key: 'actions', label: '', width: '48px', divider: true },
 ]
 
-const offlineCount = computed(() =>
-  overview.value ? Math.max(0, overview.value.servers_total - overview.value.servers_online) : 0,
-)
-
-const hotCount = computed(
-  () => items.value.filter((server) => server.cpu_percent >= 80).length,
-)
-
-const nodeTotal = computed(() =>
-  items.value.reduce((sum, server) => sum + server.node_count, 0),
-)
+const metrics = computed<MetricStripItem[]>(() => {
+  const stats = overview.stats
+  const offline = stats ? Math.max(0, stats.servers_total - stats.servers_online) : null
+  return [
+    {
+      key: 'total',
+      label: '服务器总数',
+      value: stats?.servers_total ?? '—',
+      icon: Server,
+    },
+    {
+      key: 'online',
+      label: '在线',
+      value: stats?.servers_online ?? '—',
+      icon: Activity,
+      tone: stats ? 'success' : 'default',
+    },
+    {
+      key: 'offline',
+      label: '离线',
+      value: offline ?? '—',
+      icon: ServerOff,
+      tone: offline && offline > 0 ? 'danger' : 'default',
+    },
+  ]
+})
 
 function rowActions(row: ServerItem): OverflowMenuItem[] {
   return [
@@ -86,12 +101,9 @@ async function load() {
   }
 }
 
-async function loadOverview() {
-  try {
-    overview.value = await getDashboard()
-  } catch {
-    overview.value = null
-  }
+async function reload() {
+  await load()
+  void overview.refresh().catch(() => undefined)
 }
 
 function onPageChange(nextPage: number, nextSize: number) {
@@ -106,7 +118,7 @@ async function toggleStatus(server: ServerItem) {
   error.value = ''
   try {
     await updateServer(server.id, { status: next })
-    await load()
+    await reload()
   } catch (err) {
     error.value = errorMessage(err)
   } finally {
@@ -122,7 +134,7 @@ async function confirmDelete() {
   try {
     await deleteServer(target.id)
     deleteTarget.value = null
-    await load()
+    await reload()
   } catch (err) {
     error.value = errorMessage(err)
   } finally {
@@ -132,7 +144,6 @@ async function confirmDelete() {
 
 onMounted(() => {
   void load()
-  void loadOverview()
 })
 </script>
 
@@ -158,52 +169,11 @@ onMounted(() => {
       @dismiss="error = ''"
     />
 
-    <div
-      v-if="overview"
-      class="stat-grid"
-    >
-      <StatCard
-        label="服务器总数"
-        :value="overview.servers_total"
-        :icon="Server"
-      />
-      <StatCard
-        label="在线"
-        :value="overview.servers_online"
-        :icon="Activity"
-        tone="success"
-      />
-      <StatCard
-        label="离线"
-        :value="offlineCount"
-        :icon="ServerOff"
-        :tone="offlineCount > 0 ? 'danger' : 'default'"
-      />
-      <StatCard
-        label="高负载（CPU ≥ 80%）"
-        :value="hotCount"
-        :icon="Cpu"
-        :tone="hotCount > 0 ? 'warning' : 'default'"
-      />
-      <StatCard
-        label="节点数"
-        :value="nodeTotal"
-        :icon="Waypoints"
-      />
-    </div>
-    <div
-      v-else
-      class="stat-grid"
-    >
-      <div
-        v-for="n in 5"
-        :key="n"
-        class="card stat-skeleton"
-      >
-        <span class="skeleton skeleton-line" />
-        <span class="skeleton skeleton-value" />
-      </div>
-    </div>
+    <MetricStrip
+      :items="metrics"
+      :loading="overview.loading && !overview.stats"
+      aria-label="服务器状态汇总"
+    />
 
     <div class="table-card">
       <DataTable
@@ -212,6 +182,7 @@ onMounted(() => {
         :row-key="(row) => row.id"
         :loading="loading"
         :total-count="total"
+        aria-label="服务器列表"
       >
         <template #cell-name="{ row }">
           <RouterLink :to="`/servers/${row.id}`">
@@ -256,13 +227,13 @@ onMounted(() => {
     <ServerFormDialog
       :open="showCreate"
       @close="showCreate = false"
-      @saved="load"
+      @saved="reload"
     />
     <ServerFormDialog
       :open="editTarget !== null"
       :server="editTarget"
       @close="editTarget = null"
-      @saved="load"
+      @saved="reload"
     />
 
     <ConfirmDialog
@@ -279,18 +250,12 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.stat-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: var(--spacing-md);
-}
-
 .table-card {
-  margin-top: var(--spacing-md);
+  min-width: 0;
 }
 
 .heartbeat {
   display: block;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-xs);
 }
 </style>

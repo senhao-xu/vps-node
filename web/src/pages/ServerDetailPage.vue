@@ -1,6 +1,24 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
+import {
+  Activity,
+  Box,
+  CalendarClock,
+  Cpu,
+  HardDrive,
+  HeartPulse,
+  MemoryStick,
+  Pencil,
+  Power,
+  Radio,
+  RefreshCw,
+  Server as ServerIcon,
+  ShieldCheck,
+  Trash2,
+  Users,
+  Waypoints,
+} from 'lucide-vue-next'
 import { deleteServer, getServer, rotateAgentToken, createRegisterToken, updateServer } from '@/api/servers'
 import { deleteNode } from '@/api/nodes'
 import { getServerVisits } from '@/api/visits'
@@ -15,12 +33,14 @@ import NodeFormDialog from '@/components/NodeFormDialog.vue'
 import OneTimeSecret from '@/components/OneTimeSecret.vue'
 import ServerFormDialog from '@/components/ServerFormDialog.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
+import DetailNav, { type DetailNavItem } from '@/components/ui/DetailNav.vue'
 import LoadingSpinner from '@/components/ui/LoadingSpinner.vue'
+import MetricStrip, { type MetricStripItem } from '@/components/ui/MetricStrip.vue'
 import OverflowMenu, { type OverflowMenuItem } from '@/components/ui/OverflowMenu.vue'
-import PageHeader from '@/components/ui/PageHeader.vue'
+import ResourceHeader from '@/components/ui/ResourceHeader.vue'
 import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import { useCopyFeedback } from '@/utils/clipboard'
-import { formatDateTime, formatDuration, formatRelative } from '@/utils/format'
+import { formatDateTime, formatDuration, formatPercent, formatRelative } from '@/utils/format'
 import { binaryInstallCommand, dockerInstallCommand } from '@/utils/installCommands'
 import { nodeStatusInfo, protocolLabel, serverStatusInfo } from '@/utils/labels'
 
@@ -46,6 +66,14 @@ const installTab = ref<InstallTab>('binary')
 const installTabItems: { value: InstallTab; label: string }[] = [
   { value: 'binary', label: '二进制安装' },
   { value: 'docker', label: 'Docker 安装' },
+]
+
+const detailNavItems: DetailNavItem[] = [
+  { id: 'overview', label: '运行概览', hint: '身份与承载状态', icon: ServerIcon },
+  { id: 'agent', label: 'Agent 管理', hint: '注册、凭证与安装', icon: Radio },
+  { id: 'health', label: '系统指标', hint: '资源压力与运行时间', icon: HeartPulse },
+  { id: 'nodes', label: '节点拓扑', hint: '协议与服务端口', icon: Waypoints },
+  { id: 'activity', label: '访问活动', hint: '最近连接目标', icon: Activity },
 ]
 const { copied: commandCopied, copy } = useCopyFeedback()
 
@@ -121,6 +149,67 @@ const serverId = computed(() => {
   const id = typeof raw === 'string' ? Number(raw) : NaN
   return Number.isInteger(id) && id > 0 ? id : null
 })
+
+const serverMetrics = computed<MetricStripItem[]>(() => {
+  const current = server.value
+  if (!current) return []
+  return [
+    {
+      key: 'cpu',
+      label: 'CPU',
+      value: formatPercent(current.cpu_percent),
+      icon: Cpu,
+      tone: current.cpu_percent >= 80 ? 'warning' : 'default',
+    },
+    {
+      key: 'memory',
+      label: '内存',
+      value: formatPercent(current.memory_percent),
+      icon: MemoryStick,
+      tone: current.memory_percent >= 80 ? 'warning' : 'default',
+    },
+    {
+      key: 'disk',
+      label: '磁盘',
+      value: formatPercent(current.disk_percent),
+      icon: HardDrive,
+      tone: current.disk_percent >= 80 ? 'warning' : 'default',
+    },
+    {
+      key: 'users',
+      label: '在线用户',
+      value: current.online_users,
+      hint: current.nodes.length + ' 个节点',
+      icon: Users,
+    },
+    {
+      key: 'uptime',
+      label: '运行时间',
+      value: formatDuration(current.uptime_seconds),
+      icon: Activity,
+    },
+  ]
+})
+
+const maxResourcePercent = computed(() => {
+  const current = server.value
+  if (!current) return 0
+  return Math.max(current.cpu_percent, current.memory_percent, current.disk_percent)
+})
+
+const pressureLabel = computed(() => {
+  if (maxResourcePercent.value >= 90) return '高压'
+  if (maxResourcePercent.value >= 75) return '偏高'
+  return '平稳'
+})
+
+const pressureClass = computed(() =>
+  maxResourcePercent.value >= 90
+    ? 'text-danger'
+    : maxResourcePercent.value >= 75
+      ? 'text-warning'
+      : 'text-success',
+)
 
 const nodeColumns: Column[] = [
   { key: 'name', label: '节点名称' },
@@ -269,21 +358,30 @@ onMounted(() => {
 </script>
 
 <template>
-  <section class="page">
-    <PageHeader
+  <section class="page detail-page">
+    <ResourceHeader
       :title="server ? server.name : '服务器详情'"
+      eyebrow="服务器资源"
+      :subtitle="server ? `由 Agent ${server.agent?.version || '未注册'} 管理的运行实例` : '正在读取服务器状态'"
       back-to="/servers"
-      back-title="服务器"
+      back-label="返回服务器列表"
+      :icon="ServerIcon"
     >
+      <template #status>
+        <StatusBadge
+          v-if="server"
+          v-bind="serverStatusInfo(server.status)"
+        />
+      </template>
       <template #actions>
         <template v-if="server">
-          <StatusBadge v-bind="serverStatusInfo(server.status)" />
           <button
             type="button"
             class="btn secondary"
             :disabled="statusUpdating"
             @click="toggleStatus"
           >
+            <Power :size="15" />
             {{ server.status === 'disabled' ? '启用' : '禁用' }}
           </button>
           <button
@@ -291,6 +389,7 @@ onMounted(() => {
             class="btn secondary"
             @click="showEdit = true"
           >
+            <Pencil :size="15" />
             编辑
           </button>
           <button
@@ -298,11 +397,30 @@ onMounted(() => {
             class="btn danger secondary"
             @click="showDeleteConfirm = true"
           >
+            <Trash2 :size="15" />
             删除
           </button>
         </template>
       </template>
-    </PageHeader>
+      <template #meta>
+        <span class="resource-meta-item">
+          <Box :size="15" />
+          Server ID <strong>#{{ server?.id ?? '—' }}</strong>
+        </span>
+        <span class="resource-meta-item">
+          <RefreshCw :size="15" />
+          配置版本 <strong>r{{ server?.revision ?? '—' }}</strong>
+        </span>
+        <span class="resource-meta-item">
+          <CalendarClock :size="15" />
+          创建于 <strong>{{ formatDateTime(server?.created_at) }}</strong>
+        </span>
+        <span class="resource-meta-item">
+          <Radio :size="15" />
+          最后心跳 <strong>{{ formatRelative(server?.last_seen_at) }}</strong>
+        </span>
+      </template>
+    </ResourceHeader>
     <ErrorBanner
       :message="error"
       @dismiss="error = ''"
@@ -315,267 +433,419 @@ onMounted(() => {
       <LoadingSpinner size="lg" />
     </div>
     <template v-else-if="server">
-      <div class="card">
-        <h2 class="card-title">
-          基础信息
-        </h2>
-        <div class="info-grid">
-          <div class="info-item">
-            <span class="info-label">名称</span>
-            <span>{{ server.name }}</span>
-          </div>
-          <div class="info-item">
-            <span class="info-label">Server ID</span>
-            <span>{{ server.id }}</span>
-          </div>
-          <div class="info-item">
-            <span class="info-label">配置版本（revision）</span>
-            <span class="mono">{{ server.revision }}</span>
-          </div>
-          <div class="info-item">
-            <span class="info-label">在线用户</span>
-            <span>{{ server.online_users }}</span>
-          </div>
-          <div class="info-item">
-            <span class="info-label">创建时间</span>
-            <span>{{ formatDateTime(server.created_at) }}</span>
-          </div>
-        </div>
-      </div>
+      <MetricStrip
+        :items="serverMetrics"
+        aria-label="服务器资源指标"
+      />
+      <DetailNav
+        :items="detailNavItems"
+        aria-label="服务器详情分区"
+      />
+      <div class="detail-workspace">
+        <main class="detail-main">
+          <section
+            id="overview"
+            class="detail-section"
+          >
+            <div class="section-heading">
+              <div class="section-heading-copy">
+                <span class="section-kicker">Overview</span>
+                <h2>运行概览</h2>
+                <p>核对服务器身份、配置修订和当前承载情况。</p>
+              </div>
+            </div>
+            <div class="card">
+              <h2 class="card-title">
+                基础信息
+              </h2>
+              <div class="info-grid">
+                <div class="info-item">
+                  <span class="info-label">名称</span>
+                  <span>{{ server.name }}</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label">Server ID</span>
+                  <span>{{ server.id }}</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label">配置版本（revision）</span>
+                  <span class="mono">{{ server.revision }}</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label">在线用户</span>
+                  <span>{{ server.online_users }}</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label">创建时间</span>
+                  <span>{{ formatDateTime(server.created_at) }}</span>
+                </div>
+              </div>
+            </div>
+          </section>
 
-      <div class="card">
-        <h2 class="card-title">
-          Agent
-        </h2>
-        <div
-          v-if="server.agent"
-          class="info-grid"
-        >
-          <div class="info-item">
-            <span class="info-label">Agent ID</span>
-            <span>{{ server.agent.id }}</span>
-          </div>
-          <div class="info-item">
-            <span class="info-label">版本</span>
-            <span>{{ server.agent.version || '—' }}</span>
-          </div>
-          <div class="info-item">
-            <span class="info-label">最后心跳</span>
-            <span>
-              {{ server.agent.last_seen_at ? formatDateTime(server.agent.last_seen_at) : '从未' }}
-              <span
-                v-if="server.agent.last_seen_at"
-                class="text-secondary"
+          <section
+            id="agent"
+            class="detail-section"
+          >
+            <div class="section-heading">
+              <div class="section-heading-copy">
+                <span class="section-kicker">Agent</span>
+                <h2>Agent 管理</h2>
+                <p>管理注册凭证、安装方式和运行端连接状态。</p>
+              </div>
+            </div>
+            <div class="card">
+              <h2 class="card-title">
+                Agent
+              </h2>
+              <div
+                v-if="server.agent"
+                class="info-grid"
               >
-                （{{ formatRelative(server.agent.last_seen_at) }}）
-              </span>
-            </span>
-          </div>
-          <div class="info-item">
-            <span class="info-label">连接时间</span>
-            <span>{{ formatDateTime(server.agent.connected_at) }}</span>
-          </div>
-        </div>
-        <p
-          v-else
-          class="text-secondary agent-missing"
-        >
-          该服务器还没有注册 Agent。点击下方按钮生成一次性注册 Token，在服务器上运行 Agent 时使用。
-        </p>
-        <div class="token-actions">
-          <button
-            v-if="server.agent"
-            type="button"
-            class="btn secondary small"
-            :disabled="rotatingAgentToken"
-            @click="rotateToken"
-          >
-            {{ rotatingAgentToken ? '生成中…' : '轮换 Agent Token' }}
-          </button>
-          <button
-            type="button"
-            class="btn secondary small"
-            :disabled="generatingRegisterToken"
-            @click="generateRegisterToken"
-          >
-            {{ generatingRegisterToken ? '生成中…' : (server.agent ? '重新生成注册 Token' : '生成注册 Token') }}
-          </button>
-        </div>
-        <OneTimeSecret
-          v-if="agentTokenResult"
-          class="secret-block"
-          label="新 Agent Token（旧 Token 已立即失效）"
-          :value="agentTokenResult.agent_token"
-          hint="仅显示这一次，请立即复制保存并更新 Agent 配置。"
-        />
-        <OneTimeSecret
-          v-if="registerTokenResult"
-          class="secret-block"
-          label="注册 Token"
-          :value="registerTokenResult.register_token"
-          :hint="`仅显示这一次，有效期至 ${formatDateTime(registerTokenResult.expires_at)}。`"
-        />
-        <div class="install-block">
-          <div class="install-head">
-            <span class="install-title">Agent 安装</span>
-            <SegmentedControl
-              v-model="installTab"
-              class="install-segmented"
-              :items="installTabItems"
-              aria-label="安装方式"
-            />
-          </div>
-          <p
-            v-if="freshRegisterToken === ''"
-            class="install-hint"
-          >
-            {{ generatingRegisterToken ? '正在生成注册 Token…' : '注册 Token 生成失败，请点击上方「生成注册 Token」重试。' }}
-          </p>
-          <p
-            v-else
-            class="install-hint ok"
-          >
-            已自动内嵌注册 Token，有效期至 {{ registerTokenResult ? formatDateTime(registerTokenResult.expires_at) : '' }}。
-          </p>
-          <div class="install-code-head">
-            <span class="text-secondary">安装命令</span>
-            <button
-              type="button"
-              class="btn link small"
-              @click="copyInstallCommand"
-            >
-              {{ commandCopied ? '已复制' : '复制' }}
-            </button>
-          </div>
-          <pre class="install-code mono">{{ activeInstallCommand }}</pre>
-          <p class="install-note">
-            {{ installNotes[installTab] }}
-          </p>
-        </div>
-      </div>
+                <div class="info-item">
+                  <span class="info-label">Agent ID</span>
+                  <span>{{ server.agent.id }}</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label">版本</span>
+                  <span>{{ server.agent.version || '—' }}</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label">最后心跳</span>
+                  <span>
+                    {{ server.agent.last_seen_at ? formatDateTime(server.agent.last_seen_at) : '从未' }}
+                    <span
+                      v-if="server.agent.last_seen_at"
+                      class="text-secondary"
+                    >
+                      （{{ formatRelative(server.agent.last_seen_at) }}）
+                    </span>
+                  </span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label">连接时间</span>
+                  <span>{{ formatDateTime(server.agent.connected_at) }}</span>
+                </div>
+              </div>
+              <p
+                v-else
+                class="text-secondary agent-missing"
+              >
+                该服务器还没有注册 Agent。点击下方按钮生成一次性注册 Token，在服务器上运行 Agent 时使用。
+              </p>
+              <div class="token-actions">
+                <button
+                  v-if="server.agent"
+                  type="button"
+                  class="btn secondary small"
+                  :disabled="rotatingAgentToken"
+                  @click="rotateToken"
+                >
+                  {{ rotatingAgentToken ? '生成中…' : '轮换 Agent Token' }}
+                </button>
+                <button
+                  type="button"
+                  class="btn secondary small"
+                  :disabled="generatingRegisterToken"
+                  @click="generateRegisterToken"
+                >
+                  {{ generatingRegisterToken ? '生成中…' : (server.agent ? '重新生成注册 Token' : '生成注册 Token') }}
+                </button>
+              </div>
+              <OneTimeSecret
+                v-if="agentTokenResult"
+                class="secret-block"
+                label="新 Agent Token（旧 Token 已立即失效）"
+                :value="agentTokenResult.agent_token"
+                hint="仅显示这一次，请立即复制保存并更新 Agent 配置。"
+              />
+              <OneTimeSecret
+                v-if="registerTokenResult"
+                class="secret-block"
+                label="注册 Token"
+                :value="registerTokenResult.register_token"
+                :hint="`仅显示这一次，有效期至 ${formatDateTime(registerTokenResult.expires_at)}。`"
+              />
+              <div class="install-block">
+                <div class="install-head">
+                  <span class="install-title">Agent 安装</span>
+                  <SegmentedControl
+                    v-model="installTab"
+                    class="install-segmented"
+                    :items="installTabItems"
+                    aria-label="安装方式"
+                  />
+                </div>
+                <p
+                  v-if="freshRegisterToken === ''"
+                  class="install-hint"
+                >
+                  {{ generatingRegisterToken ? '正在生成注册 Token…' : '注册 Token 生成失败，请点击上方「生成注册 Token」重试。' }}
+                </p>
+                <p
+                  v-else
+                  class="install-hint ok"
+                >
+                  已自动内嵌注册 Token，有效期至 {{ registerTokenResult ? formatDateTime(registerTokenResult.expires_at) : '' }}。
+                </p>
+                <div class="install-code-head">
+                  <span class="text-secondary">安装命令</span>
+                  <button
+                    type="button"
+                    class="btn link small"
+                    @click="copyInstallCommand"
+                  >
+                    {{ commandCopied ? '已复制' : '复制' }}
+                  </button>
+                </div>
+                <pre class="install-code mono">{{ activeInstallCommand }}</pre>
+                <p class="install-note">
+                  {{ installNotes[installTab] }}
+                </p>
+              </div>
+            </div>
+          </section>
 
-      <div class="card">
-        <h2 class="card-title">
-          系统指标
-        </h2>
-        <div class="metrics">
-          <MetricBar
-            label="CPU"
-            :percent="server.cpu_percent"
-          />
-          <MetricBar
-            label="内存"
-            :percent="server.memory_percent"
-          />
-          <MetricBar
-            label="磁盘"
-            :percent="server.disk_percent"
-          />
-          <div class="uptime-row">
-            <span class="text-secondary">Uptime</span>
-            <span>{{ formatDuration(server.uptime_seconds) }}</span>
-          </div>
-        </div>
-      </div>
+          <section
+            id="health"
+            class="detail-section"
+          >
+            <div class="section-heading">
+              <div class="section-heading-copy">
+                <span class="section-kicker">Health</span>
+                <h2>系统指标</h2>
+                <p>持续观察 CPU、内存、磁盘和运行时长。</p>
+              </div>
+            </div>
+            <div class="card">
+              <h2 class="card-title">
+                系统指标
+              </h2>
+              <div class="metrics">
+                <MetricBar
+                  label="CPU"
+                  :percent="server.cpu_percent"
+                />
+                <MetricBar
+                  label="内存"
+                  :percent="server.memory_percent"
+                />
+                <MetricBar
+                  label="磁盘"
+                  :percent="server.disk_percent"
+                />
+                <div class="uptime-row">
+                  <span class="text-secondary">Uptime</span>
+                  <span>{{ formatDuration(server.uptime_seconds) }}</span>
+                </div>
+              </div>
+            </div>
+          </section>
 
-      <div class="card">
-        <div class="card-head">
-          <h2 class="card-title">
-            节点（{{ server.nodes.length }}）
-          </h2>
-          <div class="node-head-actions">
-            <RouterLink
-              class="btn secondary small"
-              :to="`/nodes?server_id=${server.id}`"
-            >
-              在节点页查看
-            </RouterLink>
-            <button
-              type="button"
-              class="btn small"
-              @click="showNodeDialog = true"
-            >
-              添加节点
-            </button>
-          </div>
-        </div>
-        <DataTable
-          :columns="nodeColumns"
-          :rows="server.nodes"
-          :row-key="(row) => row.id"
-          :loading="loading"
-          :bordered="false"
-        >
-          <template #cell-protocol="{ row }">
-            {{ protocolLabel(row.protocol) }}
-          </template>
-          <template #cell-status="{ row }">
-            <StatusBadge v-bind="nodeStatusInfo(row.status)" />
-          </template>
-          <template #cell-actions="{ row }">
-            <OverflowMenu
-              :items="nodeActions(row)"
-              :label="`节点 ${row.name} 的操作`"
-            />
-          </template>
-          <template #empty>
-            该服务器还没有节点，点击右上角添加
-          </template>
-        </DataTable>
-      </div>
+          <section
+            id="nodes"
+            class="detail-section"
+          >
+            <div class="section-heading">
+              <div class="section-heading-copy">
+                <span class="section-kicker">Topology</span>
+                <h2>节点拓扑</h2>
+                <p>查看并维护该服务器承载的协议、端口和节点状态。</p>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-head">
+                <h2 class="card-title">
+                  节点（{{ server.nodes.length }}）
+                </h2>
+                <div class="node-head-actions">
+                  <RouterLink
+                    class="btn secondary small"
+                    :to="`/nodes?server_id=${server.id}`"
+                  >
+                    在节点页查看
+                  </RouterLink>
+                  <button
+                    type="button"
+                    class="btn small"
+                    @click="showNodeDialog = true"
+                  >
+                    添加节点
+                  </button>
+                </div>
+              </div>
+              <DataTable
+                :columns="nodeColumns"
+                :rows="server.nodes"
+                :row-key="(row) => row.id"
+                :loading="loading"
+                :bordered="false"
+                aria-label="服务器节点列表"
+              >
+                <template #cell-protocol="{ row }">
+                  {{ protocolLabel(row.protocol) }}
+                </template>
+                <template #cell-status="{ row }">
+                  <StatusBadge v-bind="nodeStatusInfo(row.status)" />
+                </template>
+                <template #cell-actions="{ row }">
+                  <OverflowMenu
+                    :items="nodeActions(row)"
+                    :label="`节点 ${row.name} 的操作`"
+                  />
+                </template>
+                <template #empty>
+                  该服务器还没有节点，点击右上角添加
+                </template>
+              </DataTable>
+            </div>
+          </section>
 
-      <div class="card">
-        <div class="card-head">
-          <h2 class="card-title">
-            访问站点
-          </h2>
-          <span class="text-secondary visit-count">共 {{ visitTotal }} 条</span>
-        </div>
-        <ErrorBanner
-          :message="visitsError"
-          @dismiss="visitsError = ''"
-        />
-        <DataTable
-          :columns="visitColumns"
-          :rows="visits"
-          :row-key="(row) => row.id"
-          :loading="visitsLoading"
-          :bordered="false"
+          <section
+            id="activity"
+            class="detail-section"
+          >
+            <div class="section-heading">
+              <div class="section-heading-copy">
+                <span class="section-kicker">Activity</span>
+                <h2>访问活动</h2>
+                <p>检查用户、节点、目标地址和来源 IP 的最近访问记录。</p>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-head">
+                <h2 class="card-title">
+                  访问站点
+                </h2>
+                <span class="text-secondary visit-count">共 {{ visitTotal }} 条</span>
+              </div>
+              <ErrorBanner
+                :message="visitsError"
+                @dismiss="visitsError = ''"
+              />
+              <DataTable
+                :columns="visitColumns"
+                :rows="visits"
+                :row-key="(row) => row.id"
+                :loading="visitsLoading"
+                :bordered="false"
+                aria-label="服务器访问记录"
+              >
+                <template #cell-created_at="{ row }">
+                  {{ formatDateTime(row.created_at) }}
+                </template>
+                <template #cell-username="{ row }">
+                  <RouterLink :to="`/users/${row.user_id}`">
+                    {{ row.username }}
+                  </RouterLink>
+                </template>
+                <template #cell-node_name="{ row }">
+                  {{ row.node_name || '—' }}
+                </template>
+                <template #cell-target="{ row }">
+                  <span class="mono">{{ formatTarget(row) }}</span>
+                </template>
+                <template #cell-client_ip="{ row }">
+                  <span
+                    v-if="row.client_ip"
+                    class="mono"
+                  >{{ row.client_ip }}</span>
+                  <span
+                    v-else
+                    class="text-secondary"
+                  >—</span>
+                </template>
+                <template #empty>
+                  该服务器暂无访问记录
+                </template>
+              </DataTable>
+              <TablePaginator
+                :page="visitPage"
+                :page-size="visitPageSize"
+                :total="visitTotal"
+                @change="onVisitPageChange"
+              />
+            </div>
+          </section>
+        </main>
+
+        <aside
+          class="detail-aside"
+          aria-label="服务器摘要"
         >
-          <template #cell-created_at="{ row }">
-            {{ formatDateTime(row.created_at) }}
-          </template>
-          <template #cell-username="{ row }">
-            <RouterLink :to="`/users/${row.user_id}`">
-              {{ row.username }}
-            </RouterLink>
-          </template>
-          <template #cell-node_name="{ row }">
-            {{ row.node_name || '—' }}
-          </template>
-          <template #cell-target="{ row }">
-            <span class="mono">{{ formatTarget(row) }}</span>
-          </template>
-          <template #cell-client_ip="{ row }">
-            <span
-              v-if="row.client_ip"
-              class="mono"
-            >{{ row.client_ip }}</span>
-            <span
-              v-else
-              class="text-secondary"
-            >—</span>
-          </template>
-          <template #empty>
-            该服务器暂无访问记录
-          </template>
-        </DataTable>
-        <TablePaginator
-          :page="visitPage"
-          :page-size="visitPageSize"
-          :total="visitTotal"
-          @change="onVisitPageChange"
-        />
+          <div class="detail-aside-inner">
+            <section class="summary-panel">
+              <div class="summary-panel-head">
+                <h2>运行摘要</h2>
+                <HeartPulse :size="17" />
+              </div>
+              <dl class="summary-list">
+                <div class="summary-row">
+                  <dt>服务器状态</dt>
+                  <dd><StatusBadge v-bind="serverStatusInfo(server.status)" /></dd>
+                </div>
+                <div class="summary-row">
+                  <dt>Agent 状态</dt>
+                  <dd>{{ server.agent ? '已注册' : '待注册' }}</dd>
+                </div>
+                <div class="summary-row">
+                  <dt>Agent 版本</dt>
+                  <dd class="mono">
+                    {{ server.agent?.version || '—' }}
+                  </dd>
+                </div>
+                <div class="summary-row">
+                  <dt>运行时间</dt>
+                  <dd>{{ formatDuration(server.uptime_seconds) }}</dd>
+                </div>
+                <div class="summary-row">
+                  <dt>在线用户</dt>
+                  <dd>{{ server.online_users }}</dd>
+                </div>
+              </dl>
+            </section>
+
+            <section class="summary-panel">
+              <div class="summary-panel-head">
+                <h2>资源与拓扑</h2>
+                <Waypoints :size="17" />
+              </div>
+              <dl class="summary-list">
+                <div class="summary-row">
+                  <dt>资源压力</dt>
+                  <dd :class="pressureClass">
+                    {{ pressureLabel }}
+                  </dd>
+                </div>
+                <div class="summary-row">
+                  <dt>最高占用</dt>
+                  <dd>{{ formatPercent(maxResourcePercent) }}</dd>
+                </div>
+                <div class="summary-row">
+                  <dt>节点数量</dt>
+                  <dd>{{ server.nodes.length }} 个</dd>
+                </div>
+                <div class="summary-row">
+                  <dt>配置版本</dt>
+                  <dd class="mono">
+                    r{{ server.revision }}
+                  </dd>
+                </div>
+              </dl>
+              <div class="summary-panel-footer">
+                <div class="summary-callout">
+                  <ShieldCheck :size="16" />
+                  <span v-if="server.agent">
+                    Agent 最近一次心跳为 {{ formatRelative(server.agent.last_seen_at) }}，配置由面板统一下发。
+                  </span>
+                  <span v-else>
+                    生成注册 Token 并完成 Agent 安装后，运行指标和节点配置才会开始同步。
+                  </span>
+                </div>
+              </div>
+            </section>
+          </div>
+        </aside>
       </div>
     </template>
 
@@ -624,10 +894,26 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.detail-page {
+  max-width: 1540px;
+}
+
+.detail-main :deep(.card) {
+  margin-top: 0;
+}
+
+.text-success {
+  color: var(--color-success);
+}
+
+.text-warning {
+  color: var(--color-warning);
+}
+
 .loading-block {
   display: flex;
   justify-content: center;
-  padding: var(--spacing-xl) 0;
+  padding: 72px 0;
 }
 
 .agent-missing {
@@ -636,6 +922,7 @@ onMounted(() => {
 
 .token-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--spacing-sm);
 }
 
@@ -701,7 +988,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-sm);
-  max-width: 480px;
+  max-width: 640px;
 }
 
 .uptime-row {
@@ -721,6 +1008,11 @@ onMounted(() => {
 }
 
 @media (max-width: 700px) {
+  .token-actions .btn,
+  .node-head-actions .btn {
+    flex: 1 1 auto;
+  }
+
   .install-head,
   .install-code-head {
     align-items: stretch;

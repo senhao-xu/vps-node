@@ -85,6 +85,7 @@ onMounted(() => {
       :row-key="(row) => row.id"
       :loading="loading"
       :bordered="false"
+      aria-label="用户访问记录"
     >
       <template #cell-created_at="{ row }">
         {{ formatDateTime(row.created_at) }}

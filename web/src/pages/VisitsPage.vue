@@ -301,104 +301,122 @@ onMounted(() => {
       </button>
     </div>
 
-    <div class="card">
-      <div class="card-head">
-        <h2 class="card-title">
-          访问最多站点
-        </h2>
-        <SegmentedControl
-          :items="topRangeItems"
-          :model-value="topRange"
-          aria-label="Top 站点时间范围"
-          @update:model-value="onTopRangeChange"
-        />
-      </div>
-      <ErrorBanner
-        :message="topError"
-        @dismiss="topError = ''"
-      />
-      <DataTable
-        :columns="topColumns"
-        :rows="topHosts"
-        :row-key="(row) => row.dest_host"
-        :loading="topLoading"
-        :skeleton-rows="4"
-        :bordered="false"
+    <div class="visits-workspace">
+      <section
+        class="visits-panel visits-main"
+        aria-labelledby="visit-detail-title"
       >
-        <template #cell-dest_host="{ row }">
-          <span class="mono">{{ row.dest_host }}</span>
-        </template>
-        <template #cell-hits="{ row }">
-          {{ row.hits }}
-        </template>
-        <template #empty>
-          暂无聚合数据
-        </template>
-      </DataTable>
-    </div>
+        <div class="visits-panel-head">
+          <div>
+            <h2 id="visit-detail-title">
+              访问明细
+            </h2>
+            <p>按时间倒序展示当前筛选结果</p>
+          </div>
+        </div>
+        <DataTable
+          :columns="columns"
+          :rows="items"
+          :row-key="(row) => row.id"
+          :loading="loading"
+          :bordered="false"
+          aria-label="访问明细表格"
+        >
+          <template #cell-created_at="{ row }">
+            {{ formatDateTime(row.created_at) }}
+          </template>
+          <template #cell-username="{ row }">
+            <RouterLink :to="'/users/' + row.user_id">
+              {{ row.username }}
+            </RouterLink>
+          </template>
+          <template #cell-server_name="{ row }">
+            <RouterLink :to="'/servers/' + row.server_id">
+              {{ row.server_name }}
+            </RouterLink>
+          </template>
+          <template #cell-node_name="{ row }">
+            {{ row.node_name || '—' }}
+          </template>
+          <template #cell-target="{ row }">
+            <span class="mono">{{ formatTarget(row) }}</span>
+          </template>
+          <template #cell-network="{ row }">
+            {{ row.network || '—' }}
+          </template>
+          <template #cell-client_ip="{ row }">
+            <span
+              v-if="row.client_ip"
+              class="mono"
+            >{{ row.client_ip }}</span>
+            <span
+              v-else
+              class="text-secondary"
+            >—</span>
+          </template>
+          <template #empty>
+            没有符合条件的访问记录
+          </template>
+        </DataTable>
+        <div class="visits-pagination">
+          <TablePaginator
+            :page="page"
+            :page-size="pageSize"
+            :total="total"
+            @change="onPageChange"
+          />
+        </div>
+      </section>
 
-    <div class="card">
-      <div class="card-head">
-        <h2 class="card-title">
-          访问明细
-        </h2>
-      </div>
-      <DataTable
-        :columns="columns"
-        :rows="items"
-        :row-key="(row) => row.id"
-        :loading="loading"
-        :bordered="false"
+      <aside
+        class="visits-panel visits-top"
+        aria-labelledby="top-hosts-title"
       >
-        <template #cell-created_at="{ row }">
-          {{ formatDateTime(row.created_at) }}
-        </template>
-        <template #cell-username="{ row }">
-          <RouterLink :to="`/users/${row.user_id}`">
-            {{ row.username }}
-          </RouterLink>
-        </template>
-        <template #cell-server_name="{ row }">
-          <RouterLink :to="`/servers/${row.server_id}`">
-            {{ row.server_name }}
-          </RouterLink>
-        </template>
-        <template #cell-node_name="{ row }">
-          {{ row.node_name || '—' }}
-        </template>
-        <template #cell-target="{ row }">
-          <span class="mono">{{ formatTarget(row) }}</span>
-        </template>
-        <template #cell-network="{ row }">
-          {{ row.network || '—' }}
-        </template>
-        <template #cell-client_ip="{ row }">
-          <span
-            v-if="row.client_ip"
-            class="mono"
-          >{{ row.client_ip }}</span>
-          <span
-            v-else
-            class="text-secondary"
-          >—</span>
-        </template>
-        <template #empty>
-          没有符合条件的访问记录
-        </template>
-      </DataTable>
-      <TablePaginator
-        :page="page"
-        :page-size="pageSize"
-        :total="total"
-        @change="onPageChange"
-      />
+        <div class="visits-panel-head">
+          <div>
+            <h2 id="top-hosts-title">
+              访问最多站点
+            </h2>
+            <p>当前筛选条件下的聚合结果</p>
+          </div>
+          <SegmentedControl
+            :items="topRangeItems"
+            :model-value="topRange"
+            aria-label="Top 站点时间范围"
+            @update:model-value="onTopRangeChange"
+          />
+        </div>
+        <ErrorBanner
+          :message="topError"
+          @dismiss="topError = ''"
+        />
+        <DataTable
+          :columns="topColumns"
+          :rows="topHosts"
+          :row-key="(row) => row.dest_host"
+          :loading="topLoading"
+          :skeleton-rows="4"
+          :bordered="false"
+          aria-label="热门站点表格"
+        >
+          <template #cell-dest_host="{ row }">
+            <span class="mono">{{ row.dest_host }}</span>
+          </template>
+          <template #cell-hits="{ row }">
+            {{ row.hits }}
+          </template>
+          <template #empty>
+            暂无聚合数据
+          </template>
+        </DataTable>
+      </aside>
     </div>
   </section>
 </template>
 
 <style scoped>
 .filter-select {
-  width: 170px;
+  width: 160px;
 }
 
 .range-field {
@@ -413,11 +431,65 @@ onMounted(() => {
   white-space: nowrap;
 }
 
-@media (max-width: 700px) {
-  .filter-select {
-    width: 100%;
-  }
+.visits-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 330px;
+  align-items: start;
+  gap: 14px;
+  min-width: 0;
+}
 
+.visits-panel {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.visits-panel-head {
+  display: flex;
+  min-height: 54px;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.visits-panel-head h2 {
+  margin: 0;
+  font-size: var(--font-size-md);
+  font-weight: 750;
+}
+
+.visits-panel-head p {
+  margin: 2px 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.visits-top :deep(.data-table) {
+  min-width: 0;
+}
+
+.visits-top :deep(.error-banner) {
+  margin: 10px 12px;
+}
+
+.visits-pagination {
+  padding: 0 12px 12px;
+  border-top: 1px solid var(--color-border);
+}
+
+@media (max-width: 1100px) {
+  .visits-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 700px) {
+  .filter-select,
   .range-field {
     width: 100%;
   }
@@ -425,6 +497,11 @@ onMounted(() => {
   .range-field input {
     flex: 1;
     min-width: 0;
+  }
+
+  .visits-panel-head {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 </style>

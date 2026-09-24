@@ -128,18 +128,18 @@ export function useFocusTrap(container: Ref<HTMLElement | null>, active: Ref<boo
   }
 
   watch(active, async (isActive) => {
-    const el = container.value
-    if (!el) return
     if (isActive) {
       previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
       await nextTick()
+      const el = container.value
+      if (!el) return
       const nodes = focusableNodes()
       const target = nodes[0]
       if (target) target.focus()
       else el.focus()
       el.addEventListener('keydown', onKeydown)
     } else {
-      el.removeEventListener('keydown', onKeydown)
+      container.value?.removeEventListener('keydown', onKeydown)
       if (previousFocus && document.contains(previousFocus)) previousFocus.focus()
       previousFocus = null
     }

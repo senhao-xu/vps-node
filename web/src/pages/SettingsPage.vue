@@ -348,7 +348,7 @@ onMounted(() => {
   flex-direction: column;
   gap: var(--spacing-xs);
   position: sticky;
-  top: 88px;
+  top: calc(var(--shell-toolbar-offset) + var(--spacing-md));
 }
 
 .settings-nav-item {
@@ -402,7 +402,7 @@ onMounted(() => {
   font-size: var(--font-size-sm);
 }
 
-@media (max-width: 700px) {
+@media (max-width: 899px) {
   .settings-layout {
     grid-template-columns: minmax(0, 1fr);
   }

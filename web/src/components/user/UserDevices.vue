@@ -79,6 +79,7 @@ onMounted(() => {
       :row-key="(row) => `${row.node_id}-${row.ip}`"
       :loading="loading"
       :bordered="false"
+      aria-label="用户在线设备"
     >
       <template #cell-ip="{ row }">
         <span class="mono">{{ row.ip }}</span>

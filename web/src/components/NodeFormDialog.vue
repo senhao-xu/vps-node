@@ -184,6 +184,25 @@ const protocolOptions: Array<{ value: Protocol; label: string; dot: string }> = 
   { value: 'anytls', label: protocolLabel('anytls'), dot: 'danger' },
 ]
 
+const serverSelectValue = computed<number>({
+  get: () => serverChoice.value ?? 0,
+  set: (value) => {
+    serverChoice.value = value === 0 ? null : value
+  },
+})
+
+const serverOptions = computed<Array<{ value: number; label: string }>>(() => [
+  {
+    value: 0,
+    label: loadingServers.value ? '加载服务器列表…' : '请选择服务器',
+  },
+  ...servers.value.map((server) => ({ value: server.id, label: server.name })),
+])
+
+const cipherOptions: Array<{ value: string; label: string }> = SHADOWSOCKS_METHODS.map(
+  (method) => ({ value: method, label: method }),
+)
+
 function parseList(raw: string): string[] {
   return raw
     .split(/[,，\s]+/)
@@ -443,26 +462,13 @@ async function submit() {
           class="form-row"
         >
           <div class="field">
-            <label for="node-server">所属服务器</label>
-            <select
-              id="node-server"
-              v-model="serverChoice"
+            <label id="node-server-label">所属服务器</label>
+            <AppSelect
+              v-model="serverSelectValue"
+              :options="serverOptions"
               :disabled="loadingServers"
-            >
-              <option
-                :value="null"
-                disabled
-              >
-                {{ loadingServers ? '加载服务器列表…' : '请选择服务器' }}
-              </option>
-              <option
-                v-for="server in servers"
-                :key="server.id"
-                :value="server.id"
-              >
-                {{ server.name }}
-              </option>
-            </select>
+              label="所属服务器"
+            />
           </div>
         </div>
         <div class="field">
@@ -576,19 +582,12 @@ async function submit() {
             Shadowsocks
           </div>
           <div class="field method-field">
-            <label for="ss-cipher">加密方式</label>
-            <select
-              id="ss-cipher"
+            <label id="ss-cipher-label">加密方式</label>
+            <AppSelect
               v-model="ssCipher"
-            >
-              <option
-                v-for="method in SHADOWSOCKS_METHODS"
-                :key="method"
-                :value="method"
-              >
-                {{ method }}
-              </option>
-            </select>
+              :options="cipherOptions"
+              label="Shadowsocks 加密方式"
+            />
           </div>
           <p class="protocol-note">
             服务端与用户密钥由 Panel 安全派生，无需手工填写密码。
