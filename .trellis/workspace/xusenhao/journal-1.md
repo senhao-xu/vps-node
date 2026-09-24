@@ -113,3 +113,24 @@ GET /api/nodes/{id} 详情 DTO 新增 settings 字段回显公开协议配置（
 ### Status
 
 [OK] **Completed**
+
+
+## Session 4: Stateless agent: panel-issued agent key + panel-owned batch seq
+
+**Date**: 2026-09-24
+**Task**: Stateless agent: panel-issued agent key + panel-owned batch seq
+**Branch**: `main`
+
+### Summary
+
+Made the panel agent stateless: replaced the one-time register_token flow with a long-lived per-server agent key (key_hash auth + key_enc app_key-encrypted reveal) via GET/POST /api/servers/{id}/agent-key. Agents keep no local state; heartbeat returns server_id and traffic/device/visit resume seqs (COALESCE(MAX(seq),0)) and the agent adopts max(local,resume) so restarts never collide with the (agent_id,seq) idempotency key. Removed /api/agent/register and both server token routes; drop the state volume/AGENT_STATE_PATH in favor of AGENT_KEY. Migration 0005 renames agents.token_hash->key_hash, adds key_enc, drops servers register-token columns. Clean break: back up panel-data before upgrading.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ef10dc3` | (see git log) |
+
+### Status
+
+[OK] **Completed**
