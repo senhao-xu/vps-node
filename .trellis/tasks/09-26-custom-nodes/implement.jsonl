@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "新增 0006_custom_nodes migration、repo CRUD 与加密存储须遵循 SQLite 迁移和静态密钥规范。"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "新增 /api/custom-nodes 端点的错误包络、校验矩阵与 secrets 处理须一致。"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "自定义节点管理页的 api/types/components 归属与单点类型约定。"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "列表页 + ModalDialog 表单复用既有组件契约。"}

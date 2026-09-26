@@ -56,6 +56,7 @@ const columns: Column[] = [
   { key: 'rate', label: '倍率', align: 'right', width: '70px' },
   { key: 'tags', label: '标签', width: '150px' },
   { key: 'server', label: '所属服务器', width: '140px' },
+  { key: 'chain', label: '链路', width: '150px' },
   { key: 'status', label: '状态', width: '80px' },
   { key: 'enabled', label: '启用', width: '64px' },
   { key: 'created_at', label: '创建时间', width: '140px', sortable: true },
@@ -431,6 +432,17 @@ onMounted(() => {
           <RouterLink :to="`/servers/${row.server.id}`">
             {{ row.server.name }}
           </RouterLink>
+        </template>
+        <template #cell-chain="{ row }">
+          <span
+            v-if="row.chain_node"
+            class="chip"
+            :title="`流量经 ${row.chain_node.server_name}/${row.chain_node.name} 落地`"
+          >→ {{ row.chain_node.server_name }}/{{ row.chain_node.name }}</span>
+          <span
+            v-else
+            class="text-secondary"
+          >—</span>
         </template>
         <template #cell-status="{ row }">
           <StatusBadge v-bind="nodeStatusInfo(row.status)" />

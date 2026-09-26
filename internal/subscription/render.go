@@ -1,7 +1,6 @@
 package subscription
 
 import (
-	"crypto/ecdh"
 	"encoding/base64"
 	"fmt"
 	"net"
@@ -200,10 +199,28 @@ func RenderGeneral(appKey []byte, userUUID string, nodes []Node) (string, error)
 	return base64.StdEncoding.EncodeToString([]byte(strings.Join(links, "\n"))), nil
 }
 
+// CustomSource is one administrator-maintained external node source merged
+// into subscription output after the managed nodes. Links are share URIs
+// (one per entry); Proxies are Clash proxy mappings lifted from an upstream
+// Clash subscription.
+type CustomSource struct {
+	ID      int64
+	Name    string
+	Links   []string
+	Proxies []map[string]any
+}
+
 // RenderGeneralLinks renders each node's share link, skipping nodes that
 // cannot be rendered (reported via onSkip) so a single broken node does not
 // break the whole subscription.
 func RenderGeneralLinks(appKey []byte, userUUID string, nodes []Node, onSkip func(Node, error)) string {
+	return RenderGeneralLinksMerged(appKey, userUUID, nodes, nil, onSkip)
+}
+
+// RenderGeneralLinksMerged behaves like RenderGeneralLinks and then appends
+// the custom sources' share links verbatim (including lines that would not
+// parse — general clients ignore them).
+func RenderGeneralLinksMerged(appKey []byte, userUUID string, nodes []Node, custom []CustomSource, onSkip func(Node, error)) string {
 	links := make([]string, 0, len(nodes))
 	for _, node := range expandNodes(nodes) {
 		link, err := renderURI(appKey, userUUID, node)
@@ -215,14 +232,28 @@ func RenderGeneralLinks(appKey []byte, userUUID string, nodes []Node, onSkip fun
 		}
 		links = append(links, link)
 	}
+	for _, source := range custom {
+		links = append(links, source.Links...)
+	}
 	return base64.StdEncoding.EncodeToString([]byte(strings.Join(links, "\n")))
 }
 
 // RenderClashFiltered assembles the Clash Meta config from the renderable
 // nodes, skipping broken nodes (reported via onSkip).
 func RenderClashFiltered(appKey []byte, userUUID, template string, nodes []Node, onSkip func(Node, error)) ([]byte, error) {
+	return RenderClashFilteredMerged(appKey, userUUID, template, nodes, nil, onSkip, nil)
+}
+
+// RenderClashFilteredMerged behaves like RenderClashFiltered and then merges
+// custom sources: share links are parsed into Clash proxies (unparseable
+// lines are skipped and reported via onSkipCustom), upstream proxies are
+// appended as-is. Custom proxy names colliding with an earlier name are
+// suffixed with the source id so Clash proxy names stay unique. Custom
+// proxies join the __ALL_PROXIES__ group only.
+func RenderClashFilteredMerged(appKey []byte, userUUID, template string, nodes []Node, custom []CustomSource, onSkip func(Node, error), onSkipCustom func(sourceID int64, item string, err error)) ([]byte, error) {
 	proxies := make([]map[string]any, 0, len(nodes))
 	names := map[string][]string{"all": {}}
+	usedNames := map[string]bool{}
 	for _, n := range expandNodes(nodes) {
 		proxy, err := renderProxy(appKey, userUUID, n)
 		if err != nil {
@@ -234,8 +265,53 @@ func RenderClashFiltered(appKey []byte, userUUID, template string, nodes []Node,
 		proxies = append(proxies, proxy)
 		names["all"] = append(names["all"], n.Name)
 		names[n.Protocol] = append(names[n.Protocol], n.Name)
+		usedNames[n.Name] = true
+	}
+	for _, source := range custom {
+		for _, link := range source.Links {
+			proxy, err := ParseShareURI(link)
+			if err != nil {
+				if onSkipCustom != nil {
+					onSkipCustom(source.ID, link, err)
+				}
+				continue
+			}
+			name, _ := proxy["name"].(string)
+			name = uniqueProxyName(usedNames, name, source.ID)
+			proxy["name"] = name
+			proxies = append(proxies, proxy)
+			names["all"] = append(names["all"], name)
+		}
+		for _, proxy := range source.Proxies {
+			name, _ := proxy["name"].(string)
+			if name == "" {
+				if onSkipCustom != nil {
+					onSkipCustom(source.ID, "", fmt.Errorf("upstream proxy without a name"))
+				}
+				continue
+			}
+			name = uniqueProxyName(usedNames, name, source.ID)
+			proxy["name"] = name
+			proxies = append(proxies, proxy)
+			names["all"] = append(names["all"], name)
+		}
 	}
 	return assembleClash(template, proxies, names)
+}
+
+// uniqueProxyName returns name, or "<name> <sourceID>" (with a numeric tie
+// breaker) when name is already taken.
+func uniqueProxyName(used map[string]bool, name string, sourceID int64) string {
+	if !used[name] {
+		used[name] = true
+		return name
+	}
+	candidate := name + " " + strconv.FormatInt(sourceID, 10)
+	for i := 2; used[candidate]; i++ {
+		candidate = name + " " + strconv.FormatInt(sourceID, 10) + "-" + strconv.Itoa(i)
+	}
+	used[candidate] = true
+	return candidate
 }
 
 func renderURI(appKey []byte, userUUID string, n Node) (string, error) {
@@ -258,15 +334,11 @@ func renderURI(appKey []byte, userUUID string, n Node) (string, error) {
 		}
 		publicKey := singbox.SettingString(reality, "public_key")
 		if publicKey == "" {
-			privateRaw, err := base64.RawURLEncoding.DecodeString(singbox.SettingString(n.Secret, "private_key"))
+			derived, err := singbox.RealityPublicKey(singbox.SettingString(n.Secret, "private_key"))
 			if err != nil {
-				return "", fmt.Errorf("derive reality key: %w", err)
+				return "", err
 			}
-			privateKey, err := ecdh.X25519().NewPrivateKey(privateRaw)
-			if err != nil {
-				return "", fmt.Errorf("derive reality key: %w", err)
-			}
-			publicKey = base64.RawURLEncoding.EncodeToString(privateKey.PublicKey().Bytes())
+			publicKey = derived
 		}
 		q := url.Values{"security": {"reality"}, "encryption": {"none"}, "flow": {"xtls-rprx-vision"}, "sni": {serverName}, "pbk": {publicKey}, "type": {"tcp"}}
 		if sid := singbox.SettingString(reality, "short_id"); sid != "" {
@@ -424,15 +496,11 @@ func renderProxy(appKey []byte, userUUID string, n Node) (map[string]any, error)
 		}
 		publicKey := singbox.SettingString(reality, "public_key")
 		if publicKey == "" {
-			raw, err := base64.RawURLEncoding.DecodeString(singbox.SettingString(n.Secret, "private_key"))
+			derived, err := singbox.RealityPublicKey(singbox.SettingString(n.Secret, "private_key"))
 			if err != nil {
 				return nil, err
 			}
-			key, err := ecdh.X25519().NewPrivateKey(raw)
-			if err != nil {
-				return nil, err
-			}
-			publicKey = base64.RawURLEncoding.EncodeToString(key.PublicKey().Bytes())
+			publicKey = derived
 		}
 		p["uuid"], p["flow"], p["network"], p["tls"] = userUUID, "xtls-rprx-vision", "tcp", true
 		p["servername"], p["client-fingerprint"] = serverName, "chrome"
@@ -480,10 +548,7 @@ func ssClientPassword(appKey []byte, n Node, userUUID, cipher string) (string, e
 }
 
 func combineSSClientPassword(cipher, serverKey, userKey string) string {
-	if !singbox.IsSS2022(cipher) {
-		return userKey
-	}
-	return serverKey + ":" + userKey
+	return singbox.CombineSSClientPassword(cipher, serverKey, userKey)
 }
 
 func obfsEnabled(obfs map[string]any) bool {

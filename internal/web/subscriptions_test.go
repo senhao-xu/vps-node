@@ -303,7 +303,7 @@ func TestSubscriptionIPv6EntryRendering(t *testing.T) {
 		t.Fatalf("expected a primary and an IPv6 entry, got %q", text)
 	}
 
-	if err := e.repo.UpdateNodeAndBump(ctx, node, server, "hk01.example.com", "hk-ss", "2001:db8::1", false, 443, `{"cipher":"2022-blake3-aes-128-gcm"}`, nil, 1, "[]", nil); err != nil {
+	if err := e.repo.UpdateNodeAndBump(ctx, node, server, "hk01.example.com", "hk-ss", "2001:db8::1", false, 443, `{"cipher":"2022-blake3-aes-128-gcm"}`, nil, 1, "[]", nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if text := render(); strings.Contains(text, "[2001:db8::1]:443") {

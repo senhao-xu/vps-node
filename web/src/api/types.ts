@@ -46,6 +46,15 @@ export type UserCreated = UserDetail & {
   subscription_url: string
 }
 
+export type NodeRef = {
+  id: number
+  name: string
+}
+
+export type ChainNodeRef = NodeRef & {
+  server_name: string
+}
+
 export type NodeBrief = {
   id: number
   server_id: number
@@ -60,11 +69,8 @@ export type NodeBrief = {
   status: NodeStatus
   created_at: string
   server: NodeRef
-}
-
-export type NodeRef = {
-  id: number
-  name: string
+  chain_node_id: number | null
+  chain_node: ChainNodeRef | null
 }
 
 export type NodeDetail = NodeBrief & {
@@ -319,6 +325,7 @@ export type CreateNodeInput = {
   rate?: number
   tags?: string[]
   settings?: NodeSettingsInput
+  chain_node_id?: number | null
 }
 
 export type UpdateNodeInput = {
@@ -331,4 +338,38 @@ export type UpdateNodeInput = {
   tags?: string[]
   settings?: NodeSettingsInput
   status?: NodeStatus
+  /** null unlinks the chain exit; omitting the field keeps the current link. */
+  chain_node_id?: number | null
+}
+
+export type CustomNodeSourceType = 'links' | 'subscription'
+
+export type CustomNode = {
+  id: number
+  name: string
+  source_type: CustomNodeSourceType
+  status: NodeStatus
+  has_cache: boolean
+  fetched_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type CustomNodeResult = CustomNode & { warnings?: string[] }
+
+export type CreateCustomNodeInput = {
+  name: string
+  source_type: CustomNodeSourceType
+  content: string
+}
+
+export type UpdateCustomNodeInput = {
+  name?: string
+  content?: string
+  status?: NodeStatus
+}
+
+export type UserCustomNodes = {
+  custom_node_ids: number[]
+  custom_nodes: CustomNode[]
 }

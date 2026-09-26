@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
@@ -198,6 +199,14 @@ func (h *Handler) handlePublicSubscription(w http.ResponseWriter, r *http.Reques
 	skipNode := func(n subscription.Node, err error) {
 		h.logger.Warn("skipping unrenderable node in subscription", "user_id", u.ID, "node_id", n.ID, "error", err)
 	}
+	customSources, err := h.customSourcesForUser(r.Context(), u.ID)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	skipCustom := func(sourceID int64, item string, err error) {
+		h.logger.Warn("skipping unrenderable custom node entry in subscription", "user_id", u.ID, "custom_node_id", sourceID, "error", err)
+	}
 	w.Header().Set("Subscription-Userinfo", subscriptionUserinfo(u))
 	name, err := h.repo.GetSettingOr(r.Context(), settingSubscribeName, "")
 	if err != nil {
@@ -209,7 +218,7 @@ func (h *Handler) handlePublicSubscription(w http.ResponseWriter, r *http.Reques
 		w.Header().Set("Content-Disposition", "attachment; filename*=UTF-8''"+url.PathEscape(name))
 	}
 	if flag == "general" {
-		body := subscription.RenderGeneralLinks(h.appKey, u.UUID, nodes, skipNode)
+		body := subscription.RenderGeneralLinksMerged(h.appKey, u.UUID, nodes, customSources, skipNode)
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = w.Write([]byte(body))
 		return
@@ -219,7 +228,7 @@ func (h *Handler) handlePublicSubscription(w http.ResponseWriter, r *http.Reques
 		writeErr(w, err)
 		return
 	}
-	body, err := subscription.RenderClashFiltered(h.appKey, u.UUID, template, nodes, skipNode)
+	body, err := subscription.RenderClashFilteredMerged(h.appKey, u.UUID, template, nodes, customSources, skipNode, skipCustom)
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -234,4 +243,63 @@ func subscriptionUserinfo(u repo.User) string {
 		value += fmt.Sprintf("; expire=%d", u.ExpiresAt.Unix())
 	}
 	return value
+}
+
+// customSourcesForUser resolves the active custom nodes authorized for the
+// user into renderable sources. links-type content is decrypted and split
+// into lines; subscription-type content is fetched upstream with a short TTL
+// cache (stale cache is served when the fetch fails, and the source is
+// skipped when no cache exists).
+func (h *Handler) customSourcesForUser(ctx context.Context, userID int64) ([]subscription.CustomSource, error) {
+	customNodes, err := h.repo.ListActiveCustomNodesByUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if len(customNodes) == 0 {
+		return nil, nil
+	}
+	sources := make([]subscription.CustomSource, 0, len(customNodes))
+	for _, cn := range customNodes {
+		plain, err := secrets.Decrypt(h.appKey, cn.ContentEnc)
+		if err != nil {
+			h.logger.Warn("skipping custom node with undecryptable content", "custom_node_id", cn.ID, "error", err)
+			continue
+		}
+		source := subscription.CustomSource{ID: cn.ID, Name: cn.Name}
+		switch cn.SourceType {
+		case repo.CustomNodeSourceLinks:
+			source.Links = subscription.SplitLinkLines(string(plain))
+		case repo.CustomNodeSourceSubscription:
+			content := h.fetchCustomNodeContent(ctx, cn, strings.TrimSpace(string(plain)))
+			if content == "" {
+				continue
+			}
+			source.Links, source.Proxies = subscription.NormalizeFetchedContent(content)
+		default:
+			continue
+		}
+		if len(source.Links) == 0 && len(source.Proxies) == 0 {
+			continue
+		}
+		sources = append(sources, source)
+	}
+	return sources, nil
+}
+
+// fetchCustomNodeContent returns fresh upstream content when the cache is
+// stale, falling back to the cached content when the fetch fails. An empty
+// result means the source must be skipped for this render.
+func (h *Handler) fetchCustomNodeContent(ctx context.Context, cn repo.CustomNode, upstreamURL string) string {
+	if cn.CachedContent != "" && time.Since(cn.FetchedAt) < subscription.CacheTTL {
+		return cn.CachedContent
+	}
+	content, err := subscription.FetchSubscription(ctx, upstreamURL)
+	if err != nil {
+		h.logger.Warn("custom node subscription fetch failed", "custom_node_id", cn.ID, "error", err)
+		return cn.CachedContent
+	}
+	if err := h.repo.UpdateCustomNodeCache(ctx, cn.ID, content, time.Now().Unix()); err != nil {
+		h.logger.Warn("custom node cache write failed", "custom_node_id", cn.ID, "error", err)
+	}
+	return content
 }

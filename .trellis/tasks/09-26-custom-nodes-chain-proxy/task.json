@@ -1,0 +1,29 @@
+{
+  "id": "custom-nodes-chain-proxy",
+  "name": "custom-nodes-chain-proxy",
+  "title": "自定义节点与链式代理",
+  "description": "父任务：1) 管理员全局自定义节点（外部分享链接/订阅汇入订阅输出）；2) 链式代理（节点选择出站节点，sing-box 出站转发）",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P1",
+  "creator": "xusenhao",
+  "assignee": "xusenhao",
+  "createdAt": "2026-09-26",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "09-26-custom-nodes",
+    "09-26-chain-proxy"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

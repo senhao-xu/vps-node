@@ -1,4 +1,11 @@
-import type { NodeStatus, Protocol, ServerStatus, User, UserStatus } from '@/api/types'
+import type {
+  CustomNodeSourceType,
+  NodeStatus,
+  Protocol,
+  ServerStatus,
+  User,
+  UserStatus,
+} from '@/api/types'
 
 export type Tone = 'success' | 'warning' | 'danger' | 'muted' | 'primary'
 
@@ -60,6 +67,17 @@ export function protocolLabel(protocol: Protocol): string {
       return 'AnyTLS'
     default:
       return protocol
+  }
+}
+
+export function customNodeSourceLabel(sourceType: CustomNodeSourceType): string {
+  switch (sourceType) {
+    case 'links':
+      return '分享链接'
+    case 'subscription':
+      return '订阅链接'
+    default:
+      return sourceType
   }
 }
 

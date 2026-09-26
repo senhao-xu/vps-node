@@ -25,7 +25,7 @@ vps-node/
 │   │                        #   agent*.go (bearer), agent_telemetry.go, dto.go, respond.go
 │   ├── adminauth/           # bcrypt, DB-backed sessions, login rate limiter
 │   ├── secrets/             # AES-256-GCM (app_key) for recoverable protocol secrets
-│   ├── singbox/             # pure renderer: Node+eligible users → sing-box inbound JSON (singbox-render-v1)
+│   ├── singbox/             # pure renderer: Node+eligible users+optional chain exits → sing-box JSON (singbox-render-v2)
 │   ├── agentclient/         # typed agent→panel HTTP client (retry/backoff/jitter)
 │   ├── agentruntime/        # applier (check→atomic replace→optional reload), metrics, clash collector, loop
 │   ├── agentstate/          # in-memory agent state (batch seqs; no file IO; agent is stateless)

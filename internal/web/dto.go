@@ -86,20 +86,28 @@ type nodeRefDTO struct {
 	Name string `json:"name"`
 }
 
+type chainRefDTO struct {
+	ID         int64  `json:"id"`
+	Name       string `json:"name"`
+	ServerName string `json:"server_name"`
+}
+
 type nodeDTO struct {
-	ID          int64      `json:"id"`
-	ServerID    int64      `json:"server_id"`
-	Address     string     `json:"address"`
-	IPv6Enabled bool       `json:"ipv6_enabled"`
-	IPv6Address string     `json:"ipv6_address"`
-	Name        string     `json:"name"`
-	Protocol    string     `json:"protocol"`
-	Port        int        `json:"port"`
-	Rate        float64    `json:"rate"`
-	Tags        []string   `json:"tags"`
-	Status      string     `json:"status"`
-	Server      nodeRefDTO `json:"server"`
-	CreatedAt   string     `json:"created_at"`
+	ID          int64        `json:"id"`
+	ServerID    int64        `json:"server_id"`
+	Address     string       `json:"address"`
+	IPv6Enabled bool         `json:"ipv6_enabled"`
+	IPv6Address string       `json:"ipv6_address"`
+	Name        string       `json:"name"`
+	Protocol    string       `json:"protocol"`
+	Port        int          `json:"port"`
+	Rate        float64      `json:"rate"`
+	Tags        []string     `json:"tags"`
+	Status      string       `json:"status"`
+	Server      nodeRefDTO   `json:"server"`
+	ChainNodeID *int64       `json:"chain_node_id"`
+	ChainNode   *chainRefDTO `json:"chain_node"`
+	CreatedAt   string       `json:"created_at"`
 }
 
 type nodeDetailDTO struct {
@@ -111,7 +119,7 @@ type nodeDetailDTO struct {
 }
 
 func toNodeDTO(n repo.Node) nodeDTO {
-	return nodeDTO{
+	dto := nodeDTO{
 		ID:          n.ID,
 		ServerID:    n.ServerID,
 		Address:     n.Address,
@@ -124,8 +132,13 @@ func toNodeDTO(n repo.Node) nodeDTO {
 		Tags:        nodeTags(n.Tags),
 		Status:      n.Status,
 		Server:      nodeRefDTO{ID: n.ServerID, Name: n.ServerName},
+		ChainNodeID: n.ChainNodeID,
 		CreatedAt:   rfc3339(n.CreatedAt),
 	}
+	if n.ChainNodeID != nil && n.ChainNodeName != "" {
+		dto.ChainNode = &chainRefDTO{ID: *n.ChainNodeID, Name: n.ChainNodeName, ServerName: n.ChainServerName}
+	}
+	return dto
 }
 
 func nodeTags(raw string) []string {

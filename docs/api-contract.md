@@ -288,7 +288,7 @@ Response `200`: server DTO. Setting `status: "disabled"` stops config sync for t
 
 ### DELETE /api/servers/:id
 
-Response `200`: `{}`. Panel marks the server deleted, removes agent, nodes, `user_nodes` referencing its nodes and its online devices; traffic records are retained until retention cleanup.
+Response `200`: `{}`. Panel marks the server deleted, removes agent, nodes, `user_nodes` referencing its nodes and its online devices; traffic records are retained until retention cleanup. Nodes on other servers chaining into this server's nodes are unlinked (`chain_node_id` cleared) and their servers' revisions are bumped.
 
 ### GET /api/servers/:id/agent-key
 
@@ -305,10 +305,10 @@ Generates or resets the server's Agent Key. Response `200`: `{ "agent_key": "<pl
 Query (all optional, combinable): `server_id` (exact match), `protocol` (`shadowsocks|vless|hysteria2|anytls`), `status` (`active|disabled`), `q` (case-insensitive substring match on node name), plus `page` / `page_size`. Invalid enum values return `400 invalid_request`. Paginated node DTOs:
 
 ```json
-{ "id": 1, "server_id": 1, "address": "hk01.example.com", "ipv6_enabled": false, "ipv6_address": "", "name": "HK-SS", "protocol": "shadowsocks", "port": 8388, "rate": 1, "tags": [], "status": "active", "server": { "id": 1, "name": "HK-1" }, "created_at": "..." }
+{ "id": 1, "server_id": 1, "address": "hk01.example.com", "ipv6_enabled": false, "ipv6_address": "", "name": "HK-SS", "protocol": "shadowsocks", "port": 8388, "rate": 1, "tags": [], "status": "active", "server": { "id": 1, "name": "HK-1" }, "chain_node_id": null, "chain_node": null, "created_at": "..." }
 ```
 
-Every node DTO carries `server: { id, name }` referencing its owning server. `address` is the user-facing connection host used to render subscriptions. `rate` is the traffic multiplier (default `1`) and `tags` is a string array. `ipv6_enabled` (default `false`) advertises an extra IPv6 entry in subscriptions and `ipv6_address` is its connection host (an IPv6 literal or a domain resolving to AAAA); when empty or disabled the subscription renders only `address`.
+Every node DTO carries `server: { id, name }` referencing its owning server. `address` is the user-facing connection host used to render subscriptions. `rate` is the traffic multiplier (default `1`) and `tags` is a string array. `ipv6_enabled` (default `false`) advertises an extra IPv6 entry in subscriptions and `ipv6_address` is its connection host (an IPv6 literal or a domain resolving to AAAA); when empty or disabled the subscription renders only `address`. `chain_node_id` links the node to another managed node (any server) used as its chain exit; when set, the DTO also carries `chain_node: { id, name, server_name }` for display. Chained nodes are transparent to subscriptions (only the entry node is rendered).
 
 Protocol secrets are never exposed.
 
@@ -321,6 +321,8 @@ Protocol secrets are never exposed.
 `address` is required (1-255 characters). Node names are not unique per server (a copied node keeps its source name), but `port` must be unique among the server's `active` nodes; a duplicate active port returns `409 conflict`. `rate` is an optional positive traffic multiplier (default `1`); `tags` is an optional array of at most 20 non-empty strings of at most 32 characters. Invalid values return `422 validation`. `ipv6_enabled` is optional (default `false`); `ipv6_address` accepts a host of at most 255 characters (IPv6 literal or domain, mirroring `address`), and enabling it without an address returns `422 validation`.
 
 `settings` is the protocol settings object, validated against a per-protocol allowlist; unknown keys in a validated section return `422 validation`, and validated sections deep-merge leaf by leaf. The reserved free-form sections `tls_settings`, `network_settings`, `multiplex`, `utls` (vless) and `obfs_settings` (shadowsocks) accept arbitrary JSON objects: a supplied section replaces the stored one as a whole, is preserved verbatim, and is never rendered, so it is an extension placeholder rather than runtime configuration. Public values are stored in `nodes.protocol_settings`; private material is encrypted at rest by Panel and never echoed.
+
+`chain_node_id` is an optional id of another managed node used as this node's chain exit. The target must exist and be `active`, must not be the node itself, and must not close a chain loop (A→B→A at any depth) — violations return `422 validation`. Setting or clearing the link bumps the revisions of both the entry and the exit server. The exit node's inbound carries a derived pseudo user (`relay-<entry server id>`) whose traffic is never attributed to a panel user.
 
 - `shadowsocks`: required `cipher` (one of `2022-blake3-aes-128-gcm`, `2022-blake3-aes-256-gcm`, `2022-blake3-chacha20-poly1305`); optional `obfs`, `obfs_settings`, `plugin`, `plugin_opts`; optional secret `password` (server password, otherwise derived).
 - `vless`: required secret `private_key` (X25519, 32 decoded bytes) and `reality_settings.server_name`; `tls` (integer, must be `2`), `reality_settings.server_port` (1-65535, default `443`), `reality_settings.short_id` (even-length hex of at most 16 characters), `reality_settings.allow_insecure`, `flow` (empty or `xtls-rprx-vision`), `network` (empty or `tcp`), `tls_settings`, `network_settings`, `multiplex`, `utls` are optional. `reality_settings.public_key` is derived from `private_key`; a contradicting value returns `422 validation`.
@@ -349,7 +351,7 @@ Response `200`: node DTO plus `user_count`, `online_users`, `server: { id, name 
 
 ### PUT /api/nodes/:id
 
-Partial update of `address`, `ipv6_enabled`, `ipv6_address`, `name`, `port`, `rate`, `tags`, `settings`, `status`. Protocol settings are merged with stored settings section by section; omitted public fields and secrets remain unchanged, and `certificate`/`private_key` must be replaced as a pair. A supplied reserved free-form section (`tls_settings`/`network_settings`/`multiplex`/`utls`/`obfs_settings`) replaces its stored value as a whole. Response `200`: node DTO. Changes bump the owning server revision. Enabling a node whose port is already used by an active node on the same server returns `409 conflict`.
+Partial update of `address`, `ipv6_enabled`, `ipv6_address`, `name`, `port`, `rate`, `tags`, `settings`, `status`, `chain_node_id`. `chain_node_id` is tri-state: omitting the field keeps the current link, `null` unlinks, and a node id retargets the exit (same validation as create). Protocol settings are merged with stored settings section by section; omitted public fields and secrets remain unchanged, and `certificate`/`private_key` must be replaced as a pair. A supplied reserved free-form section (`tls_settings`/`network_settings`/`multiplex`/`utls`/`obfs_settings`) replaces its stored value as a whole. Response `200`: node DTO. Changes bump the owning server revision; chain changes additionally bump the old and new exit servers, and updating a node bumps every server whose nodes chain through it. Enabling a node whose port is already used by an active node on the same server returns `409 conflict`.
 
 ### POST /api/nodes/:id/copy
 
@@ -357,7 +359,58 @@ Duplicates a node verbatim onto the same server: name, address, `ipv6_enabled`, 
 
 ### DELETE /api/nodes/:id
 
-Response `200`: `{}`. Removes `user_nodes` for this node; bumps server revision so agents drop the service.
+Response `200`: `{}`. Removes `user_nodes` for this node; bumps server revision so agents drop the service. A node that is referenced as another node's chain exit cannot be deleted: `DELETE` returns `409 conflict` with a message naming the referencing nodes, which must be unlinked first.
+
+## Custom Nodes
+
+Admin-managed external nodes merged into subscription output. They are never rendered by
+agents, never carry traffic/device statistics, and cannot be used as a node's chain exit.
+
+### GET /api/custom-nodes
+
+Response `200`:
+
+```json
+{ "items": [ { "id": 1, "name": "airport-A", "source_type": "links", "status": "active", "has_cache": false, "fetched_at": null, "created_at": "...", "updated_at": "..." } ] }
+```
+
+`content` is never echoed. `has_cache` / `fetched_at` describe the cached upstream payload for
+`subscription`-type entries (refreshed with a 5-minute TTL at render time; a failed fetch falls
+back to the last cache, otherwise the entry is skipped).
+
+### POST /api/custom-nodes
+
+```json
+{ "name": "airport-A", "source_type": "links", "content": "ss://...\nvless://..." }
+```
+
+`source_type` is `links` (one share URI per line; supported schemes `ss`/`vless`/`hysteria2`/`anytls`/`trojan`/`vmess`) or `subscription` (an `http(s)` URL, fetched server-side with a 5s timeout, 1 MiB cap and at most 3 redirects). Response `201`: the custom node DTO plus an optional `warnings` array listing lines that could not be converted to a Clash proxy (unparseable lines are still stored and pass through `flag=general` unchanged). Duplicate `name` → `409 conflict`; empty/invalid content → `422 validation`.
+
+### PUT /api/custom-nodes/:id
+
+Partial update of `name`, `content` (omit to keep; `source_type` is immutable) and `status`. Response `200`: the DTO plus optional `warnings`. Duplicate `name` → `409 conflict`.
+
+### DELETE /api/custom-nodes/:id
+
+Response `204`. Also removes every user authorization referencing it.
+
+### GET /api/users/:id/custom-nodes
+
+Response `200`:
+
+```json
+{ "custom_node_ids": [1], "custom_nodes": [ { "id": 1, "name": "airport-A", "source_type": "links", "status": "active", "has_cache": false, "fetched_at": null, "created_at": "...", "updated_at": "..." } ] }
+```
+
+### PUT /api/users/:id/custom-nodes
+
+Full-set replacement:
+
+```json
+{ "custom_node_ids": [1, 3] }
+```
+
+Idempotent; duplicates do not create duplicate relations; unknown `custom_node_id` → `422 validation`. Because custom nodes never reach agent config, this does **not** bump any server revision. Response `200`: same shape as GET.
 
 ## Dashboard
 
@@ -474,6 +527,12 @@ credentials are identical to the primary entry. Both entries share the node's si
 traffic and visit logs stay attributed to that node (the visit `client_ip` distinguishes the
 families).
 
+After all managed nodes, the output appends the user's authorized active custom nodes in
+`custom_nodes.id` order. `flag=general` passes `links`-type lines through verbatim;
+`flag=clash-meta` converts them to proxies and drops the ones that cannot be parsed. Names that
+collide with a managed node or an earlier custom node get a ` <id>` suffix so Clash proxy names
+stay unique.
+
 ---
 
 # Agent API
@@ -511,7 +570,7 @@ Returns the server-scoped rendered configuration.
 {
   "status": "updated",
   "revision": 1024,
-  "renderer_version": "singbox-render-v1",
+  "renderer_version": "singbox-render-v2",
   "config": { "singbox": { } },
   "users": [
     {
@@ -531,6 +590,8 @@ Returns the server-scoped rendered configuration.
 ```
 
 `config.singbox` is the complete, rendered sing-box configuration for the server. `renderer_version` identifies the rendering contract (see `internal/singbox.ContractVersion`) so agents can detect renderer changes. `credential` contains protocol-derived secrets (already generated/decrypted by Panel). `device_limit` and `speed_limit` are copied from the user row so the embedded runtime can enforce them. Only eligible users on the server's nodes are included; expired/disabled/over-transfer users are absent, which instructs the agent to remove them locally.
+
+Chained nodes (see `POST /api/nodes` `chain_node_id`) render one extra outbound per chained entry node (`tag: chain-<node id>`, a full protocol client of the exit node, credentials derived from the panel app key) plus a `route.rules` entry mapping the entry inbound tag to that outbound; `route.final` stays `direct`. Exit-side inbounds carry an additional pseudo user named `relay-<entry server id>` with the same derived credential; agents never map that name to a panel user, so relay traffic is neither attributed nor reported.
 
 Agent applies the config by loading it into the embedded sing-box instance; it keeps the previous config and keeps polling with its applied `version` on failure, reporting the failure via heartbeat extension field `last_apply_error`.
 

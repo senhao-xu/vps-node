@@ -50,6 +50,12 @@ export const router = createRouter({
       meta: { title: '节点' },
     },
     {
+      path: '/custom-nodes',
+      name: 'custom-nodes',
+      component: () => import('@/pages/CustomNodesPage.vue'),
+      meta: { title: '自定义节点' },
+    },
+    {
       path: '/servers/:id',
       name: 'server-detail',
       component: () => import('@/pages/ServerDetailPage.vue'),

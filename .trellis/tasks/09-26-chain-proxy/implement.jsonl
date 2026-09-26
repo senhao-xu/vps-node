@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "0007_node_chain migration、revision 双端 bump 与节点表变更须遵循数据库规范。"}
+{"file": ".trellis/spec/backend/node-protocol-settings.md", "reason": "四种协议的出站客户端渲染与 relay 凭证须符合协议设置约定（Reality 公钥推导等）。"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "环检测、删除保护 409 等错误的包络与校验矩阵约定。"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "NodeFormDialog 出站节点下拉与列表链路列复用组件契约。"}

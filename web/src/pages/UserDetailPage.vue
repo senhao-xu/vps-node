@@ -15,9 +15,10 @@ import {
 } from 'lucide-vue-next'
 import { getUser, getUserNodes } from '@/api/users'
 import { listNodes } from '@/api/nodes'
+import { getUserCustomNodes, listCustomNodes } from '@/api/customNodes'
 import { listServers } from '@/api/servers'
 import { errorMessage } from '@/api/http'
-import type { NodeBrief, Server, UserDetail } from '@/api/types'
+import type { CustomNode, NodeBrief, Server, UserDetail } from '@/api/types'
 import ErrorBanner from '@/components/ErrorBanner.vue'
 import ProgressBar from '@/components/ProgressBar.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
@@ -42,7 +43,9 @@ const router = useRouter()
 const user = ref<UserDetail | null>(null)
 const nodes = ref<NodeBrief[]>([])
 const servers = ref<Server[]>([])
+const customNodes = ref<CustomNode[]>([])
 const authorizedNodeIds = ref<number[]>([])
+const authorizedCustomNodeIds = ref<number[]>([])
 const loading = ref(false)
 const error = ref('')
 
@@ -113,16 +116,21 @@ async function loadCore() {
   loading.value = true
   error.value = ''
   try {
-    const [detail, nodePage, serverPage, userNodes] = await Promise.all([
-      getUser(id),
-      listNodes({ page: 1, pageSize: 100 }),
-      listServers({ page: 1, pageSize: 100 }),
-      getUserNodes(id),
-    ])
+    const [detail, nodePage, serverPage, userNodes, customNodeList, userCustomNodes] =
+      await Promise.all([
+        getUser(id),
+        listNodes({ page: 1, pageSize: 100 }),
+        listServers({ page: 1, pageSize: 100 }),
+        getUserNodes(id),
+        listCustomNodes(),
+        getUserCustomNodes(id),
+      ])
     user.value = detail
     nodes.value = nodePage.items
     servers.value = serverPage.items
+    customNodes.value = customNodeList.items
     authorizedNodeIds.value = userNodes.node_ids
+    authorizedCustomNodeIds.value = userCustomNodes.custom_node_ids
   } catch (err) {
     error.value = errorMessage(err)
     if ((err as { status?: number }).status === 404) {
@@ -137,8 +145,9 @@ function onUserUpdated(updated: UserDetail) {
   user.value = updated
 }
 
-function onNodesSaved(nodeIds: number[]) {
+function onNodesSaved(nodeIds: number[], customNodeIds: number[]) {
   authorizedNodeIds.value = nodeIds
+  authorizedCustomNodeIds.value = customNodeIds
   void loadCore()
 }
 
@@ -260,6 +269,8 @@ onMounted(() => {
               :nodes="nodes"
               :servers="servers"
               :node-ids="authorizedNodeIds"
+              :custom-nodes="customNodes"
+              :custom-node-ids="authorizedCustomNodeIds"
               @saved="onNodesSaved"
             />
           </section>

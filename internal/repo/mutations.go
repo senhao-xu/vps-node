@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"time"
 )
 
@@ -289,7 +290,20 @@ func (r *Repo) CreateNodeAndBump(ctx context.Context, n NewNode) (int64, error) 
 		if err != nil {
 			return err
 		}
-		return bumpRevisionExec(ctx, tx, n.ServerID)
+		serverIDs := []int64{n.ServerID}
+		if n.ChainNodeID != nil {
+			exitServerID, err := nodeServerIDExec(ctx, tx, *n.ChainNodeID)
+			if err != nil {
+				return err
+			}
+			serverIDs = append(serverIDs, exitServerID)
+		}
+		for _, serverID := range dedupeInt64(serverIDs) {
+			if err := bumpRevisionExec(ctx, tx, serverID); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 	if err != nil {
 		return 0, err
@@ -297,12 +311,94 @@ func (r *Repo) CreateNodeAndBump(ctx context.Context, n NewNode) (int64, error) 
 	return id, nil
 }
 
-func (r *Repo) UpdateNodeAndBump(ctx context.Context, nodeID, serverID int64, address, name, ipv6Address string, ipv6Enabled bool, port int, settings string, secretEnc []byte, rate float64, tags string, status *string) error {
+// nodeServerIDExec resolves a node's owning server inside a transaction.
+func nodeServerIDExec(ctx context.Context, q execer, nodeID int64) (int64, error) {
+	var serverID int64
+	err := q.QueryRowContext(ctx, `SELECT server_id FROM nodes WHERE id = ?`, nodeID).Scan(&serverID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	return serverID, mapErr(err)
+}
+
+// chainTargetServerIDExec resolves the server owning the node's current chain
+// exit (nil when the node is unlinked).
+func chainTargetServerIDExec(ctx context.Context, q execer, nodeID int64) (*int64, error) {
+	var serverID sql.NullInt64
+	err := q.QueryRowContext(ctx,
+		`SELECT x.server_id FROM nodes n JOIN nodes x ON x.id = n.chain_node_id WHERE n.id = ?`, nodeID).Scan(&serverID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	if !serverID.Valid {
+		return nil, nil
+	}
+	return &serverID.Int64, nil
+}
+
+// chainReferencingServerIDsExec lists the servers owning nodes that chain to
+// nodeID; their configs embed nodeID as an exit and must refresh whenever the
+// exit node changes.
+func chainReferencingServerIDsExec(ctx context.Context, q execer, nodeID int64) ([]int64, error) {
+	rows, err := q.QueryContext(ctx, `SELECT DISTINCT server_id FROM nodes WHERE chain_node_id = ?`, nodeID)
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	defer rows.Close()
+	ids := []int64{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, mapErr(err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// bumpServersExec bumps every affected server revision exactly once.
+func bumpServersExec(ctx context.Context, q execer, serverIDs ...int64) error {
+	for _, serverID := range dedupeInt64(serverIDs) {
+		if err := bumpRevisionExec(ctx, q, serverID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *Repo) UpdateNodeAndBump(ctx context.Context, nodeID, serverID int64, address, name, ipv6Address string, ipv6Enabled bool, port int, settings string, secretEnc []byte, rate float64, tags string, chainNodeID *int64, status *string) error {
 	return Tx(ctx, r.DB, func(tx *sql.Tx) error {
+		// Chain writes/rewires and exit-node changes affect both ends: bump
+		// the owning server, both chain-target servers, and every server
+		// whose nodes chain through this node.
+		affected := []int64{serverID}
+		oldExitServer, err := chainTargetServerIDExec(ctx, tx, nodeID)
+		if err != nil {
+			return err
+		}
+		if oldExitServer != nil {
+			affected = append(affected, *oldExitServer)
+		}
+		if chainNodeID != nil {
+			newExitServer, err := nodeServerIDExec(ctx, tx, *chainNodeID)
+			if err != nil {
+				return err
+			}
+			affected = append(affected, newExitServer)
+		}
+		referencing, err := chainReferencingServerIDsExec(ctx, tx, nodeID)
+		if err != nil {
+			return err
+		}
+		affected = append(affected, referencing...)
+
 		if status != nil {
 			res, err := tx.ExecContext(ctx,
-				`UPDATE nodes SET address = ?, ipv6_enabled = ?, ipv6_address = ?, name = ?, port = ?, protocol_settings = ?, secret_enc = ?, rate = ?, tags = ?, status = ?, updated_at = ? WHERE id = ?`,
-				address, ipv6EnabledInt(ipv6Enabled), ipv6Address, name, port, settings, secretEnc, rate, tags, *status, nowUnix(), nodeID)
+				`UPDATE nodes SET address = ?, ipv6_enabled = ?, ipv6_address = ?, name = ?, port = ?, protocol_settings = ?, secret_enc = ?, rate = ?, tags = ?, chain_node_id = ?, status = ?, updated_at = ? WHERE id = ?`,
+				address, ipv6EnabledInt(ipv6Enabled), ipv6Address, name, port, settings, secretEnc, rate, tags, chainNodeID, *status, nowUnix(), nodeID)
 			if err != nil {
 				return mapErr(err)
 			}
@@ -311,8 +407,8 @@ func (r *Repo) UpdateNodeAndBump(ctx context.Context, nodeID, serverID int64, ad
 			}
 		} else {
 			res, err := tx.ExecContext(ctx,
-				`UPDATE nodes SET address = ?, ipv6_enabled = ?, ipv6_address = ?, name = ?, port = ?, protocol_settings = ?, secret_enc = ?, rate = ?, tags = ?, updated_at = ? WHERE id = ?`,
-				address, ipv6EnabledInt(ipv6Enabled), ipv6Address, name, port, settings, secretEnc, rate, tags, nowUnix(), nodeID)
+				`UPDATE nodes SET address = ?, ipv6_enabled = ?, ipv6_address = ?, name = ?, port = ?, protocol_settings = ?, secret_enc = ?, rate = ?, tags = ?, chain_node_id = ?, updated_at = ? WHERE id = ?`,
+				address, ipv6EnabledInt(ipv6Enabled), ipv6Address, name, port, settings, secretEnc, rate, tags, chainNodeID, nowUnix(), nodeID)
 			if err != nil {
 				return mapErr(err)
 			}
@@ -320,12 +416,22 @@ func (r *Repo) UpdateNodeAndBump(ctx context.Context, nodeID, serverID int64, ad
 				return ErrNotFound
 			}
 		}
-		return bumpRevisionExec(ctx, tx, serverID)
+		return bumpServersExec(ctx, tx, affected...)
 	})
 }
 
 func (r *Repo) DeleteNodeAndBump(ctx context.Context, nodeID, serverID int64) error {
 	return Tx(ctx, r.DB, func(tx *sql.Tx) error {
+		// Removing a chained entry node drops the relay pseudo user from its
+		// exit server's inbounds, so the exit server must resync too.
+		affected := []int64{serverID}
+		exitServer, err := chainTargetServerIDExec(ctx, tx, nodeID)
+		if err != nil {
+			return err
+		}
+		if exitServer != nil {
+			affected = append(affected, *exitServer)
+		}
 		res, err := tx.ExecContext(ctx, `DELETE FROM nodes WHERE id = ?`, nodeID)
 		if err != nil {
 			return mapErr(err)
@@ -333,7 +439,7 @@ func (r *Repo) DeleteNodeAndBump(ctx context.Context, nodeID, serverID int64) er
 		if rowsAffected(res) == 0 {
 			return ErrNotFound
 		}
-		return bumpRevisionExec(ctx, tx, serverID)
+		return bumpServersExec(ctx, tx, affected...)
 	})
 }
 
@@ -363,12 +469,44 @@ func (r *Repo) UpdateServerAndBump(ctx context.Context, id int64, name, status s
 
 func (r *Repo) DeleteServerCascade(ctx context.Context, id int64) error {
 	return Tx(ctx, r.DB, func(tx *sql.Tx) error {
+		// Nodes on other servers may chain into this server's nodes; the
+		// chain_node_id FK (NO ACTION) would otherwise block the cascade.
+		// Unlink them and bump their servers so the entry agents resync.
+		rows, err := tx.QueryContext(ctx,
+			`SELECT DISTINCT n.server_id FROM nodes n JOIN nodes x ON x.id = n.chain_node_id WHERE x.server_id = ?`, id)
+		if err != nil {
+			return mapErr(err)
+		}
+		referencing := []int64{}
+		for rows.Next() {
+			var serverID int64
+			if err := rows.Scan(&serverID); err != nil {
+				rows.Close()
+				return mapErr(err)
+			}
+			referencing = append(referencing, serverID)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return mapErr(err)
+		}
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE nodes SET chain_node_id = NULL, updated_at = ? WHERE chain_node_id IN (SELECT id FROM nodes WHERE server_id = ?)`,
+			nowUnix(), id); err != nil {
+			return mapErr(err)
+		}
+
 		res, err := tx.ExecContext(ctx, `DELETE FROM servers WHERE id = ?`, id)
 		if err != nil {
 			return mapErr(err)
 		}
 		if rowsAffected(res) == 0 {
 			return ErrNotFound
+		}
+		for _, serverID := range dedupeInt64(referencing) {
+			if err := bumpRevisionExec(ctx, tx, serverID); err != nil {
+				return err
+			}
 		}
 		return nil
 	})

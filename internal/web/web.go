@@ -173,6 +173,13 @@ func (h *Handler) registerAdminRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/nodes/{id}", h.requireAdmin(h.handleNodeUpdate))
 	mux.HandleFunc("DELETE /api/nodes/{id}", h.requireAdmin(h.handleNodeDelete))
 
+	mux.HandleFunc("GET /api/custom-nodes", h.requireAdmin(h.handleCustomNodeList))
+	mux.HandleFunc("POST /api/custom-nodes", h.requireAdmin(h.handleCustomNodeCreate))
+	mux.HandleFunc("PUT /api/custom-nodes/{id}", h.requireAdmin(h.handleCustomNodeUpdate))
+	mux.HandleFunc("DELETE /api/custom-nodes/{id}", h.requireAdmin(h.handleCustomNodeDelete))
+	mux.HandleFunc("GET /api/users/{id}/custom-nodes", h.requireAdmin(h.handleUserCustomNodesGet))
+	mux.HandleFunc("PUT /api/users/{id}/custom-nodes", h.requireAdmin(h.handleUserCustomNodesPut))
+
 	mux.HandleFunc("GET /api/dashboard", h.requireAdmin(h.handleDashboard))
 	mux.HandleFunc("GET /api/dashboard/user-traffic", h.requireAdmin(h.handleDashboardUserTraffic))
 	mux.HandleFunc("GET /api/settings", h.requireAdmin(h.handleSettingsGet))

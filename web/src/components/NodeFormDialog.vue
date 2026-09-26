@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { createNode, generateRealityKeypair, getNode, updateNode } from '@/api/nodes'
+import { createNode, generateRealityKeypair, getNode, listNodes, updateNode } from '@/api/nodes'
 import { listServers } from '@/api/servers'
 import { errorMessage } from '@/api/http'
 import type {
@@ -79,6 +79,10 @@ const servers = ref<Server[]>([])
 const serverChoice = ref<number | null>(null)
 const loadingServers = ref(false)
 
+const chainNodeId = ref<number | null>(null)
+const chainCandidates = ref<NodeBrief[]>([])
+const loadingChainCandidates = ref(false)
+
 watch(
   () => props.open,
   (open) => {
@@ -113,7 +117,9 @@ watch(
     tlsCertificate.value = ''
     tlsPrivateKey.value = ''
     serverChoice.value = null
+    chainNodeId.value = props.node?.chain_node_id ?? null
     detailLoaded.value = false
+    void loadChainCandidates()
     if (isEdit.value && props.node) {
       void loadNodeDetail(props.node.id)
     } else if (!isEdit.value && props.serverId === undefined) {
@@ -121,6 +127,18 @@ watch(
     }
   },
 )
+
+async function loadChainCandidates() {
+  loadingChainCandidates.value = true
+  try {
+    const result = await listNodes({ status: 'active', page: 1, pageSize: 500 })
+    chainCandidates.value = result.items
+  } catch (err) {
+    error.value = errorMessage(err)
+  } finally {
+    loadingChainCandidates.value = false
+  }
+}
 
 async function loadNodeDetail(nodeId: number) {
   loadingDetail.value = true
@@ -202,6 +220,46 @@ const serverOptions = computed<Array<{ value: number; label: string }>>(() => [
   },
   ...servers.value.map((server) => ({ value: server.id, label: server.name })),
 ])
+
+const chainSelectValue = computed<number>({
+  get: () => chainNodeId.value ?? 0,
+  set: (value) => {
+    chainNodeId.value = value === 0 ? null : value
+  },
+})
+
+/**
+ * Chain exit candidates: active managed nodes, excluding the node itself and
+ * any node whose own chain would loop back to it. Grouped by server in the
+ * label; the backend re-validates the cycle check authoritatively.
+ */
+const chainOptions = computed<Array<{ value: number; label: string }>>(() => {
+  const selfId = props.node?.id ?? null
+  const linkById = new Map<number, number | null>()
+  for (const node of chainCandidates.value) linkById.set(node.id, node.chain_node_id)
+  const formsCycle = (candidateId: number): boolean => {
+    if (selfId === null) return false
+    let current: number | null = candidateId
+    let steps = 0
+    while (current !== null && steps <= linkById.size) {
+      if (current === selfId) return true
+      current = linkById.get(current) ?? null
+      steps++
+    }
+    return false
+  }
+  const options: Array<{ value: number; label: string }> = [
+    { value: 0, label: loadingChainCandidates.value ? '加载节点列表…' : '直连（不使用出站节点）' },
+  ]
+  for (const node of chainCandidates.value) {
+    if (node.id === selfId || formsCycle(node.id)) continue
+    options.push({
+      value: node.id,
+      label: `${node.server.name} / ${node.name} · ${protocolLabel(node.protocol)} :${node.port}`,
+    })
+  }
+  return options
+})
 
 const cipherOptions: Array<{ value: string; label: string }> = SHADOWSOCKS_METHODS.map(
   (method) => ({ value: method, label: method }),
@@ -421,6 +479,7 @@ async function submit() {
         tags: tagsPayload.value,
         settings: settingsPayload.value,
         status: status.value,
+        chain_node_id: chainNodeId.value,
       })
     } else {
       await createNode({
@@ -434,6 +493,7 @@ async function submit() {
         rate: rate.value ?? undefined,
         tags: tagsPayload.value,
         settings: settingsPayload.value,
+        chain_node_id: chainNodeId.value,
       })
     }
     emit('saved')
@@ -584,6 +644,18 @@ async function submit() {
           >
           <p class="field-hint">
             用于订阅分组与筛选；单个标签最长 32 个字符。
+          </p>
+        </div>
+        <div class="field">
+          <label id="node-chain-label">出站节点（可选）</label>
+          <AppSelect
+            v-model="chainSelectValue"
+            :options="chainOptions"
+            :disabled="loadingChainCandidates"
+            label="出站节点"
+          />
+          <p class="field-hint">
+            选择后，连接本节点的流量会经该节点转发落地（链式代理）；订阅中仍只展示本节点。
           </p>
         </div>
       </section>

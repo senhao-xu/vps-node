@@ -387,7 +387,7 @@ func TestNodeIPv6RoundTrip(t *testing.T) {
 		t.Fatalf("ipv6 fields lost in join select: %+v", byServer[0])
 	}
 
-	if err := r.UpdateNodeAndBump(ctx, id, serverID, "hk01.example.com", "hk-ss", "2001:db8::2", false, 8388, "{}", nil, 1, "[]", nil); err != nil {
+	if err := r.UpdateNodeAndBump(ctx, id, serverID, "hk01.example.com", "hk-ss", "2001:db8::2", false, 8388, "{}", nil, 1, "[]", nil, nil); err != nil {
 		t.Fatalf("update node: %v", err)
 	}
 	n, err = r.GetNode(ctx, id)

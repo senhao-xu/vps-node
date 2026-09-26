@@ -141,7 +141,15 @@ func (h *Handler) buildAgentConfigPayload(ctx context.Context, server repo.Serve
 		renderByID[n.ID] = sbNode
 	}
 
-	config, err := singbox.Render(h.appKey, renderNodes)
+	chains, err := h.chainExits(ctx, server, active)
+	if err != nil {
+		return agentConfigPayload{}, err
+	}
+	if err := h.injectRelayUsers(ctx, server, renderNodes); err != nil {
+		return agentConfigPayload{}, err
+	}
+
+	config, err := singbox.Render(h.appKey, renderNodes, chains...)
 	if err != nil {
 		return agentConfigPayload{}, err
 	}
@@ -178,6 +186,89 @@ func (h *Handler) buildAgentConfigPayload(ctx context.Context, server repo.Serve
 	}
 
 	return agentConfigPayload{Config: config, Users: out}, nil
+}
+
+// chainExits builds the entry-side chain outbounds for a server's active
+// nodes. A chained node whose exit is missing or disabled falls back to the
+// direct outbound (no route rule is rendered).
+func (h *Handler) chainExits(ctx context.Context, server repo.Server, active []repo.Node) ([]singbox.ChainExit, error) {
+	targetIDs := []int64{}
+	for _, n := range active {
+		if n.ChainNodeID != nil {
+			targetIDs = append(targetIDs, *n.ChainNodeID)
+		}
+	}
+	if len(targetIDs) == 0 {
+		return nil, nil
+	}
+	exitNodes, err := h.repo.ListNodesByIDs(ctx, targetIDs)
+	if err != nil {
+		return nil, err
+	}
+	exits := make(map[int64]repo.Node, len(exitNodes))
+	for _, e := range exitNodes {
+		exits[e.ID] = e
+	}
+	chains := make([]singbox.ChainExit, 0, len(targetIDs))
+	for _, n := range active {
+		if n.ChainNodeID == nil {
+			continue
+		}
+		exit, ok := exits[*n.ChainNodeID]
+		if !ok || exit.Status != repo.NodeStatusActive {
+			continue
+		}
+		sbExit, err := h.singboxNode(exit, nil)
+		if err != nil {
+			return nil, err
+		}
+		chains = append(chains, singbox.ChainExit{
+			EntryNodeID:   n.ID,
+			EntryServerID: server.ID,
+			Exit:          sbExit,
+			DialAddress:   exit.Address,
+		})
+	}
+	return chains, nil
+}
+
+// injectRelayUsers appends one relay pseudo user per (exit node, entry
+// server) pair so entry servers chaining into this server's nodes can
+// authenticate. Relay names never map to a panel user, so the agent tracker
+// leaves their traffic unattributed.
+func (h *Handler) injectRelayUsers(ctx context.Context, server repo.Server, renderNodes []singbox.Node) error {
+	entries, err := h.repo.ListChainEntriesTargetingServer(ctx, server.ID)
+	if err != nil {
+		return err
+	}
+	if len(entries) == 0 {
+		return nil
+	}
+	renderIdx := make(map[int64]int, len(renderNodes))
+	for i, n := range renderNodes {
+		renderIdx[n.ID] = i
+	}
+	type relayKey struct {
+		exitNodeID    int64
+		entryServerID int64
+	}
+	seen := map[relayKey]bool{}
+	for _, entry := range entries {
+		if entry.ChainNodeID == nil || entry.Status != repo.NodeStatusActive {
+			continue
+		}
+		idx, ok := renderIdx[*entry.ChainNodeID]
+		if !ok {
+			continue
+		}
+		key := relayKey{exitNodeID: *entry.ChainNodeID, entryServerID: entry.ServerID}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		renderNodes[idx].Relays = append(renderNodes[idx].Relays, singbox.Relay{EntryServerID: entry.ServerID})
+	}
+	return nil
 }
 
 func (h *Handler) singboxNode(n repo.Node, users []singbox.User) (singbox.Node, error) {

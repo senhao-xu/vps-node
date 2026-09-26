@@ -1,6 +1,7 @@
 import {
   Globe2,
   LayoutDashboard,
+  Link2,
   Server,
   Settings,
   Users,
@@ -27,6 +28,12 @@ export const navigationItems: NavigationItem[] = [
   { to: '/users', label: '用户', keywords: 'users yonghu', icon: Users },
   { to: '/servers', label: '服务器', keywords: 'servers fuwuqi', icon: Server },
   { to: '/nodes', label: '节点', keywords: 'nodes jiedian', icon: Waypoints },
+  {
+    to: '/custom-nodes',
+    label: '自定义节点',
+    keywords: 'custom nodes zidingyi jiedian links subscription dingyue',
+    icon: Link2,
+  },
   { to: '/visits', label: '访问记录', keywords: 'visits fangwen jilu sites', icon: Globe2 },
   { to: '/settings', label: '设置', keywords: 'settings shezhi', icon: Settings },
 ]

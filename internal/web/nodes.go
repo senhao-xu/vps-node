@@ -1,11 +1,13 @@
 package web
 
 import (
+	"context"
 	"crypto/ecdh"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -72,6 +74,26 @@ type createNodeRequest struct {
 	Rate        *float64        `json:"rate"`
 	Tags        *[]string       `json:"tags"`
 	Settings    json.RawMessage `json:"settings"`
+	ChainNodeID *int64          `json:"chain_node_id"`
+}
+
+// validateChainTarget verifies a chain exit reference: it must exist, be
+// active, and not close a chain loop. nodeID == 0 on create.
+func (h *Handler) validateChainTarget(ctx context.Context, nodeID, chainNodeID int64) error {
+	target, err := h.repo.ValidateNodeChain(ctx, nodeID, chainNodeID)
+	if err == repo.ErrNotFound {
+		return errValidation("chain_node_id refers to a node that does not exist")
+	}
+	if errors.Is(err, repo.ErrChainCycle) {
+		return errValidation("chain_node_id would create a node chain cycle")
+	}
+	if err != nil {
+		return err
+	}
+	if target.Status != repo.NodeStatusActive {
+		return errValidation("chain_node_id refers to a disabled node")
+	}
+	return nil
 }
 
 func (h *Handler) handleNodeCreate(w http.ResponseWriter, r *http.Request) {
@@ -124,6 +146,16 @@ func (h *Handler) handleNodeCreate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
+	if req.ChainNodeID != nil {
+		if *req.ChainNodeID < 1 {
+			writeErr(w, errValidation("chain_node_id must be a node id"))
+			return
+		}
+		if err := h.validateChainTarget(r.Context(), 0, *req.ChainNodeID); err != nil {
+			writeErr(w, err)
+			return
+		}
+	}
 
 	id, err := h.repo.CreateNodeAndBump(r.Context(), repo.NewNode{
 		ServerID:         req.ServerID,
@@ -137,6 +169,7 @@ func (h *Handler) handleNodeCreate(w http.ResponseWriter, r *http.Request) {
 		Rate:             rate,
 		Tags:             string(tagsJSON),
 		SecretEnc:        secretEnc,
+		ChainNodeID:      req.ChainNodeID,
 	})
 	if err != nil {
 		if err == repo.ErrConflict {
@@ -152,6 +185,7 @@ func (h *Handler) handleNodeCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	n.ServerName = server.Name
+	h.populateChainRef(r.Context(), &n)
 	httpx.WriteJSON(w, http.StatusCreated, toNodeDTO(n))
 }
 
@@ -244,6 +278,7 @@ func (h *Handler) handleNodeGet(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
+	h.populateChainRef(r.Context(), &n)
 	settings := json.RawMessage(n.ProtocolSettings)
 	if len(settings) == 0 {
 		settings = json.RawMessage("{}")
@@ -267,6 +302,25 @@ type updateNodeRequest struct {
 	Tags        *[]string       `json:"tags"`
 	Settings    json.RawMessage `json:"settings"`
 	Status      *string         `json:"status"`
+	// ChainNodeID is tri-state: absent keeps the current link, JSON null
+	// unlinks, and a node id retargets the chain exit.
+	ChainNodeID json.RawMessage `json:"chain_node_id"`
+}
+
+// resolveChainNodeID decodes the tri-state chain_node_id field; the second
+// return value reports whether the field was present in the request body.
+func resolveChainNodeID(raw json.RawMessage, current *int64) (*int64, error) {
+	if len(raw) == 0 {
+		return current, nil
+	}
+	if string(raw) == "null" {
+		return nil, nil
+	}
+	var id int64
+	if err := json.Unmarshal(raw, &id); err != nil || id < 1 {
+		return current, errValidation("chain_node_id must be a node id or null")
+	}
+	return &id, nil
 }
 
 func (h *Handler) handleNodeUpdate(w http.ResponseWriter, r *http.Request) {
@@ -341,7 +395,19 @@ func (h *Handler) handleNodeUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.repo.UpdateNodeAndBump(r.Context(), id, current.ServerID, address, name, ipv6Address, ipv6Enabled, port, settingsJSON, secretEnc, rate, string(tagsJSON), req.Status); err != nil {
+	chainNodeID, err := resolveChainNodeID(req.ChainNodeID, current.ChainNodeID)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	if chainNodeID != nil {
+		if err := h.validateChainTarget(r.Context(), id, *chainNodeID); err != nil {
+			writeErr(w, err)
+			return
+		}
+	}
+
+	if err := h.repo.UpdateNodeAndBump(r.Context(), id, current.ServerID, address, name, ipv6Address, ipv6Enabled, port, settingsJSON, secretEnc, rate, string(tagsJSON), chainNodeID, req.Status); err != nil {
 		if err == repo.ErrConflict {
 			writeErr(w, errConflict("a node with this port is already enabled on this server"))
 			return
@@ -360,6 +426,7 @@ func (h *Handler) handleNodeUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	n.ServerName = server.Name
+	h.populateChainRef(r.Context(), &n)
 	httpx.WriteJSON(w, http.StatusOK, toNodeDTO(n))
 }
 
@@ -374,11 +441,42 @@ func (h *Handler) handleNodeDelete(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
+	referencing, err := h.repo.ListNodesByChainTarget(r.Context(), id)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	if len(referencing) > 0 {
+		names := make([]string, 0, len(referencing))
+		for _, ref := range referencing {
+			names = append(names, ref.Name)
+		}
+		writeErr(w, errConflict(fmt.Sprintf("node is the chain exit of %s; unlink those nodes first", strings.Join(names, ", "))))
+		return
+	}
 	if err := h.repo.DeleteNodeAndBump(r.Context(), id, n.ServerID); err != nil {
 		writeErr(w, err)
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{})
+}
+
+// populateChainRef fills the chain exit display names for handlers that read
+// nodes through the plain (non-joined) select.
+func (h *Handler) populateChainRef(ctx context.Context, n *repo.Node) {
+	if n.ChainNodeID == nil {
+		return
+	}
+	exit, err := h.repo.GetNode(ctx, *n.ChainNodeID)
+	if err != nil {
+		return
+	}
+	server, err := h.repo.GetServer(ctx, exit.ServerID)
+	if err != nil {
+		return
+	}
+	n.ChainNodeName = exit.Name
+	n.ChainServerName = server.Name
 }
 
 // handleNodeCopy replicates a node verbatim (name, address, port, protocol
