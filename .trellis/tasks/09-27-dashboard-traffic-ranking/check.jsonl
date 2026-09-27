@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "检查新组件规范、状态三件套、无重复原语"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "检查 token 合规与目录归属"}

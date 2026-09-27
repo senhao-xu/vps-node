@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "新组件分层（components/ vs ui/）、EmptyState/加载态三件套、ProgressBar 复用、token 约束"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Visual System 语义 token、卡片/圆角规范、api 单一 owner"}
