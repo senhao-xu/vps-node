@@ -181,3 +181,24 @@ Upgraded the user-detail subscription area (UserDetailBasic.vue) to the referenc
 ### Status
 
 [OK] **Completed** (task archived; panel docker rebuilt locally)
+
+## Session 5c: Dashboard node/user traffic ranking cards
+
+**Date**: 2026-09-27
+**Task**: 09-27-dashboard-traffic-ranking
+**Branch**: `main`
+
+### Summary
+
+Added two ranking cards to the dashboard (节点流量消耗排行 / 用户消耗排行) styled after the HHUB reference. Zero backend change: both derive client-side from the existing GET /api/dashboard/user-traffic response (nodes[] per-user-per-node breakdown aggregated by node_id; items[] sorted by total_bytes; Top 8 each, percent vs grand total), so they follow the existing 今日/累计 toggle. New shared RankList.vue component (rank badge top-3 solid primary, ellipsis name + sub, tabular-nums value + percent, per-row ProgressBar, skeleton/EmptyState). Cards sit above the 用户流量 table in a 2-col grid stacking at 900px. Check agent passed clean, zero issues.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `89380ed` | feat(web): dashboard node/user traffic ranking cards |
+| `771496b` | docs(spec): document RankList; add dashboard-traffic-ranking task |
+
+### Status
+
+[OK] **Completed** (task archived; panel docker rebuilt locally)
