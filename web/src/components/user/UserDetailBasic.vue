@@ -44,6 +44,7 @@ const showRotateConfirm = ref(false)
 const showQrDialog = ref(false)
 const qrDataUrl = ref('')
 const qrError = ref('')
+const { copied: subCopied, copy: copySub } = useCopyFeedback()
 const { copied: linkCopied, copy: copyLink } = useCopyFeedback()
 
 const usernamePattern = /^[A-Za-z0-9_.-]{1,64}$/
@@ -210,30 +211,39 @@ async function expireNow() {
       </span>
       <template v-else-if="subscription.url">
         <span class="subscription-row">
-          <CopyText
-            class="mono subscription-url"
-            :text="subscription.url"
-            button-variant="secondary"
-          />
-          <button
-            type="button"
-            class="btn secondary small"
-            @click="showQrDialog = true"
-          >
-            <QrCode :size="14" />
-            扫码导入
-          </button>
-          <button
-            type="button"
-            class="btn secondary small"
-            :disabled="rotatingSubscription"
-            @click="showRotateConfirm = true"
-          >
-            {{ rotatingSubscription ? '轮换中…' : '轮换' }}
-          </button>
+          <span class="sub-url-bar mono">{{ subscription.url }}</span>
+          <span class="sub-actions">
+            <button
+              type="button"
+              class="btn small"
+              @click="copySub(subscription.url ?? '')"
+            >
+              {{ subCopied ? '已复制' : '复制订阅' }}
+            </button>
+            <button
+              type="button"
+              class="btn secondary small"
+              @click="showQrDialog = true"
+            >
+              <QrCode :size="14" />
+              扫码导入
+            </button>
+            <button
+              type="button"
+              class="btn secondary small"
+              :disabled="rotatingSubscription"
+              @click="showRotateConfirm = true"
+            >
+              {{ rotatingSubscription ? '轮换中…' : '轮换' }}
+            </button>
+          </span>
         </span>
+        <div class="client-grid-head">
+          <span>快捷一键导入到客户端：</span>
+          <span class="client-grid-hint">点击直接唤起客户端</span>
+        </div>
         <div class="client-grid">
-          <div class="client-card">
+          <div class="client-card accent-info">
             <span class="client-icon">
               <Send :size="18" />
             </span>
@@ -243,13 +253,13 @@ async function expireNow() {
             </div>
             <button
               type="button"
-              class="btn secondary small"
+              class="client-btn"
               @click="openDeepLink(clashLink)"
             >
               导入
             </button>
           </div>
-          <div class="client-card">
+          <div class="client-card accent-purple">
             <span class="client-icon">
               <Rocket :size="18" />
             </span>
@@ -259,13 +269,13 @@ async function expireNow() {
             </div>
             <button
               type="button"
-              class="btn secondary small"
+              class="client-btn"
               @click="openDeepLink(shadowrocketLink)"
             >
               导入
             </button>
           </div>
-          <div class="client-card">
+          <div class="client-card accent-warning">
             <span class="client-icon">
               <Box :size="18" />
             </span>
@@ -275,13 +285,13 @@ async function expireNow() {
             </div>
             <button
               type="button"
-              class="btn secondary small"
+              class="client-btn"
               @click="openDeepLink(singBoxLink)"
             >
               导入
             </button>
           </div>
-          <div class="client-card">
+          <div class="client-card accent-success">
             <span class="client-icon">
               <Copy :size="18" />
             </span>
@@ -291,7 +301,7 @@ async function expireNow() {
             </div>
             <button
               type="button"
-              class="btn secondary small"
+              class="client-btn"
               @click="copySubscriptionLink"
             >
               {{ linkCopied ? '已复制' : '复制' }}
@@ -509,8 +519,38 @@ async function expireNow() {
   min-width: 0;
 }
 
-.subscription-url {
-  max-width: min(520px, 100%);
+.sub-url-bar {
+  flex: 1;
+  min-width: 200px;
+  overflow: hidden;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sub-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
+.client-grid-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.client-grid-hint {
+  font-size: var(--font-size-xs);
 }
 
 .client-grid {
@@ -528,6 +568,61 @@ async function expireNow() {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
+}
+
+.client-btn {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 3px 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.accent-info .client-icon {
+  background: var(--color-info-soft);
+  color: var(--color-info);
+}
+
+.accent-info .client-btn {
+  background: var(--color-info-soft);
+  color: var(--color-info);
+}
+
+.accent-purple .client-icon {
+  background: var(--color-badge-purple-soft);
+  color: var(--color-badge-purple);
+}
+
+.accent-purple .client-btn {
+  background: var(--color-badge-purple-soft);
+  color: var(--color-badge-purple);
+}
+
+.accent-warning .client-icon {
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+}
+
+.accent-warning .client-btn {
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+}
+
+.accent-success .client-icon {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+
+.accent-success .client-btn {
+  background: var(--color-success-soft);
+  color: var(--color-success);
 }
 
 .client-icon {
