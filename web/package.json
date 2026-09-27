@@ -13,12 +13,14 @@
   "dependencies": {
     "lucide-vue-next": "^1.0.0",
     "pinia": "^3.0.3",
+    "qrcode": "^1.5.4",
     "vue": "^3.5.13",
     "vue-router": "^4.5.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
     "@types/node": "^22.18.0",
+    "@types/qrcode": "^1.5.6",
     "@vitejs/plugin-vue": "^6.0.1",
     "eslint": "^9.36.0",
     "eslint-plugin-vue": "^10.3.0",

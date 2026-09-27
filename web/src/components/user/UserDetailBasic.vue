@@ -1,15 +1,19 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { toDataURL } from 'qrcode'
+import { Box, Copy, QrCode, Rocket, Send } from 'lucide-vue-next'
 import { createUserSubscription, expireUserNow, getUserSubscription, resetUserToken, rotateUserSubscription, updateUser } from '@/api/users'
 import { errorMessage } from '@/api/http'
 import type { UserDetail, UserStatus, Subscription } from '@/api/types'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import CopyText from '@/components/CopyText.vue'
 import ErrorBanner from '@/components/ErrorBanner.vue'
+import ModalDialog from '@/components/ModalDialog.vue'
 import OneTimeSecret from '@/components/OneTimeSecret.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import LoadingSpinner from '@/components/ui/LoadingSpinner.vue'
 import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
+import { useCopyFeedback } from '@/utils/clipboard'
 import { formatDateTime } from '@/utils/format'
 import { displayUserStatus } from '@/utils/labels'
 
@@ -37,6 +41,10 @@ const resettingToken = ref(false)
 const showExpireConfirm = ref(false)
 const expiring = ref(false)
 const showRotateConfirm = ref(false)
+const showQrDialog = ref(false)
+const qrDataUrl = ref('')
+const qrError = ref('')
+const { copied: linkCopied, copy: copyLink } = useCopyFeedback()
 
 const usernamePattern = /^[A-Za-z0-9_.-]{1,64}$/
 
@@ -64,6 +72,48 @@ async function rotateSubscription() {
     subscription.value = await rotateUserSubscription(props.user.id)
     showRotateConfirm.value = false
   } catch (err) { error.value = errorMessage(err) } finally { rotatingSubscription.value = false }
+}
+
+const subscriptionUrl = computed(() => subscription.value.url ?? '')
+
+watch(
+  subscriptionUrl,
+  async (url) => {
+    qrError.value = ''
+    if (!url) {
+      qrDataUrl.value = ''
+      return
+    }
+    try {
+      qrDataUrl.value = await toDataURL(url, { margin: 1, width: 264 })
+    } catch {
+      qrDataUrl.value = ''
+      qrError.value = '二维码生成失败，请复制链接手动导入'
+    }
+  },
+  { immediate: true },
+)
+
+function toBase64(text: string): string {
+  const bytes = new TextEncoder().encode(text)
+  let binary = ''
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  return btoa(binary)
+}
+
+const clashLink = computed(() => `clash://install-config?url=${encodeURIComponent(subscriptionUrl.value)}`)
+const shadowrocketLink = computed(() => `shadowrocket://add/sub://${toBase64(subscriptionUrl.value)}`)
+const singBoxLink = computed(
+  () =>
+    `sing-box://import-remote-profile?url=${encodeURIComponent(subscriptionUrl.value)}#${encodeURIComponent(props.user.username)}`,
+)
+
+function openDeepLink(link: string) {
+  window.location.href = link
+}
+
+async function copySubscriptionLink() {
+  await copyLink(subscriptionUrl.value)
 }
 
 watch(
@@ -158,24 +208,97 @@ async function expireNow() {
       <span v-if="loadingSubscription">
         <LoadingSpinner size="sm" />
       </span>
-      <span
-        v-else-if="subscription.url"
-        class="subscription-row"
-      >
-        <CopyText
-          class="mono subscription-url"
-          :text="subscription.url"
-          button-variant="secondary"
-        />
-        <button
-          type="button"
-          class="btn secondary small"
-          :disabled="rotatingSubscription"
-          @click="showRotateConfirm = true"
-        >
-          {{ rotatingSubscription ? '轮换中…' : '轮换' }}
-        </button>
-      </span>
+      <template v-else-if="subscription.url">
+        <span class="subscription-row">
+          <CopyText
+            class="mono subscription-url"
+            :text="subscription.url"
+            button-variant="secondary"
+          />
+          <button
+            type="button"
+            class="btn secondary small"
+            @click="showQrDialog = true"
+          >
+            <QrCode :size="14" />
+            扫码导入
+          </button>
+          <button
+            type="button"
+            class="btn secondary small"
+            :disabled="rotatingSubscription"
+            @click="showRotateConfirm = true"
+          >
+            {{ rotatingSubscription ? '轮换中…' : '轮换' }}
+          </button>
+        </span>
+        <div class="client-grid">
+          <div class="client-card">
+            <span class="client-icon">
+              <Send :size="18" />
+            </span>
+            <div class="client-info">
+              <span class="client-name">Clash / Verge</span>
+              <span class="client-desc">一键导入配置</span>
+            </div>
+            <button
+              type="button"
+              class="btn secondary small"
+              @click="openDeepLink(clashLink)"
+            >
+              导入
+            </button>
+          </div>
+          <div class="client-card">
+            <span class="client-icon">
+              <Rocket :size="18" />
+            </span>
+            <div class="client-info">
+              <span class="client-name">小火箭 Shadowrocket</span>
+              <span class="client-desc">iOS 专属导入</span>
+            </div>
+            <button
+              type="button"
+              class="btn secondary small"
+              @click="openDeepLink(shadowrocketLink)"
+            >
+              导入
+            </button>
+          </div>
+          <div class="client-card">
+            <span class="client-icon">
+              <Box :size="18" />
+            </span>
+            <div class="client-info">
+              <span class="client-name">Sing-box</span>
+              <span class="client-desc">跨平台通用核心</span>
+            </div>
+            <button
+              type="button"
+              class="btn secondary small"
+              @click="openDeepLink(singBoxLink)"
+            >
+              导入
+            </button>
+          </div>
+          <div class="client-card">
+            <span class="client-icon">
+              <Copy :size="18" />
+            </span>
+            <div class="client-info">
+              <span class="client-name">v2rayN / Nekobox</span>
+              <span class="client-desc">点击复制订阅链接</span>
+            </div>
+            <button
+              type="button"
+              class="btn secondary small"
+              @click="copySubscriptionLink"
+            >
+              {{ linkCopied ? '已复制' : '复制' }}
+            </button>
+          </div>
+        </div>
+      </template>
       <button
         v-else
         type="button"
@@ -327,6 +450,43 @@ async function expireNow() {
       @cancel="showRotateConfirm = false"
       @confirm="rotateSubscription"
     />
+
+    <ModalDialog
+      :open="showQrDialog"
+      title="扫码导入订阅"
+      subtitle="使用客户端扫描下方二维码导入订阅链接"
+      :width="360"
+      @close="showQrDialog = false"
+    >
+      <div class="qr-body">
+        <img
+          v-if="qrDataUrl"
+          class="qr-image"
+          :src="qrDataUrl"
+          alt="订阅链接二维码"
+          width="264"
+          height="264"
+        >
+        <ErrorBanner
+          v-else-if="qrError"
+          :message="qrError"
+          @dismiss="qrError = ''"
+        />
+        <span v-else>
+          <LoadingSpinner />
+        </span>
+        <span class="mono qr-url">{{ subscriptionUrl }}</span>
+      </div>
+      <template #footer>
+        <button
+          type="button"
+          class="btn secondary"
+          @click="showQrDialog = false"
+        >
+          关闭
+        </button>
+      </template>
+    </ModalDialog>
   </div>
 </template>
 
@@ -351,6 +511,74 @@ async function expireNow() {
 
 .subscription-url {
   max-width: min(520px, 100%);
+}
+
+.client-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--spacing-sm);
+}
+
+.client-card {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-width: 0;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.client-icon {
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+  color: var(--color-text-secondary);
+}
+
+.client-info {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.client-name {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+}
+
+.client-desc {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.qr-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.qr-image {
+  display: block;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.qr-url {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  text-align: center;
 }
 
 .basic-card .info-label {

@@ -25,6 +25,8 @@ export default tseslint.config(
         setInterval: 'readonly',
         clearInterval: 'readonly',
         console: 'readonly',
+        btoa: 'readonly',
+        TextEncoder: 'readonly',
         KeyboardEvent: 'readonly',
         MouseEvent: 'readonly',
         HTMLElement: 'readonly',
