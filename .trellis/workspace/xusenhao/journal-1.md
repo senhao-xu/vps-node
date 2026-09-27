@@ -160,3 +160,24 @@ Caution: check agent accidentally reverted a pre-existing uncommitted change in 
 ### Status
 
 [OK] **Completed** (task archived)
+
+## Session 5b: Subscription QR import + multi-client quick links
+
+**Date**: 2026-09-27
+**Task**: 09-27-subscription-import
+**Branch**: `main`
+
+### Summary
+
+Upgraded the user-detail subscription area (UserDetailBasic.vue) to the reference "一键聚合订阅" style: QR-code import via `qrcode` toDataURL in a reused ModalDialog (regenerates after rotation), plus 4 client quick-import cards — Clash/Verge (clash://install-config), Shadowrocket (shadowrocket://add/sub:// with Unicode-safe base64 via TextEncoder+btoa), Sing-box (sing-box://import-remote-profile), v2rayN/Nekobox (copy via shared clipboard util). Added qrcode/@types/qrcode deps and btoa/TextEncoder eslint globals. Check pass fixed a QR-error forever-spinner gap with ErrorBanner. Validation: typecheck/lint/build all pass.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1716422` | feat(web): subscription QR import and multi-client quick links |
+| `0b6e365` | docs(spec): note qrcode dependency; add subscription-import task |
+
+### Status
+
+[OK] **Completed** (task archived; panel docker rebuilt locally)
