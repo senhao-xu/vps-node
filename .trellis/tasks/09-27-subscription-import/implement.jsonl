@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "ModalDialog/CopyText 复用约束、a11y、icons 只用 lucide、语义 token"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Visual System token 约束、dark 覆盖同步"}

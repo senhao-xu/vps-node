@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "检查 ModalDialog/CopyText 复用、a11y、无重复原语"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "检查 token 合规、无颜色字面量"}
