@@ -15,7 +15,7 @@ services:
       PANEL_DB_PATH: /data/panel.db
       PANEL_APP_KEY: "${PANEL_APP_KEY:-}"
       PANEL_ADMIN_USER: ${PANEL_ADMIN_USER:-admin}
-      PANEL_ADMIN_PASSWORD: "${PANEL_ADMIN_PASSWORD:?set PANEL_ADMIN_PASSWORD}"
+      PANEL_ADMIN_PASSWORD: "${PANEL_ADMIN_PASSWORD:-admin}"
       PANEL_LOG_LEVEL: ${PANEL_LOG_LEVEL:-info}
     volumes:
       - panel-data:/data
