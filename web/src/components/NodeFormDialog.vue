@@ -1070,11 +1070,11 @@ async function submit() {
 
 .protocol-badge {
   flex: none;
-  padding: 3px 8px;
-  border: 1px solid var(--color-primary-border);
+  padding: 3px 10px;
+  border: 1px solid var(--color-badge-purple-border);
   border-radius: var(--radius-full);
-  background: var(--color-primary-soft);
-  color: var(--color-primary) !important;
+  background: var(--color-badge-purple-soft);
+  color: var(--color-badge-purple) !important;
   font-size: var(--font-size-sm);
   white-space: nowrap;
 }

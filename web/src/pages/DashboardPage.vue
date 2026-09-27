@@ -77,8 +77,14 @@ const trafficColumns: Column[] = [
   { key: 'expand', label: '', width: '40px' },
 ]
 
+function ratioPercent(part: number, total: number): number | undefined {
+  if (total <= 0) return undefined
+  return Math.min(100, (part / total) * 100)
+}
+
 const metrics = computed<MetricStripItem[]>(() => {
   const stats = overview.stats
+  const serversWarning = stats !== null && stats.servers_online < stats.servers_total
   return [
     {
       key: 'users',
@@ -86,6 +92,7 @@ const metrics = computed<MetricStripItem[]>(() => {
       value: stats?.users_total ?? '—',
       hint: stats ? '在线 ' + stats.users_online : undefined,
       icon: Users,
+      bar: { percent: stats ? ratioPercent(stats.users_online, stats.users_total) : undefined, tone: 'primary' },
     },
     {
       key: 'traffic',
@@ -93,6 +100,7 @@ const metrics = computed<MetricStripItem[]>(() => {
       value: stats ? formatBytes(stats.traffic_today_bytes) : '—',
       hint: 'UTC 0 点起',
       icon: ArrowDownUp,
+      bar: { tone: 'purple' },
     },
     {
       key: 'devices',
@@ -100,6 +108,7 @@ const metrics = computed<MetricStripItem[]>(() => {
       value: stats?.devices_current ?? '—',
       hint: '按 IP 去重',
       icon: MonitorSmartphone,
+      bar: { tone: 'success' },
     },
     {
       key: 'servers',
@@ -107,7 +116,11 @@ const metrics = computed<MetricStripItem[]>(() => {
       value: stats ? stats.servers_online + ' / ' + stats.servers_total : '—',
       hint: '在线',
       icon: Server,
-      tone: !stats ? 'default' : stats.servers_online < stats.servers_total ? 'warning' : 'success',
+      tone: !stats ? 'default' : serversWarning ? 'warning' : 'success',
+      bar: {
+        percent: stats ? ratioPercent(stats.servers_online, stats.servers_total) : undefined,
+        tone: serversWarning ? 'warning' : 'success',
+      },
     },
     {
       key: 'nodes',
@@ -115,6 +128,7 @@ const metrics = computed<MetricStripItem[]>(() => {
       value: activeNodeLoading.value ? '…' : (activeNodeTotal.value ?? '—'),
       icon: Waypoints,
       tone: activeNodeError.value ? 'warning' : 'default',
+      bar: { tone: 'primary' },
     },
   ]
 })

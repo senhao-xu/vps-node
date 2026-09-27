@@ -7,7 +7,7 @@ import type {
   UserStatus,
 } from '@/api/types'
 
-export type Tone = 'success' | 'warning' | 'danger' | 'muted' | 'primary'
+export type Tone = 'success' | 'warning' | 'danger' | 'muted' | 'primary' | 'purple'
 
 export interface StatusInfo {
   label: string

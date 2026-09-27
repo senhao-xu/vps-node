@@ -407,7 +407,10 @@ onMounted(() => {
           <span class="mono">{{ row.address }}</span>
         </template>
         <template #cell-protocol="{ row }">
-          {{ protocolLabel(row.protocol) }}
+          <StatusBadge
+            :label="protocolLabel(row.protocol)"
+            tone="purple"
+          />
         </template>
         <template #cell-rate="{ row }">
           {{ row.rate }}×

@@ -22,9 +22,9 @@ const toneClass = computed(() => props.tone ?? 'muted')
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 2px 7px;
+  padding: 2px 9px;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-full);
   background: var(--color-surface-muted);
   font-size: var(--font-size-xs);
   font-weight: 650;
@@ -53,6 +53,12 @@ const toneClass = computed(() => props.tone ?? 'muted')
   border-color: var(--color-primary-border);
   background: var(--color-primary-soft);
   color: var(--color-primary);
+}
+
+.badge.purple {
+  border-color: var(--color-badge-purple-border);
+  background: var(--color-badge-purple-soft);
+  color: var(--color-badge-purple);
 }
 
 .badge.muted {

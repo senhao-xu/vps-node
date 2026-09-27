@@ -2,6 +2,11 @@
 import { computed } from 'vue'
 import type { LucideIcon } from 'lucide-vue-next'
 
+export type MetricStripBar = {
+  percent?: number
+  tone?: 'primary' | 'success' | 'warning' | 'danger' | 'purple'
+}
+
 export type MetricStripItem = {
   key: string
   label: string
@@ -9,6 +14,7 @@ export type MetricStripItem = {
   hint?: string
   icon?: LucideIcon
   tone?: 'default' | 'success' | 'warning' | 'danger'
+  bar?: MetricStripBar
 }
 
 const props = withDefaults(
@@ -24,6 +30,12 @@ const props = withDefaults(
 )
 
 const countClass = computed(() => 'count-' + Math.min(Math.max(props.items.length, 1), 5))
+
+function barWidth(bar: MetricStripBar): string {
+  const percent = bar.percent
+  if (percent === undefined || !Number.isFinite(percent)) return '100%'
+  return Math.min(100, Math.max(0, percent)) + '%'
+}
 </script>
 
 <template>
@@ -64,6 +76,17 @@ const countClass = computed(() => 'count-' + Math.min(Math.max(props.items.lengt
           class="metric-hint"
         >{{ item.hint }}</span>
       </div>
+      <div
+        v-if="item.bar && !loading"
+        class="metric-bar"
+        aria-hidden="true"
+      >
+        <span
+          class="metric-bar-fill"
+          :class="'bar-' + (item.bar.tone ?? 'primary')"
+          :style="{ width: barWidth(item.bar) }"
+        />
+      </div>
     </div>
   </section>
 </template>
@@ -74,7 +97,7 @@ const countClass = computed(() => 'count-' + Math.min(Math.max(props.items.lengt
   margin-bottom: 14px;
   overflow: hidden;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--color-surface);
   box-shadow: var(--shadow-card);
 }
@@ -131,10 +154,10 @@ const countClass = computed(() => 'count-' + Math.min(Math.max(props.items.lengt
 .metric-value-row strong {
   overflow: hidden;
   color: var(--color-text);
-  font-size: 20px;
+  font-size: 24px;
   font-variant-numeric: tabular-nums;
   font-weight: 750;
-  line-height: 1.35;
+  line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -156,6 +179,27 @@ const countClass = computed(() => 'count-' + Math.min(Math.max(props.items.lengt
   width: 64%;
   height: 20px;
 }
+
+.metric-bar {
+  height: 4px;
+  margin-top: 12px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: var(--color-muted-soft);
+}
+
+.metric-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-full);
+  transition: width 0.2s ease;
+}
+
+.metric-bar-fill.bar-primary { background: var(--color-primary); }
+.metric-bar-fill.bar-success { background: var(--color-success); }
+.metric-bar-fill.bar-warning { background: var(--color-warning); }
+.metric-bar-fill.bar-danger { background: var(--color-danger); }
+.metric-bar-fill.bar-purple { background: var(--color-badge-purple); }
 
 @media (max-width: 900px) {
   .metric-strip.count-4,
