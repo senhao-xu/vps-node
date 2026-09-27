@@ -60,6 +60,8 @@ const trafficQuery = ref('')
 const expandedUsers = ref<Set<number>>(new Set())
 let trafficRequestId = 0
 
+const trafficInitialLoading = computed(() => trafficLoading.value && traffic.value === null)
+
 const attentionServers = ref<ServerItem[]>([])
 const attentionLoading = ref(false)
 const attentionError = ref('')
@@ -378,7 +380,7 @@ onUnmounted(() => {
         </div>
         <RankList
           :items="nodeRankItems"
-          :loading="trafficLoading"
+          :loading="trafficInitialLoading"
           empty-text="该范围内暂无节点流量"
         />
       </section>
@@ -400,7 +402,7 @@ onUnmounted(() => {
         </div>
         <RankList
           :items="userRankItems"
-          :loading="trafficLoading"
+          :loading="trafficInitialLoading"
           empty-text="该范围内暂无用户流量"
         />
       </section>
@@ -441,7 +443,7 @@ onUnmounted(() => {
           :columns="trafficColumns"
           :rows="filteredTraffic"
           :row-key="(row) => row.user_id"
-          :loading="trafficLoading"
+          :loading="trafficInitialLoading"
           :bordered="false"
           aria-label="用户流量表格"
           @row-click="onRowClick"
