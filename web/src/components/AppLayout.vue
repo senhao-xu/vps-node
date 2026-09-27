@@ -378,9 +378,9 @@ onBeforeUnmount(() => {
   height: 30px;
   flex: none;
   place-items: center;
-  border-radius: var(--radius-sm);
-  background: #2dd4bf;
-  color: #062521;
+  border-radius: var(--radius-md);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
   font-size: 11px;
   line-height: 1;
 }
@@ -405,7 +405,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 10px;
   padding: 0 11px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   color: var(--color-shell-muted);
   font-size: var(--font-size-md);
   transition: color 0.15s ease, background 0.15s ease;
@@ -413,11 +413,11 @@ onBeforeUnmount(() => {
 
 .nav-item:hover {
   color: var(--color-shell-text);
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--color-shell-active);
 }
 
 .nav-item.active {
-  color: #5eead4;
+  color: var(--color-shell-text);
   background: var(--color-shell-active);
   font-weight: 700;
 }
@@ -429,7 +429,7 @@ onBeforeUnmount(() => {
   left: 0;
   width: 3px;
   border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
-  background: #2dd4bf;
+  background: var(--color-primary);
   content: '';
 }
 
