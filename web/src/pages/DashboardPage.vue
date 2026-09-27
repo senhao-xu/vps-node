@@ -25,6 +25,7 @@ import type {
 import DataTable, { type Column } from '@/components/DataTable.vue'
 import ErrorBanner from '@/components/ErrorBanner.vue'
 import ProgressBar from '@/components/ProgressBar.vue'
+import RankList, { type RankListItem } from '@/components/RankList.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import UserCreateDialog from '@/components/UserCreateDialog.vue'
 import MetricStrip, { type MetricStripItem } from '@/components/ui/MetricStrip.vue'
@@ -138,6 +139,54 @@ const filteredTraffic = computed(() => {
   const query = trafficQuery.value.trim().toLowerCase()
   if (!query) return items
   return items.filter((item) => item.username.toLowerCase().includes(query))
+})
+
+const RANK_LIMIT = 8
+
+const nodeRankItems = computed<RankListItem[]>(() => {
+  const byNode = new Map<number, { name: string; server: string; bytes: number }>()
+  for (const user of traffic.value?.items ?? []) {
+    for (const node of user.nodes) {
+      const entry = byNode.get(node.node_id)
+      if (entry) {
+        entry.bytes += node.total_bytes
+      } else {
+        byNode.set(node.node_id, {
+          name: node.node_name,
+          server: node.server_name,
+          bytes: node.total_bytes,
+        })
+      }
+    }
+  }
+  const grandTotal = [...byNode.values()].reduce((sum, entry) => sum + entry.bytes, 0)
+  return [...byNode.entries()]
+    .filter(([, entry]) => entry.bytes > 0)
+    .sort((a, b) => b[1].bytes - a[1].bytes || a[0] - b[0])
+    .slice(0, RANK_LIMIT)
+    .map(([nodeId, entry]) => ({
+      key: nodeId,
+      name: entry.name,
+      sub: entry.server,
+      value: formatBytes(entry.bytes),
+      percent: grandTotal > 0 ? (entry.bytes / grandTotal) * 100 : 0,
+    }))
+})
+
+const userRankItems = computed<RankListItem[]>(() => {
+  const users = (traffic.value?.items ?? []).filter((item) => item.total_bytes > 0)
+  const grandTotal = users.reduce((sum, item) => sum + item.total_bytes, 0)
+  return users
+    .slice()
+    .sort((a, b) => b.total_bytes - a.total_bytes || a.user_id - b.user_id)
+    .slice(0, RANK_LIMIT)
+    .map((item) => ({
+      key: item.user_id,
+      name: item.username,
+      sub: item.transfer_enable > 0 ? '配额 ' + formatBytes(item.transfer_enable) : '不限配额',
+      value: formatBytes(item.total_bytes),
+      percent: grandTotal > 0 ? (item.total_bytes / grandTotal) * 100 : 0,
+    }))
 })
 
 const attentionItems = computed<AttentionItem[]>(() => {
@@ -309,6 +358,53 @@ onUnmounted(() => {
       :loading="overview.loading && !overview.stats"
       aria-label="运营关键指标"
     />
+
+    <div class="rank-grid">
+      <section
+        class="card rank-card"
+        aria-labelledby="node-rank-title"
+      >
+        <div class="card-head">
+          <h2
+            id="node-rank-title"
+            class="card-title rank-title"
+          >
+            <Waypoints
+              :size="16"
+              aria-hidden="true"
+            />
+            节点流量消耗排行
+          </h2>
+        </div>
+        <RankList
+          :items="nodeRankItems"
+          :loading="trafficLoading"
+          empty-text="该范围内暂无节点流量"
+        />
+      </section>
+      <section
+        class="card rank-card"
+        aria-labelledby="user-rank-title"
+      >
+        <div class="card-head">
+          <h2
+            id="user-rank-title"
+            class="card-title rank-title"
+          >
+            <Users
+              :size="16"
+              aria-hidden="true"
+            />
+            用户消耗排行
+          </h2>
+        </div>
+        <RankList
+          :items="userRankItems"
+          :loading="trafficLoading"
+          empty-text="该范围内暂无用户流量"
+        />
+      </section>
+    </div>
 
     <div class="data-workspace">
       <section
@@ -532,6 +628,37 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.rank-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.rank-grid > .card + .card {
+  margin-top: 0;
+}
+
+.rank-card .card-head {
+  margin-bottom: var(--spacing-md);
+}
+
+.rank-title {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.rank-title svg {
+  color: var(--color-text-secondary);
+}
+
+@media (max-width: 900px) {
+  .rank-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .workspace-panel,
 .attention-panel {
   overflow: hidden;
