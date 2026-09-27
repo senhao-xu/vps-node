@@ -24,8 +24,8 @@ web/src/
 │   │               # TrafficChart (SVG), user/ detail sections
 ├── pages/          # Login, Dashboard, Users, UserDetail (core page), Servers,
 │   │               # ServerDetail, Settings
-├── stores/auth.ts  # hydration via /api/admin/me, login/logout
-├── router/         # auth guard + redirect param
+├── stores/         # auth hydration, theme mode, shared dashboard overview polling
+├── router/         # auth guard + redirect param; navigation.ts is the nav source of truth
 ├── styles/         # tokens.css (design tokens), base.css (button/input/table primitives)
 └── utils/          # format (bytes/dates/durations), labels (status/protocol zh-CN),
                     # clipboard, names — shared, never duplicated in pages
@@ -49,19 +49,28 @@ web/src/
 - `styles/base.css` owns page containers, cards, buttons, form controls, common action groups, focus states, and shared mobile behavior. Page-scoped CSS should contain only business-specific layout or presentation.
 - `AppLayout.vue`, `ModalDialog.vue`, `DataTable.vue`, and status/feedback components own their responsive behavior. A parent component must not target a child component's internal DOM with an ordinary scoped selector; move the rule to the child owner or use `:deep()` explicitly.
 - Management tables remain semantic tables inside a horizontal scroll container on narrow screens. Do not globally convert them into cards or add `overflow: hidden` to a parent card.
-- `DataTable.vue` renders full-bleed inside a card: `.table-wrap` negates `--card-padding` on the inline axis so row borders reach the card edges, while `th/td:first-child` and `:last-child` re-apply `--card-padding` so cell text lines up with the card title. Cell padding is `14px var(--spacing-md)`. `--card-padding` lives in `tokens.css` and is overridden to `--spacing-md` on `.card` below 700px — new table-like lists should reuse this instead of inventing their own negative-margin hack.
+- `DataTable.vue` owns its labelled, focusable horizontal-scroll region. It uses a bordered container by default and a borderless `bordered=false` mode when embedded in an existing work panel; pages must not add negative margins or clip the table wrapper. Dense cell spacing and the table minimum width remain component-owned.
 - At narrow widths, page headers and multi-field rows collapse vertically while controls remain usable. Shared dialog footers stack their buttons in `ModalDialog.vue`, so individual forms do not duplicate that rule.
 - Dialogs keep `role="dialog"`, `aria-modal="true"`, and an `aria-labelledby` relationship with the visible title.
-- Palette direction is the Xboard/shadcn neutral theme: `--color-primary` is near-black (`#0F172A`, and near-white `#F8FAFC` in dark), surfaces are white/`#020817`, and the secondary fill is `#F1F5F9` / `#1E293B`. Semantic green/amber/red stay as accents — do not introduce a brand-colored primary.
+- Palette direction is the neutral HHUB-style theme: light surfaces are neutral white/gray and `--color-primary` is near-black ink (`#18181b`, paired with `--color-on-primary` white); dark surfaces are neutral dark gray with a near-white (`#fafafa`) action color. Accent color lives only in status/badge tokens (green/amber/red status, `--color-badge-purple*` for protocol badges). Keep these values in `tokens.css`; Vue components consume only semantic tokens.
 - The app is not color-theme-agnostic: a token used as a background must ship a matching foreground token. `--color-primary` pairs with `--color-on-primary`; solid danger buttons use `--color-danger-strong` + `--color-on-danger`, while `--color-danger` remains the readable-on-surface text/tint variant (light `#EF4444`, dark `#ef5b5b`).
-- Sidebar width is token-driven (`--shell-width: 256px`, `--shell-width-collapsed: 56px`); the collapsed state is persisted in `localStorage['sidebar-collapsed']` and only applies on desktop (`min-width: 901px`).
-- Radius scale is `--radius-xs: 4px` / `sm: 6px` / `md: 12px` / `dialog: 8px` / `full: 999px`; use `--radius-xs` for the smallest controls (e.g. segmented items) and `--radius-full` for pills/circles. Do not hardcode `4px`/`6px`/`999px` border radii in components.
+- `AppLayout.vue` owns the authenticated shell. At `>=900px` it is a `--shell-sidebar-width: 216px` fixed-width navigation column plus `minmax(0, 1fr)` content; the sidebar stays full-height and the content toolbar stays sticky. Do not add desktop collapse behavior or persist a collapse preference. Sticky page content uses `--shell-toolbar-offset`.
+- Below `900px`, the same sidebar becomes an off-canvas dialog drawer. It must close on overlay click, Escape, and route change; lock document scrolling; trap focus while open; restore trigger focus on close; and participate in the shared dialog stack so Escape only closes the top overlay. The closed drawer is inert and hidden from assistive technology.
+- Navigation, panel/server state, last successful overview refresh, and the build revision remain in the sidebar; search, theme modes, administrator identity, and logout remain in the content toolbar. Preserve these responsibilities when polishing either region.
+- `router/navigation.ts` is the single source for authenticated route labels, icons, and search keywords. `AppLayout` and `MenuSearch` must consume it rather than maintain parallel arrays.
+- Radius scale is `--radius-xs: 4px` / `sm: 6px` / `md: 10px` / `lg: 14px` / `dialog: 18px` / `full: 999px`; use tokens instead of literal component radii. Cards, summary panels, and `MetricStrip` use `--radius-lg`; badges/chips use `--radius-full`.
 - Motion and viewport floors live in `base.css`: a global `@media (prefers-reduced-motion: reduce)` block neutralizes animation/transition/scroll behavior, and `html, body { min-width: 320px }` is the minimum supported width. Add new motion or sub-320 layouts with those constraints in mind.
 - Disabled controls share one opacity (`0.52`) across `.btn`, `.toggle`, `.page-btn`, and `.app-select`; floating overlay panels (AppSelect/OverflowMenu/FilterChip) all use `--radius-md` + `--shadow-dialog`.
 
+### Shared overview and build revision
+
+`stores/overview.ts` is the only authenticated-UI owner of `getDashboard()`. Its `refresh()` deduplicates concurrent calls, preserves the last good `stats` on transient failures, and updates `lastUpdatedAt` only after success. `AppLayout` owns the completion-scheduled 30-second poll, pauses it while `document.hidden`, refreshes when visible, and stops it on unmount. Pages may consume this store and request a refresh after mutations; they must not add independent dashboard polling or a second mount-time refresh.
+
+The status row reports frontend-observable semantics only: "状态刷新" is the last successful overview request, not an Agent synchronization time; unavailable and stale states remain distinct. A page may dismiss its own overview error banner locally, but must not clear the shared store error merely to hide UI because doing so falsely marks stale or unavailable data as healthy.
+
 ### Build-time version constant
 
-The sidebar footer shows the deployed git revision. It is injected at build/dev time, never hardcoded or fetched at runtime:
+The sidebar status area shows the deployed git revision as "构建修订". It is injected at build/dev time, never hardcoded or fetched at runtime:
 
 ```ts
 // web/vite.config.ts

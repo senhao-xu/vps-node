@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Visual System 约束：语义 token 两层体系、dark 覆盖同步、base.css 职责边界"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "组件改造约束：MetricStrip/StatusBadge 单一 owner、共享 CSS 原语禁止重复定义、icons 只用 lucide"}

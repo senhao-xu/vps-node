@@ -8,7 +8,7 @@
 
 Vue 3 SFC (`<script setup>`), TypeScript strict, no UI library. Two component tiers:
 
-- `components/ui/` — business-free primitives built during the xboard-style overhaul (2026-09): `ToggleSwitch`, `AppSelect`, `OverflowMenu`, `FilterChip`, `SearchInput`, `LoadingSpinner`, `EmptyState`, `PageHeader`, `StatCard`, `SegmentedControl`, plus `composables.ts`.
+- `components/ui/` — business-free primitives: `ToggleSwitch`, `AppSelect`, `OverflowMenu`, `FilterChip`, `SearchInput`, `LoadingSpinner`, `EmptyState`, `PageHeader`, `MetricStrip`, `SegmentedControl`, plus `composables.ts`.
 - `components/` — app-level shared components: `DataTable`, `TablePaginator`, `ModalDialog`, `ConfirmDialog`, `StatusBadge`, `ProgressBar`, `MetricBar`, `ErrorBanner`, `CopyText`, `AppLayout`, `MenuSearch`, form dialogs, `user/*` panels.
 
 ---
@@ -28,8 +28,10 @@ Vue 3 SFC (`<script setup>`), TypeScript strict, no UI library. Two component ti
 
 - Typed props via `withDefaults(defineProps<{...}>(), ...)`; `v-model` via `defineModel` or `modelValue` + `update:modelValue`.
 - Generic components keep the `T extends Record<string, unknown>` + typed slots pattern (`DataTable`, `AppSelect`).
-- Every page header uses `PageHeader` (`title` + `subtitle` + `#actions`); do not hand-roll `.page-header` markup. Detail pages pass `backTo`/`backTitle` for the back link (the top bar no longer renders titles or back links).
-- `StatCard` renders label + top-right icon + big value + optional `hint` line; `SegmentedControl` (`items` + `v-model`, generic over `T extends string`) is the only segmented/toggle-group control — do not hand-roll range switches in pages.
+- Every page header uses `PageHeader` (`title` + `subtitle` + `#actions`); do not hand-roll `.page-header` markup. Detail pages pass `backTo`/`backTitle` for the prominent outlined icon-plus-text return command. Put a resource `StatusBadge` in `#title-extra` so status stays adjacent to the wrapping resource name instead of drifting into the action group.
+- `MetricStrip` accepts typed `MetricStripItem[]` (`key`, `label`, `value`, optional `hint`/Lucide `icon`/semantic `tone`, optional `bar: { percent?, tone? }` for a bottom accent bar) and owns the compact 5 -> 3 -> 2 -> 1 column reflow. It is a grouped metric band with separators, not a row of cards; do not recreate metric cards in pages.
+- `StatusBadge` tones come from `utils/labels.ts` `Tone` (`success | warning | danger | muted | primary | purple`); `purple` is reserved for protocol badges and uses the `--color-badge-purple*` tokens. Badges are capsule-shaped (`--radius-full`).
+- `SegmentedControl` (`items` + `v-model`, generic over `T extends string`) is the only segmented/toggle-group control — do not hand-roll range switches in pages.
 
 ## DataTable v2 contract
 
@@ -43,17 +45,19 @@ Vue 3 SFC (`<script setup>`), TypeScript strict, no UI library. Two component ti
 - Floating panels (AppSelect, OverflowMenu, FilterChip) use the shared composables in `components/ui/composables.ts`: `useFloatingPanel` (fixed positioning + viewport flip/clamp), `useClickOutside`, `useFocusTrap`, `useScrollLock`, and the dialog stack (`pushDialog`/`isTopDialog`) so Esc closes only the top-most dialog.
 - All overlays must support: outside-click close, Esc close, keyboard navigation (↑↓/Enter/Space).
 - `ModalDialog`: title id via `useId()` (never a hard-coded id — pages mount multiple dialogs), focus trap + scroll-lock on mount, focus restore on close, right-aligned `#footer`.
+- `AppLayout` mobile navigation is also a stacked dialog overlay: activate its focus trap and scroll lock only below `900px` while open, close it after route changes, and keep the closed sidebar inert. Do not fork separate mobile navigation markup.
 
 ## Styling Patterns
 
 - Semantic tokens only (see directory-structure.md Visual System); every new token ships a `[data-theme='dark']` override.
 - No inline `style=""` except dynamic bindings (widths, positions).
-- `.card + .card` adds a stacked-card `margin-top` (base.css). Cards laid out **side by side** in a grid must opt out: `.stat-grid > .card + .card` and `.two-col > .card + .card` are reset in base.css. A new card grid needs the same reset, otherwise the later cards are pushed down inside their cell and the row looks misaligned (and the first card stretches taller).
+- `.card + .card` adds a stacked-card `margin-top` (base.css). Cards laid out **side by side** in a grid must opt out through their grid owner (the existing `.two-col` rule is the reference), otherwise later cards are pushed down inside their cells.
 - State feedback trio is mandatory on every data view: loading → `LoadingSpinner`/skeleton, empty → `EmptyState`, error → `ErrorBanner`. Ad-hoc `text-danger` blocks are forbidden.
 
 ## Accessibility
 
 - Dialogs: `role="dialog"`, `aria-modal="true"`, `aria-labelledby` pointing at the visible title.
+- Mobile navigation drawer: `role="dialog"` + `aria-modal="true"` only while open, an `aria-controls`/`aria-expanded` trigger, and focus restoration through the shared trap.
 - Toggles: `role="switch"` with keyboard support (native `<button>`).
 - Selects/menus: `aria-haspopup="listbox"`, `role="option"`, visible focus state via `--color-focus-ring`.
 
@@ -61,5 +65,6 @@ Vue 3 SFC (`<script setup>`), TypeScript strict, no UI library. Two component ti
 
 - Hand-rolling a table instead of `DataTable` (DashboardPage pre-overhaul; ~130 lines of duplicated CSS deleted).
 - Copy-pasting `.eyebrow`/`.toolbar-label`/`.card-head` into pages — these are shared now; duplication is a review blocker.
+- Calling `getDashboard()` from individual pages or starting page-local overview intervals — consume `stores/overview.ts` so requests are deduplicated and polling pauses in hidden tabs.
 - `window.confirm` for destructive actions — always `ConfirmDialog`.
 - Button loading as text swap ("保存中…") — use the spinner + `is-loading` class.

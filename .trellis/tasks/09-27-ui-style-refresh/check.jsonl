@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "检查 token 使用合规（无语义外颜色字面量）、dark 覆盖完整性"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "检查组件规范回归：共享原语未重复定义、MetricStrip/DataTable 契约未破坏"}
