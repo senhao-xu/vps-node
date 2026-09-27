@@ -29,8 +29,8 @@ Vue 3 SFC (`<script setup>`), TypeScript strict, no UI library. Two component ti
 - Typed props via `withDefaults(defineProps<{...}>(), ...)`; `v-model` via `defineModel` or `modelValue` + `update:modelValue`.
 - Generic components keep the `T extends Record<string, unknown>` + typed slots pattern (`DataTable`, `AppSelect`).
 - Every page header uses `PageHeader` (`title` + `subtitle` + `#actions`); do not hand-roll `.page-header` markup. Detail pages pass `backTo`/`backTitle` for the prominent outlined icon-plus-text return command. Put a resource `StatusBadge` in `#title-extra` so status stays adjacent to the wrapping resource name instead of drifting into the action group.
-- `MetricStrip` accepts typed `MetricStripItem[]` (`key`, `label`, `value`, optional `hint`/Lucide `icon`/semantic `tone`, optional `bar: { percent?, tone? }` for a bottom accent bar) and owns the compact 5 -> 3 -> 2 -> 1 column reflow. It is a grouped metric band with separators, not a row of cards; do not recreate metric cards in pages.
-- `StatusBadge` tones come from `utils/labels.ts` `Tone` (`success | warning | danger | muted | primary | purple`); `purple` is reserved for protocol badges and uses the `--color-badge-purple*` tokens. Badges are capsule-shaped (`--radius-full`).
+- `MetricStrip` accepts typed `MetricStripItem[]` (`key`, `label`, `value`, optional `hint`/Lucide `icon`/semantic `tone`, optional `bar: { percent?, tone? }` for a bottom accent bar) and owns the compact 5 -> 3 -> 2 -> 1 column reflow. It renders each metric as its own card (lg radius, card shadow, tone-colored top-right icon); do not recreate metric cards in pages.
+- `StatusBadge` tones come from `utils/labels.ts` `Tone` (`success | warning | danger | muted | primary | purple`). `success` and `purple` are solid-filled capsules (white text on `--color-success-solid` / `--color-badge-purple-solid`); the rest stay soft-tinted. Badges are capsule-shaped (`--radius-full`).
 - `SegmentedControl` (`items` + `v-model`, generic over `T extends string`) is the only segmented/toggle-group control — do not hand-roll range switches in pages.
 
 ## DataTable v2 contract
