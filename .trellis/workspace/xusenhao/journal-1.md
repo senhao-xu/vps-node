@@ -134,3 +134,29 @@ Made the panel agent stateless: replaced the one-time register_token flow with a
 ### Status
 
 [OK] **Completed**
+
+## Session 5: Global UI style refresh (neutral HHUB-style theme)
+
+**Date**: 2026-09-27
+**Task**: 09-27-ui-style-refresh
+**Branch**: `main`
+
+### Summary
+
+Restyled the whole `web/` frontend toward a neutral reference design: tokens.css rewritten to a zinc-style palette with near-black primary (`#18181b` light / `#fafafa` dark), radii scaled up (4/6/10/14/18px, cards at `--radius-lg`), softer diffused shadows, new `--color-badge-purple*` tokens, and light `--color-shell*` sidebar tokens (dark theme fully re-mapped, teal removed). base.css cards/buttons/chips refreshed; AppLayout sidebar lightened with hardcoded teal removed; StatusBadge capsulized with new `purple` tone; MetricStrip extended with optional `bar` (percent/tone) used by DashboardPage; NodesPage protocol badges purpled. Check agent fixed stale index.html theme-color meta and synced both frontend spec docs. Validation: typecheck/lint/build all pass.
+
+Caution: check agent accidentally reverted a pre-existing uncommitted change in deploy/docker-compose.yml (PANEL_ADMIN_PASSWORD default admin); manually restored. Left uncommitted per scope.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `80b9ffa` | style(web): neutral ink palette tokens |
+| `cd3e678` | style(web): base components refresh |
+| `2bbac9d` | style(web): light sidebar shell |
+| `40b8411` | style(web): badges/metric strip/pages polish |
+| `0b56168` | docs(spec): sync frontend specs + task artifacts |
+
+### Status
+
+[OK] **Completed** (task archived)
