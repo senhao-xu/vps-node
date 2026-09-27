@@ -94,12 +94,8 @@ function barWidth(bar: MetricStripBar): string {
 <style scoped>
 .metric-strip {
   display: grid;
+  gap: 14px;
   margin-bottom: 14px;
-  overflow: hidden;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-card);
 }
 
 .metric-strip.count-1 { grid-template-columns: 1fr; }
@@ -111,29 +107,25 @@ function barWidth(bar: MetricStripBar): string {
 .metric-item {
   min-width: 0;
   padding: 15px 16px 14px;
-  border-left: 1px solid var(--color-border);
-}
-
-.metric-item:first-child {
-  border-left: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
 }
 
 .metric-topline {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
 }
 
 .metric-icon {
   display: grid;
-  width: 28px;
-  height: 28px;
   flex: none;
   place-items: center;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-muted);
-  color: var(--color-primary);
+  order: 2;
+  color: var(--color-text-secondary);
 }
 
 .metric-label {
@@ -170,9 +162,9 @@ function barWidth(bar: MetricStripBar): string {
   white-space: nowrap;
 }
 
-.tone-success .metric-icon { color: var(--color-success); background: var(--color-success-soft); border-color: var(--color-success-border); }
-.tone-warning .metric-icon { color: var(--color-warning); background: var(--color-warning-soft); border-color: var(--color-warning-border); }
-.tone-danger .metric-icon { color: var(--color-danger); background: var(--color-danger-soft); border-color: var(--color-danger-border); }
+.tone-success .metric-icon { color: var(--color-success); }
+.tone-warning .metric-icon { color: var(--color-warning); }
+.tone-danger .metric-icon { color: var(--color-danger); }
 
 .metric-skeleton {
   display: block;
@@ -206,16 +198,6 @@ function barWidth(bar: MetricStripBar): string {
   .metric-strip.count-5 {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
-
-  .metric-strip.count-4 .metric-item:nth-child(4),
-  .metric-strip.count-5 .metric-item:nth-child(4) {
-    border-left: 0;
-  }
-
-  .metric-strip.count-4 .metric-item:nth-child(n + 4),
-  .metric-strip.count-5 .metric-item:nth-child(n + 4) {
-    border-top: 1px solid var(--color-border);
-  }
 }
 
 @media (max-width: 600px) {
@@ -223,18 +205,6 @@ function barWidth(bar: MetricStripBar): string {
   .metric-strip.count-4,
   .metric-strip.count-5 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .metric-strip .metric-item:nth-child(odd) {
-    border-left: 0;
-  }
-
-  .metric-strip .metric-item:nth-child(even) {
-    border-left: 1px solid var(--color-border);
-  }
-
-  .metric-strip .metric-item:nth-child(n + 3) {
-    border-top: 1px solid var(--color-border);
   }
 }
 
@@ -244,15 +214,6 @@ function barWidth(bar: MetricStripBar): string {
   .metric-strip.count-4,
   .metric-strip.count-5 {
     grid-template-columns: 1fr;
-  }
-
-  .metric-strip .metric-item {
-    border-left: 0;
-    border-top: 1px solid var(--color-border);
-  }
-
-  .metric-strip .metric-item:first-child {
-    border-top: 0;
   }
 }
 </style>

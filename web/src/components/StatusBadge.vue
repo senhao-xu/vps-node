@@ -32,9 +32,9 @@ const toneClass = computed(() => props.tone ?? 'muted')
 }
 
 .badge.success {
-  border-color: var(--color-success-border);
-  background: var(--color-success-soft);
-  color: var(--color-success);
+  border-color: transparent;
+  background: var(--color-success-solid);
+  color: var(--color-on-accent);
 }
 
 .badge.warning {
@@ -56,9 +56,9 @@ const toneClass = computed(() => props.tone ?? 'muted')
 }
 
 .badge.purple {
-  border-color: var(--color-badge-purple-border);
-  background: var(--color-badge-purple-soft);
-  color: var(--color-badge-purple);
+  border-color: transparent;
+  background: var(--color-badge-purple-solid);
+  color: var(--color-on-accent);
 }
 
 .badge.muted {

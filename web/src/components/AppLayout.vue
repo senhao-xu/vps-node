@@ -422,17 +422,6 @@ onBeforeUnmount(() => {
   font-weight: 700;
 }
 
-.nav-item.active::before {
-  position: absolute;
-  top: 9px;
-  bottom: 9px;
-  left: 0;
-  width: 3px;
-  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
-  background: var(--color-primary);
-  content: '';
-}
-
 .sidebar-status {
   display: grid;
   gap: 9px;
