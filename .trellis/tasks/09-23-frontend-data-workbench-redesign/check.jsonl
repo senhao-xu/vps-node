@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Verify shared component contracts, semantic tables, overlays, dialogs, and mandatory loading/error/empty behavior."}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Verify token ownership, dark parity, responsive shell, page-level overflow, and placement of shared versus page CSS."}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Verify no any/raw fetch/duplicate API DTOs and typed store/component interfaces."}
+{"file": ".trellis/tasks/09-23-frontend-data-workbench-redesign/prd.md", "reason": "Acceptance criteria AC1-AC8 and full-scope behavior to verify."}
+{"file": ".trellis/tasks/09-23-frontend-data-workbench-redesign/research/codebase-ui-audit.md", "reason": "Affected-file and risk inventory used to detect missed surfaces or behavior regressions."}
+{"file": ".trellis/tasks/09-23-frontend-data-workbench-redesign/design.md", "reason": "Implementation design contract for shell, overview polling, MetricStrip, page composition, themes, responsive behavior, and accessibility."}
+{"file": ".trellis/tasks/09-23-frontend-data-workbench-redesign/implement.md", "reason": "Batch checklist, required commands, visual matrix, and review gates."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Verify overview polling ownership, error/stale semantics, API-backed labels, and shell/page consumers."}
