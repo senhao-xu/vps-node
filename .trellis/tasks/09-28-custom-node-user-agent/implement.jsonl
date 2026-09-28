@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "新增 0008 migration（ALTER TABLE 加列）须遵循 SQLite 迁移与幂等规范。"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "user_agent 校验的错误码（422 validation）与端点契约须一致；参考 custom node entries 场景。"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "migration/repo/web/前端类型的归属与显式列清单约定。"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "预设常量与 api 类型的单点归属约定。"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "表单中 AppSelect + 条件输入的复用与可访问性约定。"}

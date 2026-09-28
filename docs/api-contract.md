@@ -371,12 +371,14 @@ agents, never carry traffic/device statistics, and cannot be used as a node's ch
 Response `200`:
 
 ```json
-{ "items": [ { "id": 1, "name": "airport-A", "source_type": "links", "status": "active", "has_cache": false, "fetched_at": null, "created_at": "...", "updated_at": "..." } ] }
+{ "items": [ { "id": 1, "name": "airport-A", "source_type": "links", "user_agent": "", "status": "active", "has_cache": false, "fetched_at": null, "created_at": "...", "updated_at": "..." } ] }
 ```
 
 `content` is never echoed. `has_cache` / `fetched_at` describe the cached upstream payload for
 `subscription`-type entries (refreshed with a 5-minute TTL at render time; a failed fetch falls
-back to the last cache, otherwise the entry is skipped).
+back to the last cache, otherwise the entry is skipped). `user_agent` is the upstream request
+header for `subscription` entries; an empty value means the built-in default
+(`clash-verge/v2.0.0`). It is always empty for `links` entries.
 
 ### POST /api/custom-nodes
 
@@ -384,11 +386,11 @@ back to the last cache, otherwise the entry is skipped).
 { "name": "airport-A", "source_type": "links", "content": "ss://...\nvless://..." }
 ```
 
-`source_type` is `links` (one share URI per line; supported schemes `ss`/`vless`/`hysteria2`/`anytls`/`trojan`/`vmess`) or `subscription` (an `http(s)` URL, fetched server-side with a 5s timeout, 1 MiB cap and at most 3 redirects). Response `201`: the custom node DTO plus an optional `warnings` array listing lines that could not be converted to a Clash proxy (unparseable lines are still stored and pass through `flag=general` unchanged). Duplicate `name` → `409 conflict`; empty/invalid content → `422 validation`.
+`source_type` is `links` (one share URI per line; supported schemes `ss`/`vless`/`hysteria2`/`anytls`/`trojan`/`vmess`) or `subscription` (an `http(s)` URL, fetched server-side with a 5s timeout, 1 MiB cap and at most 3 redirects). `subscription` entries may set `user_agent` (empty/omitted = default `clash-verge/v2.0.0`); `links` entries ignore it. Response `201`: the custom node DTO plus an optional `warnings` array listing lines that could not be converted to a Clash proxy (unparseable lines are still stored and pass through `flag=general` unchanged). Duplicate `name` → `409 conflict`; empty/invalid content → `422 validation`; `user_agent` longer than 255 characters or containing control characters → `422 validation`.
 
 ### PUT /api/custom-nodes/:id
 
-Partial update of `name`, `content` (omit to keep; `source_type` is immutable) and `status`. Response `200`: the DTO plus optional `warnings`. Duplicate `name` → `409 conflict`.
+Partial update of `name`, `content` (omit to keep; `source_type` is immutable), `status` and — for `subscription` sources — `user_agent` (empty string restores the default; omitting keeps the stored value). Changing the content or the `user_agent` invalidates the fetch cache. Response `200`: the DTO plus optional `warnings`. Duplicate `name` → `409 conflict`.
 
 ### DELETE /api/custom-nodes/:id
 
@@ -423,7 +425,7 @@ and leaves the previous cache and `fetched_at` untouched.
 Response `200`:
 
 ```json
-{ "custom_node_ids": [1], "custom_nodes": [ { "id": 1, "name": "airport-A", "source_type": "links", "status": "active", "has_cache": false, "fetched_at": null, "created_at": "...", "updated_at": "..." } ] }
+{ "custom_node_ids": [1], "custom_nodes": [ { "id": 1, "name": "airport-A", "source_type": "links", "user_agent": "", "status": "active", "has_cache": false, "fetched_at": null, "created_at": "...", "updated_at": "..." } ] }
 ```
 
 ### PUT /api/users/:id/custom-nodes

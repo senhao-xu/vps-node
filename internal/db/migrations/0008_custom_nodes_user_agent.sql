@@ -1,0 +1,1 @@
+ALTER TABLE custom_nodes ADD COLUMN user_agent TEXT NOT NULL DEFAULT '';

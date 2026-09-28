@@ -350,6 +350,7 @@ export type CustomNode = {
   id: number
   name: string
   source_type: CustomNodeSourceType
+  user_agent: string
   status: NodeStatus
   has_cache: boolean
   fetched_at: string | null
@@ -378,12 +379,14 @@ export type CreateCustomNodeInput = {
   name: string
   source_type: CustomNodeSourceType
   content: string
+  user_agent?: string
 }
 
 export type UpdateCustomNodeInput = {
   name?: string
   content?: string
   status?: NodeStatus
+  user_agent?: string
 }
 
 export type UserCustomNodes = {

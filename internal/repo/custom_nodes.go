@@ -23,6 +23,7 @@ type CustomNode struct {
 	ID            int64
 	Name          string
 	SourceType    string
+	UserAgent     string
 	ContentEnc    []byte
 	CachedContent string
 	FetchedAt     time.Time
@@ -34,11 +35,12 @@ type CustomNode struct {
 type NewCustomNode struct {
 	Name       string
 	SourceType string
+	UserAgent  string
 	ContentEnc []byte
 	Status     string
 }
 
-const customNodeSelect = `SELECT id, name, source_type, content_enc, cached_content, fetched_at, status, created_at, updated_at FROM custom_nodes`
+const customNodeSelect = `SELECT id, name, source_type, content_enc, cached_content, fetched_at, status, created_at, updated_at, user_agent FROM custom_nodes`
 
 func (r *Repo) CreateCustomNode(ctx context.Context, n NewCustomNode) (int64, error) {
 	if n.Status == "" {
@@ -46,9 +48,9 @@ func (r *Repo) CreateCustomNode(ctx context.Context, n NewCustomNode) (int64, er
 	}
 	now := nowUnix()
 	res, err := r.DB.ExecContext(ctx,
-		`INSERT INTO custom_nodes (name, source_type, content_enc, status, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
-		n.Name, n.SourceType, n.ContentEnc, n.Status, now, now)
+		`INSERT INTO custom_nodes (name, source_type, content_enc, status, created_at, updated_at, user_agent)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		n.Name, n.SourceType, n.ContentEnc, n.Status, now, now, n.UserAgent)
 	if err != nil {
 		return 0, mapErr(err)
 	}
@@ -88,7 +90,7 @@ func (r *Repo) ListCustomNodesByIDs(ctx context.Context, ids []int64) ([]CustomN
 // the given user, ordered by id so subscription output is stable.
 func (r *Repo) ListActiveCustomNodesByUser(ctx context.Context, userID int64) ([]CustomNode, error) {
 	rows, err := r.DB.QueryContext(ctx,
-		`SELECT c.id, c.name, c.source_type, c.content_enc, c.cached_content, c.fetched_at, c.status, c.created_at, c.updated_at
+		`SELECT c.id, c.name, c.source_type, c.content_enc, c.cached_content, c.fetched_at, c.status, c.created_at, c.updated_at, c.user_agent
 		 FROM custom_nodes c
 		 JOIN user_custom_nodes ucn ON ucn.custom_node_id = c.id
 		 WHERE ucn.user_id = ? AND c.status = ? ORDER BY c.id`, userID, CustomNodeStatusActive)
@@ -98,21 +100,24 @@ func (r *Repo) ListActiveCustomNodesByUser(ctx context.Context, userID int64) ([
 	return collectCustomNodes(rows)
 }
 
-// UpdateCustomNode applies a full edit. When contentEnc is nil the stored
-// content (and its fetch cache) is kept; when it changes, the fetch cache is
-// invalidated so a renamed subscription URL never serves stale upstream data.
-func (r *Repo) UpdateCustomNode(ctx context.Context, id int64, name string, contentEnc []byte, status string) error {
-	var res sql.Result
-	var err error
-	if contentEnc == nil {
-		res, err = r.DB.ExecContext(ctx,
-			`UPDATE custom_nodes SET name = ?, status = ?, updated_at = ? WHERE id = ?`,
-			name, status, nowUnix(), id)
-	} else {
-		res, err = r.DB.ExecContext(ctx,
-			`UPDATE custom_nodes SET name = ?, content_enc = ?, cached_content = '', fetched_at = 0, status = ?, updated_at = ? WHERE id = ?`,
-			name, contentEnc, status, nowUnix(), id)
+// UpdateCustomNode applies a full edit. name, user_agent and status are always
+// updated. When contentEnc is nil the stored content is kept; when it changes
+// it is replaced. The fetch cache is invalidated when the content changes or
+// the caller explicitly asks for it (e.g. a User-Agent change), so a renamed
+// or re-targeted subscription never serves stale upstream data.
+func (r *Repo) UpdateCustomNode(ctx context.Context, id int64, name string, contentEnc []byte, status, userAgent string, invalidateCache bool) error {
+	sets := []string{"name = ?", "user_agent = ?", "status = ?", "updated_at = ?"}
+	args := []any{name, userAgent, status, nowUnix()}
+	if contentEnc != nil {
+		sets = append(sets, "content_enc = ?")
+		args = append(args, contentEnc)
 	}
+	if contentEnc != nil || invalidateCache {
+		sets = append(sets, "cached_content = ''", "fetched_at = 0")
+	}
+	args = append(args, id)
+	res, err := r.DB.ExecContext(ctx,
+		`UPDATE custom_nodes SET `+strings.Join(sets, ", ")+` WHERE id = ?`, args...)
 	if err != nil {
 		return mapErr(err)
 	}
@@ -210,7 +215,7 @@ func scanCustomNode(scan func(dest ...any) error) (CustomNode, error) {
 	var n CustomNode
 	var contentEnc []byte
 	var fetchedAt, createdAt, updatedAt int64
-	err := scan(&n.ID, &n.Name, &n.SourceType, &contentEnc, &n.CachedContent, &fetchedAt, &n.Status, &createdAt, &updatedAt)
+	err := scan(&n.ID, &n.Name, &n.SourceType, &contentEnc, &n.CachedContent, &fetchedAt, &n.Status, &createdAt, &updatedAt, &n.UserAgent)
 	if err != nil {
 		return CustomNode{}, mapErr(err)
 	}

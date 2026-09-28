@@ -5,9 +5,16 @@ import { errorMessage } from '@/api/http'
 import type { CustomNode, CustomNodeSourceType } from '@/api/types'
 import ErrorBanner from '@/components/ErrorBanner.vue'
 import ModalDialog from '@/components/ModalDialog.vue'
+import AppSelect from '@/components/ui/AppSelect.vue'
 import LoadingSpinner from '@/components/ui/LoadingSpinner.vue'
 import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
+import {
+  CUSTOM_USER_AGENT_CHOICE,
+  DEFAULT_CUSTOM_NODE_USER_AGENT,
+  USER_AGENT_PRESETS,
+  isUserAgentPreset,
+} from '@/utils/customNodeUserAgents'
 
 const props = withDefaults(
   defineProps<{
@@ -26,6 +33,8 @@ const name = ref('')
 const sourceType = ref<CustomNodeSourceType>('links')
 const content = ref('')
 const status = ref<'active' | 'disabled'>('active')
+const userAgentChoice = ref<string>(DEFAULT_CUSTOM_NODE_USER_AGENT)
+const customUserAgent = ref('')
 
 const submitting = ref(false)
 const error = ref('')
@@ -39,6 +48,16 @@ const sourceOptions: Array<{ value: CustomNodeSourceType; label: string }> = [
   { value: 'subscription', label: '订阅链接' },
 ]
 
+const userAgentOptions = computed(() => [
+  ...USER_AGENT_PRESETS,
+  { value: CUSTOM_USER_AGENT_CHOICE, label: '自定义…' },
+])
+
+const effectiveUserAgent = computed(() => {
+  if (userAgentChoice.value === CUSTOM_USER_AGENT_CHOICE) return customUserAgent.value.trim()
+  return userAgentChoice.value
+})
+
 watch(
   () => props.open,
   (open) => {
@@ -49,6 +68,14 @@ watch(
     sourceType.value = props.node?.source_type ?? 'links'
     content.value = ''
     status.value = props.node?.status === 'disabled' ? 'disabled' : 'active'
+    const userAgent = props.node?.user_agent ?? ''
+    if (userAgent === '' || isUserAgentPreset(userAgent)) {
+      userAgentChoice.value = userAgent === '' ? DEFAULT_CUSTOM_NODE_USER_AGENT : userAgent
+      customUserAgent.value = ''
+    } else {
+      userAgentChoice.value = CUSTOM_USER_AGENT_CHOICE
+      customUserAgent.value = userAgent
+    }
   },
 )
 
@@ -70,6 +97,12 @@ const validationMessage = computed(() => {
   if (sourceType.value === 'subscription' && content.value.trim()) {
     const raw = content.value.trim()
     if (!/^https?:\/\//i.test(raw)) return '订阅 URL 必须是 http 或 https 地址'
+    const userAgent = effectiveUserAgent.value
+    if (userAgent.length > 255) return 'User-Agent 最长 255 个字符'
+    for (const ch of userAgent) {
+      const code = ch.codePointAt(0) ?? 0
+      if (code < 0x20 || code === 0x7f) return 'User-Agent 不能包含控制字符'
+    }
   }
   return ''
 })
@@ -94,11 +127,17 @@ async function submit() {
             name: name.value.trim(),
             status: status.value,
             ...(trimmedContent ? { content: trimmedContent } : {}),
+            ...(sourceType.value === 'subscription'
+              ? { user_agent: effectiveUserAgent.value }
+              : {}),
           })
         : await createCustomNode({
             name: name.value.trim(),
             source_type: sourceType.value,
             content: trimmedContent,
+            ...(sourceType.value === 'subscription'
+              ? { user_agent: effectiveUserAgent.value }
+              : {}),
           })
     emit('saved')
     if (result.warnings && result.warnings.length > 0) {
@@ -197,6 +236,29 @@ async function submit() {
           class="field-hint"
         >
           内容不回显；留空表示保持不变。替换订阅 URL 会立即丢弃旧缓存。
+        </p>
+      </div>
+
+      <div
+        v-if="sourceType === 'subscription'"
+        class="field"
+      >
+        <label id="custom-node-user-agent-label">上游 User-Agent</label>
+        <AppSelect
+          v-model="userAgentChoice"
+          :options="userAgentOptions"
+          label="上游 User-Agent"
+        />
+        <input
+          v-if="userAgentChoice === CUSTOM_USER_AGENT_CHOICE"
+          v-model="customUserAgent"
+          type="text"
+          maxlength="255"
+          placeholder="留空使用默认 Clash UA"
+        >
+        <p class="field-hint">
+          部分上游按 User-Agent 返回不同内容；留空使用默认
+          <code>{{ DEFAULT_CUSTOM_NODE_USER_AGENT }}</code>。修改后会清空该节点的上游缓存。
         </p>
       </div>
 

@@ -17,6 +17,7 @@ type customNodeDTO struct {
 	ID         int64   `json:"id"`
 	Name       string  `json:"name"`
 	SourceType string  `json:"source_type"`
+	UserAgent  string  `json:"user_agent"`
 	Status     string  `json:"status"`
 	HasCache   bool    `json:"has_cache"`
 	FetchedAt  *string `json:"fetched_at"`
@@ -40,6 +41,7 @@ func toCustomNodeDTO(n repo.CustomNode) customNodeDTO {
 		ID:         n.ID,
 		Name:       n.Name,
 		SourceType: n.SourceType,
+		UserAgent:  n.UserAgent,
 		Status:     n.Status,
 		HasCache:   n.CachedContent != "",
 		FetchedAt:  fetchedAt,
@@ -159,7 +161,7 @@ func (h *Handler) handleCustomNodeRefresh(w http.ResponseWriter, r *http.Request
 		writeErr(w, err)
 		return
 	}
-	content, err := subscription.FetchSubscription(r.Context(), strings.TrimSpace(string(upstream)))
+	content, err := subscription.FetchSubscription(r.Context(), strings.TrimSpace(string(upstream)), cn.UserAgent)
 	if err != nil {
 		writeErr(w, errInternal("failed to fetch upstream subscription: "+err.Error()))
 		return
@@ -191,20 +193,36 @@ func (h *Handler) handleCustomNodeList(w http.ResponseWriter, r *http.Request) {
 }
 
 type customNodeRequest struct {
-	Name    string  `json:"name"`
-	Content *string `json:"content"`
-	Status  string  `json:"status"`
+	Name      string  `json:"name"`
+	Content   *string `json:"content"`
+	Status    string  `json:"status"`
+	UserAgent *string `json:"user_agent"`
 }
 
 type createCustomNodeRequest struct {
 	Name       string `json:"name"`
 	SourceType string `json:"source_type"`
 	Content    string `json:"content"`
+	UserAgent  string `json:"user_agent"`
 }
 
 func validateCustomNodeName(name string) error {
 	if name == "" || len(name) > 128 {
 		return errValidation("name must be 1-128 characters")
+	}
+	return nil
+}
+
+// validateUserAgent rejects values that could inject extra HTTP headers and
+// caps the length. An empty value is valid and means "use the default".
+func validateUserAgent(ua string) error {
+	if len(ua) > 255 {
+		return errValidation("user_agent must be at most 255 characters")
+	}
+	for _, r := range ua {
+		if r < 0x20 || r == 0x7f {
+			return errValidation("user_agent must not contain control characters")
+		}
 	}
 	return nil
 }
@@ -267,9 +285,18 @@ func (h *Handler) handleCustomNodeCreate(w http.ResponseWriter, r *http.Request)
 		writeErr(w, err)
 		return
 	}
+	userAgent := ""
+	if req.SourceType == repo.CustomNodeSourceSubscription {
+		userAgent = strings.TrimSpace(req.UserAgent)
+		if err := validateUserAgent(userAgent); err != nil {
+			writeErr(w, err)
+			return
+		}
+	}
 	id, err := h.repo.CreateCustomNode(r.Context(), repo.NewCustomNode{
 		Name:       req.Name,
 		SourceType: req.SourceType,
+		UserAgent:  userAgent,
 		ContentEnc: enc,
 	})
 	if err != nil {
@@ -341,7 +368,17 @@ func (h *Handler) handleCustomNodeUpdate(w http.ResponseWriter, r *http.Request)
 			warnings = linkWarnings(content)
 		}
 	}
-	if err := h.repo.UpdateCustomNode(r.Context(), id, name, contentEnc, status); err != nil {
+	// links sources never carry a User-Agent, so their stored value stays empty.
+	userAgent := existing.UserAgent
+	if existing.SourceType == repo.CustomNodeSourceSubscription && req.UserAgent != nil {
+		userAgent = strings.TrimSpace(*req.UserAgent)
+		if err := validateUserAgent(userAgent); err != nil {
+			writeErr(w, err)
+			return
+		}
+	}
+	invalidateCache := contentEnc != nil || userAgent != existing.UserAgent
+	if err := h.repo.UpdateCustomNode(r.Context(), id, name, contentEnc, status, userAgent, invalidateCache); err != nil {
 		if err == repo.ErrConflict {
 			writeErr(w, errConflict("a custom node with this name already exists"))
 			return

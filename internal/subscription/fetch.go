@@ -21,6 +21,8 @@ const (
 	MaxFetchRedirects = 3
 	// CacheTTL is how long a fetched upstream subscription is reused.
 	CacheTTL = 5 * time.Minute
+	// DefaultUserAgent is sent when a custom node leaves its User-Agent unset.
+	DefaultUserAgent = "clash-verge/v2.0.0"
 )
 
 var errTooManyRedirects = fmt.Errorf("too many redirects")
@@ -35,11 +37,12 @@ var fetchClient = &http.Client{
 	},
 }
 
-// FetchSubscription downloads an upstream subscription document. SSRF
-// surface is limited to http/https with a hard timeout and a response size
-// cap; administrators may legitimately point at in-network URLs, so no IP
-// range filtering is applied.
-func FetchSubscription(ctx context.Context, rawURL string) (string, error) {
+// FetchSubscription downloads an upstream subscription document with the given
+// User-Agent; an empty userAgent falls back to DefaultUserAgent. SSRF surface
+// is limited to http/https with a hard timeout and a response size cap;
+// administrators may legitimately point at in-network URLs, so no IP range
+// filtering is applied.
+func FetchSubscription(ctx context.Context, rawURL, userAgent string) (string, error) {
 	u, err := url.Parse(strings.TrimSpace(rawURL))
 	if err != nil {
 		return "", fmt.Errorf("invalid subscription URL: %w", err)
@@ -54,7 +57,10 @@ func FetchSubscription(ctx context.Context, rawURL string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("build subscription request: %w", err)
 	}
-	req.Header.Set("User-Agent", "vps-node-panel")
+	if userAgent == "" {
+		userAgent = DefaultUserAgent
+	}
+	req.Header.Set("User-Agent", userAgent)
 	resp, err := fetchClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("fetch subscription: %w", err)
