@@ -226,3 +226,25 @@ Added two ranking cards to the dashboard (节点流量消耗排行 / 用户消�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 6: Custom node per-entry auth + SOCKS5 managed protocol
+
+**Date**: 2026-09-28
+**Task**: Custom node per-entry auth + SOCKS5 managed protocol
+**Branch**: `main`
+
+### Summary
+
+Implemented per-user entry (line) authorization for custom nodes (user_custom_node_entries, entry keys, picker dialog) and added SOCKS5 as a managed node protocol end-to-end (sing-box inbound/outbound, subscription socks/socks5, migration 0011, frontend). Both tasks archived.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `95ed101` | (see git log) |
+| `6e97ae1` | (see git log) |
+
+### Status
+
+[OK] **Completed**
