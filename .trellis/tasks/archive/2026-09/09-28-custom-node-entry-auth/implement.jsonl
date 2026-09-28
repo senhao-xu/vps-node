@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "新增迁移 0010、Tx 内整集替换、FK 级联与迁移幂等测试约定"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "PUT 用户自定义节点的 422 validation 矩阵与错误 envelope 约定"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "web/src/api/types.ts 是 api-contract 的唯一镜像，必须同任务同步更新"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "该特性跨越 DB/repo/HTTP DTO/subscription 渲染/Vue 多层，含数据格式变化"}
