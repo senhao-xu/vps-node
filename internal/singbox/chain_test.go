@@ -215,10 +215,53 @@ func TestRenderChainSocks(t *testing.T) {
 	}
 }
 
+func TestRenderChainHTTP(t *testing.T) {
+	entry := singbox.Node{
+		ID: 1, Protocol: singbox.ProtocolShadowsocks, Port: 10001,
+		Settings: map[string]any{"cipher": singbox.SSMethod2022Aes128Gcm},
+	}
+	plainExit := singbox.Node{ID: 2, Protocol: singbox.ProtocolHTTP, Port: 8080}
+	config, err := singbox.Render(testAppKey, []singbox.Node{entry}, singbox.ChainExit{
+		EntryNodeID: 1, EntryServerID: 3, Exit: plainExit, DialAddress: "exit.example.com",
+	})
+	if err != nil {
+		t.Fatalf("render plain http chain: %v", err)
+	}
+	chain := config["outbounds"].([]map[string]any)[1]
+	if chain["type"] != "http" || chain["tag"] != "chain-1" ||
+		chain["server"] != "exit.example.com" || chain["server_port"] != 8080 ||
+		chain["username"] != singbox.RelayUserName(3) || chain["password"] != singbox.DeriveRelayPassword(testAppKey, 2, 3) {
+		t.Fatalf("unexpected http chain outbound: %+v", chain)
+	}
+	if _, has := chain["tls"]; has {
+		t.Fatalf("a plaintext http exit must not attach tls: %+v", chain)
+	}
+
+	tlsExit := singbox.Node{
+		ID: 2, Protocol: singbox.ProtocolHTTP, Port: 8443,
+		Settings: map[string]any{"tls": map[string]any{"server_name": "http.exit.com"}},
+		Secret:   map[string]any{"certificate": "-----BEGIN CERTIFICATE-----\nc1\n-----END CERTIFICATE-----"},
+	}
+	config, err = singbox.Render(testAppKey, []singbox.Node{entry}, singbox.ChainExit{
+		EntryNodeID: 1, EntryServerID: 3, Exit: tlsExit, DialAddress: "exit.example.com",
+	})
+	if err != nil {
+		t.Fatalf("render tls http chain: %v", err)
+	}
+	chain = config["outbounds"].([]map[string]any)[1]
+	tlsMap, ok := chain["tls"].(map[string]any)
+	if !ok || tlsMap["enabled"] != true || tlsMap["server_name"] != "http.exit.com" {
+		t.Fatalf("tls http chain must carry tls, got %+v", chain)
+	}
+	if cert, ok := tlsMap["certificate"].([]string); !ok || len(cert) != 3 {
+		t.Fatalf("stored exit certificate must be pinned, got %+v", tlsMap)
+	}
+}
+
 func TestRenderRelayUsersInjected(t *testing.T) {
 	// Exit-side: the inbound carries one relay pseudo user per entry server,
 	// and the credential matches what the entry-side outbound derives.
-	for _, protocol := range []string{singbox.ProtocolShadowsocks, singbox.ProtocolVLESS, singbox.ProtocolHysteria2, singbox.ProtocolAnyTLS, singbox.ProtocolSocks} {
+	for _, protocol := range []string{singbox.ProtocolShadowsocks, singbox.ProtocolVLESS, singbox.ProtocolHysteria2, singbox.ProtocolAnyTLS, singbox.ProtocolSocks, singbox.ProtocolHTTP} {
 		node := singbox.Node{ID: 9, Protocol: protocol, Port: 9000, Relays: []singbox.Relay{{EntryServerID: 3}}}
 		switch protocol {
 		case singbox.ProtocolShadowsocks:
@@ -227,7 +270,7 @@ func TestRenderRelayUsersInjected(t *testing.T) {
 			privateKey, _ := testRealityKey(t)
 			node.Settings = map[string]any{"reality_settings": map[string]any{"server_name": "a.com"}}
 			node.Secret = map[string]any{"private_key": privateKey}
-		case singbox.ProtocolHysteria2, singbox.ProtocolAnyTLS, singbox.ProtocolSocks:
+		case singbox.ProtocolHysteria2, singbox.ProtocolAnyTLS, singbox.ProtocolSocks, singbox.ProtocolHTTP:
 			node.Settings = map[string]any{"tls": map[string]any{"server_name": "a.com"}}
 		}
 		config, err := singbox.Render(testAppKey, []singbox.Node{node})
@@ -239,7 +282,7 @@ func TestRenderRelayUsersInjected(t *testing.T) {
 			t.Fatalf("%s must carry the relay pseudo user, got %+v", protocol, users)
 		}
 		nameKey := "name"
-		if protocol == singbox.ProtocolSocks {
+		if protocol == singbox.ProtocolSocks || protocol == singbox.ProtocolHTTP {
 			nameKey = "username"
 		}
 		if users[0][nameKey] != singbox.RelayUserName(3) {

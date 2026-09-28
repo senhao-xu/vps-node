@@ -31,8 +31,8 @@ func TestRenderGeneralIncludesAllProtocolsWithoutPrivateKey(t *testing.T) {
 	if _, err := rand.Read(key); err != nil {
 		t.Fatal(err)
 	}
-	nodes := []Node{testNode(t, "shadowsocks"), testNode(t, "vless"), testNode(t, "hysteria2"), testNode(t, "anytls"), testNode(t, "socks")}
-	nodes[1].ID, nodes[2].ID, nodes[3].ID, nodes[4].ID = 2, 3, 4, 5
+	nodes := []Node{testNode(t, "shadowsocks"), testNode(t, "vless"), testNode(t, "hysteria2"), testNode(t, "anytls"), testNode(t, "socks"), testNode(t, "http")}
+	nodes[1].ID, nodes[2].ID, nodes[3].ID, nodes[4].ID, nodes[5].ID = 2, 3, 4, 5, 6
 	encoded, err := RenderGeneral(key, User{UUID: "user-uuid"}, nodes)
 	if err != nil {
 		t.Fatal(err)
@@ -42,7 +42,7 @@ func TestRenderGeneralIncludesAllProtocolsWithoutPrivateKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(raw)
-	for _, prefix := range []string{"ss://", "vless://", "hysteria2://", "anytls://", "socks://"} {
+	for _, prefix := range []string{"ss://", "vless://", "hysteria2://", "anytls://", "socks://", "http://"} {
 		if !strings.Contains(text, prefix) {
 			t.Fatalf("missing %s in %q", prefix, text)
 		}
@@ -231,6 +231,78 @@ func TestRenderSocksLinkAndProxy(t *testing.T) {
 	expanded := groups[0].(map[string]any)["proxies"].([]any)
 	if len(expanded) != 1 || expanded[0].(string) != "node one" {
 		t.Fatalf("__SOCKS_PROXIES__ must expand to the socks node, got %v", expanded)
+	}
+}
+
+func TestRenderHTTPLinkAndProxy(t *testing.T) {
+	key := make([]byte, 32)
+	user := User{ID: 9, UUID: "uuid-9"}
+	plain := Node{ID: 71, Name: "node one", Protocol: "http", Address: "http.example.com", Port: 8080}
+
+	encoded, err := RenderGeneral(key, user, []Node{plain})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "http://u-9:uuid-9@http.example.com:8080#node%20one"
+	if string(raw) != want {
+		t.Fatalf("plaintext http link = %q, want %q", string(raw), want)
+	}
+
+	template := "proxy-groups:\n  - {name: http, type: select, proxies: [__HTTP_PROXIES__]}\n"
+	out, err := RenderClash(key, user, template, []Node{plain})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config map[string]any
+	if err := yaml.Unmarshal(out, &config); err != nil {
+		t.Fatal(err)
+	}
+	proxy := config["proxies"].([]any)[0].(map[string]any)
+	if proxy["type"] != "http" || proxy["username"] != "u-9" || proxy["password"] != "uuid-9" || proxy["udp"] != true {
+		t.Fatalf("unexpected plaintext http clash proxy: %+v", proxy)
+	}
+	if _, has := proxy["tls"]; has {
+		t.Fatalf("plaintext http clash proxy must not carry tls: %+v", proxy)
+	}
+	groups := config["proxy-groups"].([]any)
+	expanded := groups[0].(map[string]any)["proxies"].([]any)
+	if len(expanded) != 1 || expanded[0].(string) != "node one" {
+		t.Fatalf("__HTTP_PROXIES__ must expand to the http node, got %v", expanded)
+	}
+
+	secure := Node{
+		ID: 72, Name: "tls node", Protocol: "http", Address: "http.example.com", Port: 8443,
+		Settings: map[string]any{"tls": map[string]any{"server_name": "http.example.com", "allow_insecure": true}},
+		Secret:   map[string]any{"certificate": "-----BEGIN CERTIFICATE-----\nc1\n-----END CERTIFICATE-----"},
+	}
+	encoded, err = RenderGeneral(key, user, []Node{secure})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err = base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tlsWant := "http://u-9:uuid-9@http.example.com:8443?allowInsecure=1&sni=http.example.com&tls=1#tls%20node"
+	if string(raw) != tlsWant {
+		t.Fatalf("tls http link = %q, want %q", string(raw), tlsWant)
+	}
+
+	out, err = RenderClash(key, user, template, []Node{secure})
+	if err != nil {
+		t.Fatal(err)
+	}
+	config = map[string]any{}
+	if err := yaml.Unmarshal(out, &config); err != nil {
+		t.Fatal(err)
+	}
+	proxy = config["proxies"].([]any)[0].(map[string]any)
+	if proxy["tls"] != true || proxy["sni"] != "http.example.com" || proxy["skip-cert-verify"] != true {
+		t.Fatalf("unexpected tls http clash proxy: %+v", proxy)
 	}
 }
 

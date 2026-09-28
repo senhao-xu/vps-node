@@ -314,6 +314,71 @@ func TestRenderSOCKS(t *testing.T) {
 	}
 }
 
+func TestRenderHTTPPlain(t *testing.T) {
+	node := singbox.Node{
+		ID:       71,
+		Name:     "hk-http",
+		Protocol: singbox.ProtocolHTTP,
+		Port:     8080,
+		Users:    []singbox.User{{ID: 1, UUID: "uuid-1"}, {ID: 2, UUID: "uuid-2"}},
+	}
+	config, err := singbox.Render(testAppKey, []singbox.Node{node})
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	inbound := config["inbounds"].([]map[string]any)[0]
+	if inbound["type"] != "http" || inbound["tag"] != "http-71" ||
+		inbound["listen"] != "::" || inbound["listen_port"] != 8080 {
+		t.Fatalf("unexpected inbound: %+v", inbound)
+	}
+	users := inbound["users"].([]map[string]any)
+	if len(users) != 2 || users[0]["username"] != "u-1" || users[0]["password"] != "uuid-1" ||
+		users[1]["username"] != "u-2" || users[1]["password"] != "uuid-2" {
+		t.Fatalf("http users must use u-<id> usernames and uuids as passwords, got %+v", users)
+	}
+	if _, has := inbound["tls"]; has {
+		t.Fatalf("a plaintext http proxy must not carry a tls block: %+v", inbound)
+	}
+}
+
+func TestRenderHTTPTLS(t *testing.T) {
+	node := singbox.Node{
+		ID:       72,
+		Protocol: singbox.ProtocolHTTP,
+		Port:     8443,
+		Settings: map[string]any{"tls": map[string]any{"server_name": "http.example.com"}},
+		Secret: map[string]any{
+			"certificate": "-----BEGIN CERTIFICATE-----\nline1\nline2\n-----END CERTIFICATE-----",
+			"private_key": "-----BEGIN PRIVATE KEY-----\nkey1\n-----END PRIVATE KEY-----",
+		},
+		Users: []singbox.User{{ID: 7, UUID: "uuid-7"}},
+	}
+	config, err := singbox.Render(testAppKey, []singbox.Node{node})
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	inbound := config["inbounds"].([]map[string]any)[0]
+	if inbound["type"] != "http" || inbound["tag"] != "http-72" {
+		t.Fatalf("unexpected inbound: %+v", inbound)
+	}
+	tlsMap, ok := inbound["tls"].(map[string]any)
+	if !ok || tlsMap["enabled"] != true || tlsMap["server_name"] != "http.example.com" {
+		t.Fatalf("unexpected tls block: %+v", inbound["tls"])
+	}
+	certLines, ok := tlsMap["certificate"].([]string)
+	if !ok || len(certLines) != 4 || certLines[1] != "line1" {
+		t.Fatalf("certificate must be split into lines, got %v", tlsMap["certificate"])
+	}
+	keyLines, ok := tlsMap["key"].([]string)
+	if !ok || len(keyLines) != 3 || keyLines[1] != "key1" {
+		t.Fatalf("private key must be split into lines, got %v", tlsMap["key"])
+	}
+	// allow_insecure is a client-side-only setting and must not enter the inbound.
+	if _, has := tlsMap["allow_insecure"]; has {
+		t.Fatalf("allow_insecure must never enter the server inbound: %+v", tlsMap)
+	}
+}
+
 func TestRenderMultipleNodesShape(t *testing.T) {
 	nodes := []singbox.Node{
 		{ID: 41, Protocol: singbox.ProtocolHysteria2, Port: 10001,

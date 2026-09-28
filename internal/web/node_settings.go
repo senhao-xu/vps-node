@@ -80,6 +80,12 @@ var nodeSettingsSchemas = map[string]map[string]settingField{
 		"private_key": {secret: true, validate: pemField("settings.private_key")},
 	},
 	repo.ProtocolSocks: {},
+	repo.ProtocolHTTP: {
+		"tls.server_name":    {validate: optionalStringField("settings.tls.server_name", 253)},
+		"tls.allow_insecure": {validate: boolField("settings.tls.allow_insecure")},
+		"certificate":        {secret: true, validate: pemField("settings.certificate")},
+		"private_key":        {secret: true, validate: pemField("settings.private_key")},
+	},
 }
 
 func (h *Handler) buildNodeSettings(protocol string, raw json.RawMessage, currentSettings string, currentSecret []byte) (string, []byte, error) {
@@ -110,7 +116,7 @@ func (h *Handler) buildNodeSettings(protocol string, raw json.RawMessage, curren
 			return "", nil, errValidation("settings must be a JSON object")
 		}
 	}
-	if protocol == repo.ProtocolHysteria2 || protocol == repo.ProtocolAnyTLS {
+	if protocol == repo.ProtocolHysteria2 || protocol == repo.ProtocolAnyTLS || protocol == repo.ProtocolHTTP {
 		_, certSet := parsed["certificate"]
 		_, keySet := parsed["private_key"]
 		if certSet != keySet {
@@ -259,6 +265,17 @@ func validateProtocolSettings(protocol string, plain, secretFields map[string]an
 			}
 		}
 	case repo.ProtocolHysteria2, repo.ProtocolAnyTLS:
+		return validateTLSMaterial(protocol, plain, secretFields)
+	case repo.ProtocolHTTP:
+		// TLS is optional: only a node that actually requests it (a server
+		// name or a certificate/key) must carry the complete, matching pair;
+		// otherwise the node is a plaintext HTTP proxy.
+		name, _ := nestingString(plain, "tls", "server_name")
+		certificate, certOK := secretFields["certificate"].(string)
+		privateKey, keyOK := secretFields["private_key"].(string)
+		if name == "" && !(certOK && certificate != "") && !(keyOK && privateKey != "") {
+			return nil
+		}
 		return validateTLSMaterial(protocol, plain, secretFields)
 	case repo.ProtocolSocks:
 		return nil

@@ -440,9 +440,10 @@ func TestCustomNodeEntriesChainSupported(t *testing.T) {
 		t.Fatalf("ss must be chain_supported, got %v", got)
 	}
 
-	// An upstream Clash proxy of a type the converter cannot render.
+	// An upstream Clash proxy source with one supported (http) and one
+	// unsupported (snell) type.
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte("proxies:\n  - name: plain-http\n    type: http\n    server: 198.51.100.7\n    port: 8080\n"))
+		_, _ = w.Write([]byte("proxies:\n  - name: plain-http\n    type: http\n    server: 198.51.100.7\n    port: 8080\n  - name: plain-snell\n    type: snell\n    server: 198.51.100.8\n    port: 8081\n"))
 	}))
 	defer upstream.Close()
 	resp, body := e.do(t, "POST", "/api/custom-nodes", map[string]any{
@@ -456,8 +457,10 @@ func TestCustomNodeEntriesChainSupported(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("refresh: %d %s", resp.StatusCode, body)
 	}
-	entry := customNodeEntry(t, e, cookie, id, "plain-http")
-	if entry["type"] != "http" || entry["chain_supported"] != false {
-		t.Fatalf("http must not be chain_supported: %v", entry)
+	if entry := customNodeEntry(t, e, cookie, id, "plain-http"); entry["type"] != "http" || entry["chain_supported"] != true {
+		t.Fatalf("http must be chain_supported: %v", entry)
+	}
+	if entry := customNodeEntry(t, e, cookie, id, "plain-snell"); entry["type"] != "snell" || entry["chain_supported"] != false {
+		t.Fatalf("snell must not be chain_supported: %v", entry)
 	}
 }

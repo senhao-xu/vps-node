@@ -36,7 +36,7 @@ func TestEmbeddedSingBoxValidatesChainedPayload(t *testing.T) {
 	relayKey, _ := out["agent_key"].(string)
 
 	port := 31000
-	for _, protocol := range []string{"shadowsocks", "vless", "hysteria2", "anytls", "socks"} {
+	for _, protocol := range []string{"shadowsocks", "vless", "hysteria2", "anytls", "socks", "http"} {
 		port++
 		resp, out := env.do("POST", "/api/nodes", map[string]any{
 			"server_id": relayServerID, "address": "relay.example.com", "name": "relay-" + protocol,
@@ -104,14 +104,15 @@ func TestEmbeddedSingBoxValidatesExternalExitPayload(t *testing.T) {
 			"trojan://tpass@203.0.113.10:443?sni=t.example.com#E2E-TROJAN\n" +
 			"vless://11111111-1111-1111-1111-111111111111@203.0.113.11:443#E2E-VLESS\n" +
 			"hysteria2://hypass@203.0.113.12:443?sni=h.example.com#E2E-HY2\n" +
-			"anytls://atpass@203.0.113.13:443?sni=a.example.com#E2E-ANYTLS",
+			"anytls://atpass@203.0.113.13:443?sni=a.example.com#E2E-ANYTLS\n" +
+			"http://u-9:uuid-9@203.0.113.14:8080#E2E-HTTP",
 	}, cookie)
 	sourceID := int64(out["id"].(float64))
 
 	_, out = env.do("GET", fmt.Sprintf("/api/custom-nodes/%d/nodes", sourceID), nil, cookie)
 	entries := out["entries"].([]any)
-	if len(entries) != 5 {
-		t.Fatalf("expected 5 external entries, got %v", out)
+	if len(entries) != 6 {
+		t.Fatalf("expected 6 external entries, got %v", out)
 	}
 	port := 32000
 	for _, raw := range entries {

@@ -30,6 +30,8 @@ func ProxyToOutbound(proxy map[string]any) (map[string]any, error) {
 		return anytlsProxyOutbound(proxy, server, int(port))
 	case "socks5":
 		return socksProxyOutbound(proxy, server, int(port))
+	case "http":
+		return httpProxyOutbound(proxy, server, int(port))
 	default:
 		return nil, fmt.Errorf("%w: unsupported custom proxy type %q", ErrUnrenderable, clashType)
 	}
@@ -39,7 +41,7 @@ func ProxyToOutbound(proxy map[string]any) (map[string]any, error) {
 // sing-box chain outbound. The API uses it to grey out unsupported entries.
 func OutboundSupported(clashType string) bool {
 	switch clashType {
-	case "ss", "vless", "trojan", "vmess", "hysteria2", "anytls", "socks5":
+	case "ss", "vless", "trojan", "vmess", "hysteria2", "anytls", "socks5", "http":
 		return true
 	default:
 		return false
@@ -198,6 +200,33 @@ func socksProxyOutbound(proxy map[string]any, server string, port int) (map[stri
 	}
 	if password := SettingString(proxy, "password"); password != "" {
 		outbound["password"] = password
+	}
+	return outbound, nil
+}
+
+// httpProxyOutbound converts a Clash `http` proxy into a plaintext HTTP proxy
+// outbound, adding a TLS block when the proxy sets `tls: true`.
+func httpProxyOutbound(proxy map[string]any, server string, port int) (map[string]any, error) {
+	outbound := map[string]any{
+		"type":        ProtocolHTTP,
+		"server":      server,
+		"server_port": port,
+	}
+	if username := SettingString(proxy, "username"); username != "" {
+		outbound["username"] = username
+	}
+	if password := SettingString(proxy, "password"); password != "" {
+		outbound["password"] = password
+	}
+	if proxyBool(proxy, "tls") {
+		tls := map[string]any{"enabled": true}
+		if serverName := proxyServerName(proxy); serverName != "" {
+			tls["server_name"] = serverName
+		}
+		if proxyBool(proxy, "skip-cert-verify") {
+			tls["insecure"] = true
+		}
+		outbound["tls"] = tls
 	}
 	return outbound, nil
 }

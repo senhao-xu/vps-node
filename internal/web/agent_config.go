@@ -364,6 +364,8 @@ func agentCredential(appKey []byte, n singbox.Node, userID int64, userUUID strin
 		return map[string]any{"contract": "uuid-v1", "password": userUUID}, nil
 	case singbox.ProtocolSocks:
 		return map[string]any{"contract": "socks-v1", "username": singbox.NameForUser(userID), "password": userUUID}, nil
+	case singbox.ProtocolHTTP:
+		return map[string]any{"contract": "http-v1", "username": singbox.NameForUser(userID), "password": userUUID}, nil
 	default:
 		return nil, fmt.Errorf("unknown protocol %q", n.Protocol)
 	}

@@ -72,6 +72,7 @@ const protocolOptions: Array<{ value: Protocol | ''; label: string }> = [
   { value: 'hysteria2', label: protocolLabel('hysteria2') },
   { value: 'anytls', label: protocolLabel('anytls') },
   { value: 'socks', label: protocolLabel('socks') },
+  { value: 'http', label: protocolLabel('http') },
 ]
 
 const statusOptions: Array<{ value: NodeStatus | ''; label: string }> = [
@@ -280,7 +281,8 @@ function restoreFromQuery() {
     protocol === 'vless' ||
     protocol === 'hysteria2' ||
     protocol === 'anytls' ||
-    protocol === 'socks'
+    protocol === 'socks' ||
+    protocol === 'http'
   ) {
     protocolFilter.value = protocol
   }

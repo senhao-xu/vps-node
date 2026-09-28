@@ -80,8 +80,14 @@ func seedProtocols(t *testing.T) (env *panelEnv, cookie *http.Cookie, agentKey s
 	}, cookie)
 	socksID := int64(out["id"].(float64))
 
+	_, out = env.do("POST", "/api/nodes", map[string]any{
+		"server_id": serverID, "address": "full01.example.com", "name": "HTTP", "protocol": "http", "port": 8080,
+		"settings": map[string]any{},
+	}, cookie)
+	httpID := int64(out["id"].(float64))
+
 	expires := time.Now().AddDate(0, 0, 30).UTC().Format(time.RFC3339)
-	for i, nodeIDs := range [][]int64{{ssID, vlessID, hy2ID, anytlsID, socksID}, {vlessID}} {
+	for i, nodeIDs := range [][]int64{{ssID, vlessID, hy2ID, anytlsID, socksID, httpID}, {vlessID}} {
 		_, out = env.do("POST", "/api/users", map[string]any{
 			"username":        fmt.Sprintf("e2euser%d", i+1),
 			"transfer_enable": 1 << 30,

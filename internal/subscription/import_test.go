@@ -68,6 +68,21 @@ func TestParseShareURI(t *testing.T) {
 			want: map[string]any{"name": "vmess 节点", "type": "vmess", "server": "vm.example.com", "port": 443, "uuid": "uuid-1", "alterId": 0, "cipher": "zero", "network": "ws", "tls": true, "servername": "sni.example.com", "udp": true, "ws-opts": map[string]any{"path": "/ws", "headers": map[string]any{"Host": "cdn.example.com"}}},
 		},
 		{
+			name: "http proxy plaintext",
+			raw:  "http://u-9:uuid-9@http.example.com:8080#http",
+			want: map[string]any{"name": "http", "type": "http", "server": "http.example.com", "port": 8080, "username": "u-9", "password": "uuid-9", "udp": true},
+		},
+		{
+			name: "https proxy tls",
+			raw:  "https://u-9:uuid-9@http.example.com:8443?sni=http.example.com&allowInsecure=1#h",
+			want: map[string]any{"name": "h", "type": "http", "server": "http.example.com", "port": 8443, "username": "u-9", "password": "uuid-9", "udp": true, "tls": true, "sni": "http.example.com", "skip-cert-verify": true},
+		},
+		{
+			name: "http proxy tls query",
+			raw:  "http://u@http.example.com:8080?tls=1#hq",
+			want: map[string]any{"name": "hq", "type": "http", "server": "http.example.com", "port": 8080, "username": "u", "udp": true, "tls": true},
+		},
+		{
 			name: "ss ipv6 host",
 			raw:  "ss://aes-128-gcm:secret@[2001:db8::1]:443#v6",
 			want: map[string]any{"name": "v6", "type": "ss", "server": "2001:db8::1", "port": 443, "cipher": "aes-128-gcm", "password": "secret", "udp": true},
@@ -99,7 +114,11 @@ func TestParseShareURIRejectsMalformed(t *testing.T) {
 		"",
 		"   ",
 		"no-scheme-at-all",
-		"http://example.com",
+		"http://example.com",            // http proxy without explicit port
+		"http://example.com:8080/sub",   // http proxy with a path
+		"https://example.com/sub/token", // subscription URL must not parse as a line
+		"http://example.com/sub",        // no port and a path
+		"http://[2001:db8::1]:8080/x",   // ipv6 literal with a path
 		"ss://",
 		"ss://%%%",
 		"ss://aes-128-gcm@1.2.3.4:8388",     // no password separator

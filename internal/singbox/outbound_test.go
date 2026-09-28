@@ -195,6 +195,37 @@ func TestProxyToOutboundSocks5(t *testing.T) {
 	validateOutbound(t, outbound)
 }
 
+func TestProxyToOutboundHTTP(t *testing.T) {
+	outbound, err := singbox.ProxyToOutbound(map[string]any{
+		"name": "ext-http", "type": "http", "server": "http.example.com", "port": 8080,
+		"username": "u", "password": "p",
+	})
+	if err != nil {
+		t.Fatalf("convert plain http: %v", err)
+	}
+	if outbound["type"] != "http" || outbound["server"] != "http.example.com" || outbound["server_port"] != 8080 ||
+		outbound["username"] != "u" || outbound["password"] != "p" {
+		t.Fatalf("unexpected http outbound: %+v", outbound)
+	}
+	if _, has := outbound["tls"]; has {
+		t.Fatalf("plain http proxy must not attach tls: %+v", outbound)
+	}
+	validateOutbound(t, outbound)
+
+	tlsOutbound, err := singbox.ProxyToOutbound(map[string]any{
+		"name": "ext-https", "type": "http", "server": "http.example.com", "port": 8443,
+		"username": "u", "password": "p", "tls": true, "sni": "http.example.com", "skip-cert-verify": true,
+	})
+	if err != nil {
+		t.Fatalf("convert tls http: %v", err)
+	}
+	tls := tlsOutbound["tls"].(map[string]any)
+	if tls["enabled"] != true || tls["server_name"] != "http.example.com" || tls["insecure"] != true {
+		t.Fatalf("unexpected http tls: %+v", tls)
+	}
+	validateOutbound(t, tlsOutbound)
+}
+
 func TestProxyToOutboundRequiresFields(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
@@ -218,12 +249,12 @@ func TestProxyToOutboundRequiresFields(t *testing.T) {
 }
 
 func TestOutboundSupported(t *testing.T) {
-	for _, clashType := range []string{"ss", "vless", "trojan", "vmess", "hysteria2", "anytls", "socks5"} {
+	for _, clashType := range []string{"ss", "vless", "trojan", "vmess", "hysteria2", "anytls", "socks5", "http"} {
 		if !singbox.OutboundSupported(clashType) {
 			t.Fatalf("%s must be supported", clashType)
 		}
 	}
-	for _, clashType := range []string{"", "http", "snell", "wireguard", "ssh", "socks"} {
+	for _, clashType := range []string{"", "snell", "wireguard", "ssh", "socks"} {
 		if singbox.OutboundSupported(clashType) {
 			t.Fatalf("%s must be unsupported", clashType)
 		}

@@ -12,9 +12,9 @@ import (
 )
 
 // ParseShareURI converts a single share link (ss / vless / hysteria2 / anytls
-// / trojan / vmess) into a Clash Meta (mihomo) proxy mapping. It is a pure
-// function: no IO, no panel state. Callers decide whether a parse failure
-// skips the entry (subscription rendering) or only warns (admin form
+// / http / https / trojan / vmess) into a Clash Meta (mihomo) proxy mapping. It
+// is a pure function: no IO, no panel state. Callers decide whether a parse
+// failure skips the entry (subscription rendering) or only warns (admin form
 // validation).
 func ParseShareURI(raw string) (map[string]any, error) {
 	line := strings.TrimSpace(raw)
@@ -36,6 +36,8 @@ func ParseShareURI(raw string) (map[string]any, error) {
 		return parseHysteria2URI(line)
 	case "anytls":
 		return parseAnyTLSURI(line)
+	case "http", "https":
+		return parseHTTPURI(line, strings.ToLower(scheme))
 	case "trojan":
 		return parseTrojanURI(line)
 	case "vmess":
@@ -225,6 +227,47 @@ func parseAnyTLSURI(line string) (map[string]any, error) {
 	}
 	if queryBool(q, "insecure") {
 		proxy["skip-cert-verify"] = true
+	}
+	return proxy, nil
+}
+
+// parseHTTPURI parses a plain or TLS HTTP proxy link. Because `http://` also
+// prefixes subscription URLs, it requires an explicit port and an empty path
+// (a bare "/" is allowed); anything with a path segment or no port is rejected.
+func parseHTTPURI(line, scheme string) (map[string]any, error) {
+	u, err := url.Parse(line)
+	if err != nil {
+		return nil, fmt.Errorf("invalid http link: %w", err)
+	}
+	if u.Path != "" && u.Path != "/" {
+		return nil, fmt.Errorf("invalid http link: unexpected path")
+	}
+	server, port, err := splitHostPort(u.Host)
+	if err != nil {
+		return nil, fmt.Errorf("invalid http link: %w", err)
+	}
+	q := u.Query()
+	proxy := map[string]any{
+		"name":   fallbackName(u.Fragment, server, port),
+		"type":   "http",
+		"server": server,
+		"port":   port,
+		"udp":    true,
+	}
+	if username := u.User.Username(); username != "" {
+		proxy["username"] = username
+	}
+	if password, ok := u.User.Password(); ok {
+		proxy["password"] = password
+	}
+	if scheme == "https" || queryBool(q, "tls") {
+		proxy["tls"] = true
+		if sni := q.Get("sni"); sni != "" {
+			proxy["sni"] = sni
+		}
+		if queryBool(q, "allowInsecure") || queryBool(q, "insecure") {
+			proxy["skip-cert-verify"] = true
+		}
 	}
 	return proxy, nil
 }

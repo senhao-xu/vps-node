@@ -33,6 +33,7 @@ const (
 	ProtocolHysteria2   = "hysteria2"
 	ProtocolAnyTLS      = "anytls"
 	ProtocolSocks       = "socks"
+	ProtocolHTTP        = "http"
 
 	SSMethod2022Aes128Gcm = "2022-blake3-aes-128-gcm"
 	SSMethod2022Aes256Gcm = "2022-blake3-aes-256-gcm"
@@ -253,6 +254,8 @@ func renderInbound(appKey []byte, n Node) (map[string]any, error) {
 		return renderAnyTLS(appKey, n)
 	case ProtocolSocks:
 		return renderSOCKS(appKey, n)
+	case ProtocolHTTP:
+		return renderHTTP(appKey, n)
 	default:
 		return nil, fmt.Errorf("%w: node %d: unknown protocol %q", ErrUnrenderable, n.ID, n.Protocol)
 	}
@@ -465,6 +468,56 @@ func renderSOCKS(appKey []byte, n Node) (map[string]any, error) {
 	}, nil
 }
 
+// renderHTTP renders an HTTP proxy inbound. TLS is optional: it is attached
+// only when the node carries a complete server_name + certificate/private_key
+// set (the same inline-PEM shape as anytls/ hysteria2); otherwise the inbound
+// is a plaintext HTTP proxy.
+func renderHTTP(appKey []byte, n Node) (map[string]any, error) {
+	users := make([]map[string]any, 0, len(n.Users)+len(n.Relays))
+	for _, u := range n.Users {
+		users = append(users, map[string]any{
+			"username": NameForUser(u.ID),
+			"password": u.UUID,
+		})
+	}
+	for _, relay := range n.Relays {
+		users = append(users, map[string]any{
+			"username": RelayUserName(relay.EntryServerID),
+			"password": DeriveRelayPassword(appKey, n.ID, relay.EntryServerID),
+		})
+	}
+	inbound := map[string]any{
+		"type":        ProtocolHTTP,
+		"tag":         inboundTag(n),
+		"listen":      "::",
+		"listen_port": n.Port,
+		"users":       users,
+	}
+	if tls := httpServerTLS(n); tls != nil {
+		inbound["tls"] = tls
+	}
+	return inbound, nil
+}
+
+// httpServerTLS builds the server-side TLS block for an HTTP proxy inbound. It
+// returns nil for a plaintext proxy; a TLS proxy needs all of server_name,
+// certificate and private_key (validation enforces the complete set, so a
+// partially configured legacy row stays plaintext).
+func httpServerTLS(n Node) map[string]any {
+	serverName := SettingString(SettingMap(n.Settings, "tls"), "server_name")
+	certificate := SettingString(n.Secret, "certificate")
+	privateKey := SettingString(n.Secret, "private_key")
+	if serverName == "" || certificate == "" || privateKey == "" {
+		return nil
+	}
+	return map[string]any{
+		"enabled":     true,
+		"server_name": serverName,
+		"certificate": strings.Split(certificate, "\n"),
+		"key":         strings.Split(privateKey, "\n"),
+	}
+}
+
 func renderChainOutbound(appKey []byte, c ChainExit) (map[string]any, error) {
 	tag := chainOutboundTag(c.EntryNodeID)
 	switch c.Exit.Protocol {
@@ -478,6 +531,8 @@ func renderChainOutbound(appKey []byte, c ChainExit) (map[string]any, error) {
 		return renderAnyTLSOutbound(appKey, c, tag)
 	case ProtocolSocks:
 		return renderSOCKSOutbound(appKey, c, tag)
+	case ProtocolHTTP:
+		return renderHTTPOutbound(appKey, c, tag)
 	default:
 		return nil, fmt.Errorf("%w: node %d: unknown protocol %q", ErrUnrenderable, c.Exit.ID, c.Exit.Protocol)
 	}
@@ -605,6 +660,44 @@ func renderSOCKSOutbound(appKey []byte, c ChainExit, tag string) (map[string]any
 		"username":    RelayUserName(c.EntryServerID),
 		"password":    DeriveRelayPassword(appKey, c.Exit.ID, c.EntryServerID),
 	}, nil
+}
+
+// httpChainTLS builds the optional client TLS block for an HTTP exit outbound.
+// It returns nil for a plaintext exit. Unlike chainTLS (hysteria2/anytls, which
+// always speak TLS) HTTP TLS is opt-in, so the block is omitted unless the exit
+// carries a server name or certificate. A stored certificate is pinned;
+// otherwise the handshake falls back to insecure.
+func httpChainTLS(n Node) map[string]any {
+	serverName := SettingString(SettingMap(n.Settings, "tls"), "server_name")
+	certificate := SettingString(n.Secret, "certificate")
+	if serverName == "" && certificate == "" {
+		return nil
+	}
+	tls := map[string]any{"enabled": true}
+	if serverName != "" {
+		tls["server_name"] = serverName
+	}
+	if certificate != "" {
+		tls["certificate"] = strings.Split(certificate, "\n")
+	} else {
+		tls["insecure"] = true
+	}
+	return tls
+}
+
+func renderHTTPOutbound(appKey []byte, c ChainExit, tag string) (map[string]any, error) {
+	outbound := map[string]any{
+		"type":        ProtocolHTTP,
+		"tag":         tag,
+		"server":      c.DialAddress,
+		"server_port": c.Exit.Port,
+		"username":    RelayUserName(c.EntryServerID),
+		"password":    DeriveRelayPassword(appKey, c.Exit.ID, c.EntryServerID),
+	}
+	if tls := httpChainTLS(c.Exit); tls != nil {
+		outbound["tls"] = tls
+	}
+	return outbound, nil
 }
 
 func SettingString(m map[string]any, key string) string {

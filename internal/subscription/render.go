@@ -396,6 +396,15 @@ func renderURI(appKey []byte, user User, n Node) (string, error) {
 	case singbox.ProtocolSocks:
 		credential := base64.RawURLEncoding.EncodeToString([]byte(singbox.NameForUser(user.ID) + ":" + user.UUID))
 		return "socks://" + credential + "@" + host + "#" + name, nil
+	case singbox.ProtocolHTTP:
+		// HTTP proxy clients expect plaintext `user:pass` userinfo (base64url
+		// userinfo, as used by socks, is not parsable as a proxy).
+		userinfo := url.UserPassword(singbox.NameForUser(user.ID), user.UUID).String()
+		link := "http://" + userinfo + "@" + host
+		if query := httpTLSQuery(n); query != "" {
+			link += "?" + query
+		}
+		return link + "#" + name, nil
 	default:
 		return "", fmt.Errorf("unsupported protocol %q", n.Protocol)
 	}
@@ -558,10 +567,46 @@ func renderProxy(appKey []byte, user User, n Node) (map[string]any, error) {
 		p["username"] = singbox.NameForUser(user.ID)
 		p["password"] = user.UUID
 		p["udp"] = true
+	case singbox.ProtocolHTTP:
+		// Clash Meta type is `http` (same string as the panel protocol).
+		p["username"] = singbox.NameForUser(user.ID)
+		p["password"] = user.UUID
+		p["udp"] = true
+		tls := singbox.SettingMap(n.Settings, "tls")
+		serverName := singbox.SettingString(tls, "server_name")
+		if serverName != "" || singbox.SettingString(n.Secret, "certificate") != "" {
+			p["tls"] = true
+			if serverName != "" {
+				p["sni"] = serverName
+			}
+			insecure := false
+			if v, ok := tls["allow_insecure"].(bool); ok {
+				insecure = v
+			}
+			p["skip-cert-verify"] = insecure
+		}
 	default:
 		return nil, fmt.Errorf("unsupported protocol %q", n.Protocol)
 	}
 	return p, nil
+}
+
+// httpTLSQuery returns the optional TLS query string for an HTTP proxy share
+// link; an empty result means a plaintext proxy.
+func httpTLSQuery(n Node) string {
+	tls := singbox.SettingMap(n.Settings, "tls")
+	serverName := singbox.SettingString(tls, "server_name")
+	if serverName == "" && singbox.SettingString(n.Secret, "certificate") == "" {
+		return ""
+	}
+	q := url.Values{"tls": {"1"}}
+	if serverName != "" {
+		q.Set("sni", serverName)
+	}
+	if v, ok := tls["allow_insecure"].(bool); ok && v {
+		q.Set("allowInsecure", "1")
+	}
+	return q.Encode()
 }
 
 func ssClientPassword(appKey []byte, n Node, userUUID, cipher string) (string, error) {
@@ -618,7 +663,7 @@ func expandGroups(config map[string]any, names map[string][]string, validating b
 			}
 		}
 	}
-	placeholders := map[string]string{"__ALL_PROXIES__": "all", "__SHADOWSOCKS_PROXIES__": singbox.ProtocolShadowsocks, "__VLESS_PROXIES__": singbox.ProtocolVLESS, "__HYSTERIA2_PROXIES__": singbox.ProtocolHysteria2, "__ANYTLS_PROXIES__": singbox.ProtocolAnyTLS, "__SOCKS_PROXIES__": singbox.ProtocolSocks}
+	placeholders := map[string]string{"__ALL_PROXIES__": "all", "__SHADOWSOCKS_PROXIES__": singbox.ProtocolShadowsocks, "__VLESS_PROXIES__": singbox.ProtocolVLESS, "__HYSTERIA2_PROXIES__": singbox.ProtocolHysteria2, "__ANYTLS_PROXIES__": singbox.ProtocolAnyTLS, "__SOCKS_PROXIES__": singbox.ProtocolSocks, "__HTTP_PROXIES__": singbox.ProtocolHTTP}
 	for _, rawGroup := range groups {
 		group := rawGroup.(map[string]any)
 		items, ok := group["proxies"].([]any)

@@ -89,7 +89,7 @@ const contentLabel = computed(() => {
 const contentPlaceholder = computed(() => {
   if (sourceType.value === 'subscription') return 'https://example.com/subscribe'
   if (isEdit.value) return '留空则保持现有链接不变'
-  return '每行一条分享链接，支持 ss / vless / hysteria2 / anytls / trojan / vmess'
+  return '每行一条分享链接，支持 ss / vless / hysteria2 / anytls / http / https / trojan / vmess'
 })
 
 const validationMessage = computed(() => {

@@ -73,6 +73,7 @@ const anytlsAllowInsecure = ref(false)
 const tlsServerName = ref('')
 const tlsCertificate = ref('')
 const tlsPrivateKey = ref('')
+const httpAllowInsecure = ref(false)
 
 const submitting = ref(false)
 const generatingReality = ref(false)
@@ -141,6 +142,7 @@ watch(
     tlsServerName.value = ''
     tlsCertificate.value = ''
     tlsPrivateKey.value = ''
+    httpAllowInsecure.value = false
     serverChoice.value = null
     chainNodeId.value = props.node?.chain_node_id ?? null
     chainCustomNodeId.value = props.node?.chain_custom_node_id ?? null
@@ -329,6 +331,10 @@ async function loadNodeDetail(nodeId: number) {
       anytlsAllowInsecure.value = tls?.allow_insecure ?? false
       const scheme = settings.padding_scheme
       anytlsPaddingScheme.value = Array.isArray(scheme) ? scheme.join('\n') : (scheme ?? '')
+    } else if (protocol.value === 'http') {
+      const tls = typeof settings.tls === 'object' ? settings.tls : undefined
+      tlsServerName.value = tls?.server_name ?? ''
+      httpAllowInsecure.value = tls?.allow_insecure ?? false
     } else if (protocol.value === 'socks') {
       // SOCKS5 无协议设置，服务端返回的 settings 恒为 {}，无需读取。
     }
@@ -360,6 +366,7 @@ const protocolOptions: Array<{ value: Protocol; label: string; dot: string }> = 
   { value: 'hysteria2', label: protocolLabel('hysteria2'), dot: 'warning' },
   { value: 'anytls', label: protocolLabel('anytls'), dot: 'danger' },
   { value: 'socks', label: protocolLabel('socks'), dot: 'muted' },
+  { value: 'http', label: protocolLabel('http'), dot: 'muted' },
 ]
 
 const serverSelectValue = computed<number>({
@@ -488,6 +495,19 @@ const settingsPayload = computed<NodeSettingsInput | undefined>(() => {
     if (scheme.length > 0) payload.padding_scheme = scheme
     if (tlsCertificate.value) payload.certificate = tlsCertificate.value
     if (tlsPrivateKey.value) payload.private_key = tlsPrivateKey.value
+  } else if (protocol.value === 'http') {
+    // Optional TLS. With no TLS fields at all the node is a plaintext HTTP
+    // proxy and still submits an explicit `{}` (settings are supported but
+    // optional, unlike socks).
+    if (!tlsServerName.value.trim() && !tlsCertificate.value && !tlsPrivateKey.value) {
+      return {}
+    }
+    const tls: TLSSettingsInput = {}
+    if (tlsServerName.value.trim()) tls.server_name = tlsServerName.value.trim()
+    tls.allow_insecure = httpAllowInsecure.value
+    payload.tls = tls
+    if (tlsCertificate.value) payload.certificate = tlsCertificate.value
+    if (tlsPrivateKey.value) payload.private_key = tlsPrivateKey.value
   } else if (protocol.value === 'socks') {
     return {}
   }
@@ -575,6 +595,28 @@ const validationMessage = computed(() => {
     if (tlsServerName.value.trim() && !/^[A-Za-z0-9.-]+$/.test(tlsServerName.value.trim())) {
       return 'Server Name 格式不正确'
     }
+  } else if (protocol.value === 'http') {
+    // Optional TLS: all fields empty means a plaintext HTTP proxy; otherwise
+    // the server name must be well-formed and certificate/private key paired.
+    if (!isEdit.value && tlsServerName.value.trim() && (!tlsCertificate.value || !tlsPrivateKey.value)) {
+      return '请填写 HTTP PEM 证书链和私钥'
+    }
+    if (
+      !isEdit.value &&
+      !tlsServerName.value.trim() &&
+      (tlsCertificate.value || tlsPrivateKey.value)
+    ) {
+      return '请填写 HTTP TLS Server Name'
+    }
+    if (
+      (tlsCertificate.value && !tlsPrivateKey.value) ||
+      (!tlsCertificate.value && tlsPrivateKey.value)
+    ) {
+      return '证书链和私钥必须成对提交'
+    }
+    if (tlsServerName.value.trim() && !/^[A-Za-z0-9.-]+$/.test(tlsServerName.value.trim())) {
+      return 'Server Name 格式不正确'
+    }
   } else if (protocol.value === 'socks') {
     // SOCKS5 无协议设置，端口/地址等通用校验已在上方处理。
   }
@@ -614,6 +656,7 @@ function changeProtocol() {
   tlsServerName.value = ''
   tlsCertificate.value = ''
   tlsPrivateKey.value = ''
+  httpAllowInsecure.value = false
   // SOCKS5 无协议设置状态，无需额外重置。
   error.value = ''
 }
@@ -1241,6 +1284,58 @@ async function submit() {
           </div>
           <p class="field-hint">
             用户 UUID 直接作为认证凭据；证书和私钥必须成对替换。
+          </p>
+        </div>
+
+        <div
+          v-else-if="protocol === 'http'"
+          class="settings-box"
+        >
+          <div class="section-label">
+            HTTP · 可选 TLS
+          </div>
+          <p class="protocol-note">
+            明文 HTTP 代理无需任何设置；填写 TLS Server Name 与 PEM 证书/私钥后将以 HTTPS 代理运行。认证凭据由 Panel 为每个用户自动分配（u-&lt;id&gt; / UUID）。
+          </p>
+          <div class="field">
+            <label for="http-server-name">TLS Server Name（可选）</label>
+            <input
+              id="http-server-name"
+              v-model="tlsServerName"
+              type="text"
+              placeholder="留空则为明文 HTTP"
+            >
+          </div>
+          <div class="field">
+            <label for="http-certificate">PEM 证书链{{ isEdit ? '（留空保持不变）' : '' }}</label>
+            <textarea
+              id="http-certificate"
+              v-model="tlsCertificate"
+              rows="5"
+              :placeholder="isEdit ? '留空保持不变' : '-----BEGIN CERTIFICATE-----'"
+            />
+          </div>
+          <div class="field">
+            <label for="http-private-key">PEM 私钥{{ isEdit ? '（留空保持不变）' : '' }}</label>
+            <textarea
+              id="http-private-key"
+              v-model="tlsPrivateKey"
+              rows="5"
+              :placeholder="isEdit ? '留空保持不变' : '-----BEGIN PRIVATE KEY-----'"
+            />
+          </div>
+          <div class="toggle-row">
+            <div class="toggle-row-text">
+              <span class="toggle-row-label">允许不安全（allow_insecure）</span>
+              <span class="toggle-row-desc">仅测试环境使用，生产环境请保持关闭</span>
+            </div>
+            <ToggleSwitch
+              v-model="httpAllowInsecure"
+              label="允许不安全"
+            />
+          </div>
+          <p class="field-hint">
+            证书和私钥会加密保存并由 Panel 以内联 TLS 配置下发 Agent；启用 TLS 后经 UI 无法退回明文，编辑时两个字段必须一起替换。
           </p>
         </div>
 

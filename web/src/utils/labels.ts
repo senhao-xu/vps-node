@@ -67,6 +67,8 @@ export function protocolLabel(protocol: Protocol): string {
       return 'AnyTLS'
     case 'socks':
       return 'SOCKS5'
+    case 'http':
+      return 'HTTP'
     default:
       return protocol
   }
