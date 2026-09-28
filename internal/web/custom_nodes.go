@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -61,6 +62,7 @@ func toCustomNodeDTOs(nodes []repo.CustomNode) []customNodeDTO {
 }
 
 type customNodeEntryDTO struct {
+	Key    string `json:"key"`
 	Name   string `json:"name"`
 	Type   string `json:"type"`
 	Server string `json:"server"`
@@ -77,10 +79,10 @@ type customNodeEntriesResponse struct {
 	Skipped    []string             `json:"skipped,omitempty"`
 }
 
-func toCustomNodeEntryDTOs(summaries []subscription.NodeSummary) []customNodeEntryDTO {
+func toCustomNodeEntryDTOs(summaries []subscription.EntrySummary) []customNodeEntryDTO {
 	out := make([]customNodeEntryDTO, 0, len(summaries))
 	for _, s := range summaries {
-		out = append(out, customNodeEntryDTO{Name: s.Name, Type: s.Type, Server: s.Server, Port: s.Port})
+		out = append(out, customNodeEntryDTO{Key: s.Key, Name: s.Name, Type: s.Type, Server: s.Server, Port: s.Port})
 	}
 	return out
 }
@@ -115,8 +117,8 @@ func (h *Handler) customNodeEntries(cn repo.CustomNode) (customNodeEntriesRespon
 	default:
 		return resp, nil
 	}
-	summaries, skipped := subscription.Summarize(links, proxies)
-	resp.Entries = toCustomNodeEntryDTOs(summaries)
+	entries, skipped := subscription.SummarizeEntries(h.appKey, links, proxies)
+	resp.Entries = toCustomNodeEntryDTOs(entries)
 	resp.Skipped = skipped
 	return resp, nil
 }
@@ -423,9 +425,41 @@ func (h *Handler) handleCustomNodeDelete(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// customNodeEntrySelectionDTO is one source's entry-key whitelist. It is
+// returned (and accepted) only for sources whose whitelist is non-empty; a
+// source with no entry is authorized for every entry it contains.
+type customNodeEntrySelectionDTO struct {
+	CustomNodeID int64    `json:"custom_node_id"`
+	EntryKeys    []string `json:"entry_keys"`
+}
+
 type userCustomNodesResponse struct {
-	CustomNodeIDs []int64         `json:"custom_node_ids"`
-	CustomNodes   []customNodeDTO `json:"custom_nodes"`
+	CustomNodeIDs     []int64                       `json:"custom_node_ids"`
+	CustomNodes       []customNodeDTO               `json:"custom_nodes"`
+	CustomNodeEntries []customNodeEntrySelectionDTO `json:"custom_node_entries"`
+}
+
+// toEntrySelections renders the per-source whitelists in a stable order,
+// omitting sources with no whitelist.
+func toEntrySelections(entries map[int64]map[string]struct{}) []customNodeEntrySelectionDTO {
+	ids := make([]int64, 0, len(entries))
+	for id, keys := range entries {
+		if len(keys) > 0 {
+			ids = append(ids, id)
+		}
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+
+	out := make([]customNodeEntrySelectionDTO, 0, len(ids))
+	for _, id := range ids {
+		keys := make([]string, 0, len(entries[id]))
+		for key := range entries[id] {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		out = append(out, customNodeEntrySelectionDTO{CustomNodeID: id, EntryKeys: keys})
+	}
+	return out
 }
 
 func (h *Handler) handleUserCustomNodesGet(w http.ResponseWriter, r *http.Request) {
@@ -448,7 +482,16 @@ func (h *Handler) handleUserCustomNodesGet(w http.ResponseWriter, r *http.Reques
 		writeErr(w, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, userCustomNodesResponse{CustomNodeIDs: customNodeIDs, CustomNodes: toCustomNodeDTOs(nodes)})
+	entryKeys, err := h.repo.ListCustomNodeEntryKeysByUser(r.Context(), id)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, userCustomNodesResponse{
+		CustomNodeIDs:     customNodeIDs,
+		CustomNodes:       toCustomNodeDTOs(nodes),
+		CustomNodeEntries: toEntrySelections(entryKeys),
+	})
 }
 
 func (h *Handler) handleUserCustomNodesPut(w http.ResponseWriter, r *http.Request) {
@@ -458,7 +501,8 @@ func (h *Handler) handleUserCustomNodesPut(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	var req struct {
-		CustomNodeIDs []int64 `json:"custom_node_ids"`
+		CustomNodeIDs     []int64                       `json:"custom_node_ids"`
+		CustomNodeEntries []customNodeEntrySelectionDTO `json:"custom_node_entries"`
 	}
 	if err := decodeJSON(w, r, &req); err != nil {
 		writeErr(w, err)
@@ -477,8 +521,13 @@ func (h *Handler) handleUserCustomNodesPut(w http.ResponseWriter, r *http.Reques
 		writeErr(w, err)
 		return
 	}
+	entries, err := validateCustomNodeEntries(req.CustomNodeEntries, customNodeIDs)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
 	// Custom nodes never reach the agent config, so no server revision bump.
-	if err := h.repo.SetUserCustomNodes(r.Context(), id, customNodeIDs); err != nil {
+	if err := h.repo.SetUserCustomNodesAndEntries(r.Context(), id, customNodeIDs, entries); err != nil {
 		writeErr(w, err)
 		return
 	}
@@ -487,7 +536,65 @@ func (h *Handler) handleUserCustomNodesPut(w http.ResponseWriter, r *http.Reques
 		writeErr(w, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, userCustomNodesResponse{CustomNodeIDs: customNodeIDs, CustomNodes: toCustomNodeDTOs(nodes)})
+	entryKeys, err := h.repo.ListCustomNodeEntryKeysByUser(r.Context(), id)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, userCustomNodesResponse{
+		CustomNodeIDs:     customNodeIDs,
+		CustomNodes:       toCustomNodeDTOs(nodes),
+		CustomNodeEntries: toEntrySelections(entryKeys),
+	})
+}
+
+// validateCustomNodeEntries normalizes the optional per-source entry
+// whitelists: every referenced source must itself be authorized, every key must
+// be a 64-character lowercase hex digest, and duplicates/blanks are dropped.
+// An empty resulting whitelist is omitted, which means "all entries".
+func validateCustomNodeEntries(selections []customNodeEntrySelectionDTO, customNodeIDs []int64) (map[int64][]string, error) {
+	authorized := make(map[int64]bool, len(customNodeIDs))
+	for _, id := range customNodeIDs {
+		authorized[id] = true
+	}
+	out := map[int64][]string{}
+	seen := map[int64]map[string]bool{}
+	for _, selection := range selections {
+		if !authorized[selection.CustomNodeID] {
+			return nil, errValidation("custom_node_entries custom_node_id must also appear in custom_node_ids")
+		}
+		if seen[selection.CustomNodeID] == nil {
+			seen[selection.CustomNodeID] = map[string]bool{}
+		}
+		for _, key := range selection.EntryKeys {
+			if key == "" {
+				continue
+			}
+			if !isEntryKey(key) {
+				return nil, errValidation("entry_key must be a 64-character lowercase hexadecimal string")
+			}
+			if seen[selection.CustomNodeID][key] {
+				continue
+			}
+			seen[selection.CustomNodeID][key] = true
+			// Repeated selections for one source merge instead of replacing,
+			// so duplicates can never reach the composite primary key.
+			out[selection.CustomNodeID] = append(out[selection.CustomNodeID], key)
+		}
+	}
+	return out, nil
+}
+
+func isEntryKey(key string) bool {
+	if len(key) != 64 {
+		return false
+	}
+	for _, r := range key {
+		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')) {
+			return false
+		}
+	}
+	return true
 }
 
 func (h *Handler) validateCustomNodeIDs(ctx context.Context, customNodeIDs []int64) ([]int64, error) {

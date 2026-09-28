@@ -258,6 +258,10 @@ func (h *Handler) customSourcesForUser(ctx context.Context, userID int64) ([]sub
 	if len(customNodes) == 0 {
 		return nil, nil
 	}
+	whitelists, err := h.repo.ListCustomNodeEntryKeysByUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
 	sources := make([]subscription.CustomSource, 0, len(customNodes))
 	for _, cn := range customNodes {
 		plain, err := secrets.Decrypt(h.appKey, cn.ContentEnc)
@@ -278,12 +282,48 @@ func (h *Handler) customSourcesForUser(ctx context.Context, userID int64) ([]sub
 		default:
 			continue
 		}
+		// A non-empty whitelist keeps only the authorized entries; the empty
+		// case leaves both slices untouched so the output stays byte-identical
+		// to the pre-whitelist behavior.
+		if keySet := whitelists[cn.ID]; len(keySet) > 0 {
+			allowed := make(map[string]bool, len(keySet))
+			for key := range keySet {
+				allowed[key] = true
+			}
+			source.Links = filterAllowedLinks(h.appKey, source.Links, allowed)
+			source.Proxies = filterAllowedProxies(h.appKey, source.Proxies, allowed)
+		}
 		if len(source.Links) == 0 && len(source.Proxies) == 0 {
 			continue
 		}
 		sources = append(sources, source)
 	}
 	return sources, nil
+}
+
+// filterAllowedLinks drops share links whose stable entry key is not in the
+// whitelist. Links that cannot be parsed have no key and are dropped (they can
+// never be authorized individually).
+func filterAllowedLinks(appKey []byte, links []string, allowed map[string]bool) []string {
+	filtered := make([]string, 0, len(links))
+	for _, link := range links {
+		if key, ok := subscription.LinkEntryKey(appKey, link); ok && allowed[key] {
+			filtered = append(filtered, link)
+		}
+	}
+	return filtered
+}
+
+// filterAllowedProxies drops upstream Clash proxies whose stable entry key is
+// not in the whitelist.
+func filterAllowedProxies(appKey []byte, proxies []map[string]any, allowed map[string]bool) []map[string]any {
+	filtered := make([]map[string]any, 0, len(proxies))
+	for _, proxy := range proxies {
+		if key, err := subscription.EntryKey(appKey, proxy); err == nil && allowed[key] {
+			filtered = append(filtered, proxy)
+		}
+	}
+	return filtered
 }
 
 // fetchCustomNodeContent returns fresh upstream content when the cache is

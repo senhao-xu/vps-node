@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"database/sql"
+	"sort"
 	"strings"
 	"time"
 )
@@ -206,6 +207,86 @@ func (r *Repo) ListCustomNodeIDsByUser(ctx context.Context, userID int64) ([]int
 		ids = append(ids, id)
 	}
 	return ids, rows.Err()
+}
+
+// ListCustomNodeEntryKeysByUser returns the per-source entry-key whitelists
+// authorized for a user. Sources without a whitelist (meaning every entry is
+// allowed) are omitted, so a missing key must be treated as "all entries".
+func (r *Repo) ListCustomNodeEntryKeysByUser(ctx context.Context, userID int64) (map[int64]map[string]struct{}, error) {
+	rows, err := r.DB.QueryContext(ctx,
+		`SELECT custom_node_id, entry_key FROM user_custom_node_entries WHERE user_id = ? ORDER BY custom_node_id, entry_key`,
+		userID)
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	defer rows.Close()
+
+	entries := map[int64]map[string]struct{}{}
+	for rows.Next() {
+		var customNodeID int64
+		var entryKey string
+		if err := rows.Scan(&customNodeID, &entryKey); err != nil {
+			return nil, mapErr(err)
+		}
+		if entries[customNodeID] == nil {
+			entries[customNodeID] = map[string]struct{}{}
+		}
+		entries[customNodeID][entryKey] = struct{}{}
+	}
+	return entries, rows.Err()
+}
+
+// SetUserCustomNodesAndEntries replaces a user's whole custom-node
+// authorization in one transaction: the authorized source set plus the
+// per-source entry-key whitelists. A source without a non-empty whitelist
+// allows every one of its entries. Entry keys are validated by the caller;
+// this method only drops blanks and duplicates.
+func (r *Repo) SetUserCustomNodesAndEntries(ctx context.Context, userID int64, customNodeIDs []int64, entries map[int64][]string) error {
+	unique := dedupeInt64(customNodeIDs)
+	return Tx(ctx, r.DB, func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM user_custom_nodes WHERE user_id = ?`, userID); err != nil {
+			return mapErr(err)
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM user_custom_node_entries WHERE user_id = ?`, userID); err != nil {
+			return mapErr(err)
+		}
+		now := nowUnix()
+		for _, customNodeID := range unique {
+			if _, err := tx.ExecContext(ctx,
+				`INSERT INTO user_custom_nodes (user_id, custom_node_id, created_at) VALUES (?, ?, ?)`,
+				userID, customNodeID, now); err != nil {
+				return mapErr(err)
+			}
+		}
+		// Whitelists only make sense for an authorized source; an entry for an
+		// unauthorized id is ignored rather than written as an orphan.
+		for _, customNodeID := range unique {
+			for _, entryKey := range dedupeStrings(entries[customNodeID]) {
+				if entryKey == "" {
+					continue
+				}
+				if _, err := tx.ExecContext(ctx,
+					`INSERT INTO user_custom_node_entries (user_id, custom_node_id, entry_key, created_at) VALUES (?, ?, ?, ?)`,
+					userID, customNodeID, entryKey, now); err != nil {
+					return mapErr(err)
+				}
+			}
+		}
+		return nil
+	})
+}
+
+func dedupeStrings(values []string) []string {
+	sorted := append([]string(nil), values...)
+	sort.Strings(sorted)
+	out := make([]string, 0, len(sorted))
+	for i, v := range sorted {
+		if i > 0 && v == sorted[i-1] {
+			continue
+		}
+		out = append(out, v)
+	}
+	return out
 }
 
 func collectCustomNodes(rows *sql.Rows) ([]CustomNode, error) {

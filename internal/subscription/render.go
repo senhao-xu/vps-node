@@ -202,7 +202,9 @@ func RenderGeneral(appKey []byte, userUUID string, nodes []Node) (string, error)
 // CustomSource is one administrator-maintained external node source merged
 // into subscription output after the managed nodes. Links are share URIs
 // (one per entry); Proxies are Clash proxy mappings lifted from an upstream
-// Clash subscription.
+// Clash subscription. Per-entry authorization is applied by the caller
+// (customSourcesForUser) while building the source, so the render functions
+// stay pure and an unfiltered source keeps the legacy "all entries" behavior.
 type CustomSource struct {
 	ID      int64
 	Name    string

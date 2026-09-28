@@ -113,15 +113,17 @@ id, _ := repo.CreateServerWithAgentKey(ctx, name, active, hash, enc) // one tx
 ## Scenario: Custom node entries view & subscription refresh
 
 ### 1. Scope / Trigger
-- Trigger: any change to `GET /api/custom-nodes/{id}/nodes` or `POST /api/custom-nodes/{id}/refresh`, or to `internal/subscription.Summarize` / `looseInt`.
+- Trigger: any change to `GET /api/custom-nodes/{id}/nodes` or `POST /api/custom-nodes/{id}/refresh`, or to `internal/subscription.Summarize` / `SummarizeEntries` / `looseInt`.
 
 ### 2. Signatures
 - `GET /api/custom-nodes/{id}/nodes` — read-only digest of a custom node's stored content.
 - `POST /api/custom-nodes/{id}/refresh` — force-fetch a `subscription` source.
 - `subscription.Summarize(links []string, proxies []map[string]any) ([]NodeSummary, []string)` (`internal/subscription/summary.go`).
+- `subscription.SummarizeEntries(appKey []byte, links []string, proxies []map[string]any) ([]EntrySummary, []string)` (`internal/subscription/entrykey.go`) — attaches a stable `Key` per entry.
 
 ### 3. Contracts
-- Response `{source_type, has_cache, fetched_at, entries:[{name,type,server,port}], skipped?}`.
+- Response `{source_type, has_cache, fetched_at, entries:[{key,name,type,server,port}], skipped?}`.
+- `key` is the per-entry authorization id: `HMAC-SHA256(app_key)` hex of the entry's canonical connection JSON with the display `name` removed; it survives upstream renames. Unparseable entries have no key and are listed in `skipped`.
 - View performs **no network IO**: `subscription` reads `custom_nodes.cached_content` only; a cache miss returns `entries:[]`, `has_cache:false`. `links` parses `content_enc`, so `has_cache:false`, `fetched_at:null` always.
 - Refresh ignores the render-path 5-minute `CacheTTL`, calls `subscription.FetchSubscription`, writes the cache + `fetched_at`, then returns the same shape with `has_cache:true`.
 - `type` is the Clash proxy type (`ss`/`vless`/`hysteria2`/`anytls`/`trojan`/`vmess`); `skipped` carries the raw link line or `name`/`proxy #i` for unparseable/incomplete entries.

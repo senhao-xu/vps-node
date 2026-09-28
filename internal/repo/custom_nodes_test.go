@@ -267,3 +267,103 @@ func TestUserCustomNodeAuthorization(t *testing.T) {
 		t.Fatalf("user cascade: %v", ids)
 	}
 }
+
+func TestUserCustomNodeEntryAuthorization(t *testing.T) {
+	r := newTestRepo(t)
+	ctx := context.Background()
+
+	userID := mustCreateUser(t, r, "entry-auth")
+	otherUserID := mustCreateUser(t, r, "entry-other")
+	cn1 := mustCreateCustomNode(t, r, "cn-entry-a", repo.CustomNodeSourceLinks)
+	cn2 := mustCreateCustomNode(t, r, "cn-entry-b", repo.CustomNodeSourceLinks)
+	cn3 := mustCreateCustomNode(t, r, "cn-entry-c", repo.CustomNodeSourceLinks)
+
+	// Default: no authorizations, no whitelists.
+	if entries, err := r.ListCustomNodeEntryKeysByUser(ctx, userID); err != nil || len(entries) != 0 {
+		t.Fatalf("default whitelists: %v %v", entries, err)
+	}
+
+	// Set writes sources plus non-empty whitelists; duplicates collapse and
+	// blank whitelists (and unauthorized ids) are omitted.
+	if err := r.SetUserCustomNodesAndEntries(ctx, userID, []int64{cn1, cn2}, map[int64][]string{
+		cn1: {"key-a", "key-b", "key-a"},
+		cn2: {},
+		cn3: {"orphan-key"},
+	}); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	ids, err := r.ListCustomNodeIDsByUser(ctx, userID)
+	if err != nil || len(ids) != 2 || ids[0] != cn1 || ids[1] != cn2 {
+		t.Fatalf("ids: %v %v", ids, err)
+	}
+	entries, err := r.ListCustomNodeEntryKeysByUser(ctx, userID)
+	if err != nil {
+		t.Fatalf("whitelists: %v", err)
+	}
+	if len(entries) != 1 || len(entries[cn1]) != 2 {
+		t.Fatalf("whitelists must only carry non-empty sources: %v", entries)
+	}
+	if _, ok := entries[cn1]["key-a"]; !ok {
+		t.Fatalf("key-a missing: %v", entries)
+	}
+	if _, ok := entries[cn1]["key-b"]; !ok {
+		t.Fatalf("key-b missing: %v", entries)
+	}
+	if _, ok := entries[cn2]; ok {
+		t.Fatalf("empty whitelist must be omitted: %v", entries)
+	}
+	if _, ok := entries[cn3]; ok {
+		t.Fatalf("unauthorized source whitelist must be ignored: %v", entries)
+	}
+
+	// The set replaces both the sources and the whitelists.
+	if err := r.SetUserCustomNodesAndEntries(ctx, userID, []int64{cn2}, map[int64][]string{cn2: {"key-c"}}); err != nil {
+		t.Fatalf("replace: %v", err)
+	}
+	ids, _ = r.ListCustomNodeIDsByUser(ctx, userID)
+	if len(ids) != 1 || ids[0] != cn2 {
+		t.Fatalf("after replace ids: %v", ids)
+	}
+	entries, _ = r.ListCustomNodeEntryKeysByUser(ctx, userID)
+	if len(entries) != 1 || len(entries[cn2]) != 1 {
+		t.Fatalf("after replace whitelists: %v", entries)
+	}
+
+	// Clearing the authorized set clears every whitelist row.
+	if err := r.SetUserCustomNodesAndEntries(ctx, userID, []int64{}, nil); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	if entries, _ := r.ListCustomNodeEntryKeysByUser(ctx, userID); len(entries) != 0 {
+		t.Fatalf("after clear whitelists: %v", entries)
+	}
+
+	// Other users' whitelists are independent.
+	if err := r.SetUserCustomNodesAndEntries(ctx, otherUserID, []int64{cn1}, map[int64][]string{cn1: {"other-key"}}); err != nil {
+		t.Fatalf("other set: %v", err)
+	}
+	if entries, _ := r.ListCustomNodeEntryKeysByUser(ctx, otherUserID); len(entries[cn1]) != 1 {
+		t.Fatalf("other whitelist: %v", entries)
+	}
+	if entries, _ := r.ListCustomNodeEntryKeysByUser(ctx, userID); len(entries) != 0 {
+		t.Fatalf("user whitelist must stay empty: %v", entries)
+	}
+
+	// Deleting a custom node cascades the whitelist.
+	if err := r.DeleteCustomNode(ctx, cn1); err != nil {
+		t.Fatalf("delete custom node: %v", err)
+	}
+	if entries, _ := r.ListCustomNodeEntryKeysByUser(ctx, otherUserID); len(entries) != 0 {
+		t.Fatalf("custom node cascade: %v", entries)
+	}
+
+	// Deleting a user cascades the whitelist.
+	if err := r.SetUserCustomNodesAndEntries(ctx, userID, []int64{cn2}, map[int64][]string{cn2: {"key-d"}}); err != nil {
+		t.Fatalf("re-set: %v", err)
+	}
+	if err := r.DeleteUserAndBump(ctx, userID); err != nil {
+		t.Fatalf("delete user: %v", err)
+	}
+	if entries, _ := r.ListCustomNodeEntryKeysByUser(ctx, userID); len(entries) != 0 {
+		t.Fatalf("user cascade: %v", entries)
+	}
+}

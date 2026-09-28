@@ -3,6 +3,7 @@ import type {
   CreateCustomNodeInput,
   CustomNode,
   CustomNodeEntries,
+  CustomNodeEntrySelection,
   CustomNodeResult,
   UpdateCustomNodeInput,
   UserCustomNodes,
@@ -47,9 +48,10 @@ export function getUserCustomNodes(userId: number): Promise<UserCustomNodes> {
 export function putUserCustomNodes(
   userId: number,
   customNodeIds: number[],
+  entries: CustomNodeEntrySelection[],
 ): Promise<UserCustomNodes> {
   return request<UserCustomNodes>(`/api/users/${userId}/custom-nodes`, {
     method: 'PUT',
-    body: { custom_node_ids: customNodeIds },
+    body: { custom_node_ids: customNodeIds, custom_node_entries: entries },
   })
 }

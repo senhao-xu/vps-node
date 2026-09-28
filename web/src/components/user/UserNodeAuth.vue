@@ -3,9 +3,10 @@ import { ref, watch } from 'vue'
 import { putUserNodes } from '@/api/users'
 import { putUserCustomNodes } from '@/api/customNodes'
 import { errorMessage } from '@/api/http'
-import type { CustomNode, NodeBrief, Server } from '@/api/types'
+import type { CustomNode, CustomNodeEntrySelection, NodeBrief, Server } from '@/api/types'
 import ErrorBanner from '@/components/ErrorBanner.vue'
 import NodeChecklist from '@/components/NodeChecklist.vue'
+import CustomNodeEntryPickerDialog from '@/components/user/CustomNodeEntryPickerDialog.vue'
 import { customNodeSourceLabel } from '@/utils/labels'
 
 const props = defineProps<{
@@ -15,24 +16,57 @@ const props = defineProps<{
   nodeIds: number[]
   customNodes: CustomNode[]
   customNodeIds: number[]
+  customNodeEntries: CustomNodeEntrySelection[]
 }>()
 
 const emit = defineEmits<{
-  (e: 'saved', nodeIds: number[], customNodeIds: number[]): void
+  (e: 'saved', nodeIds: number[], customNodeIds: number[], customNodeEntries: CustomNodeEntrySelection[]): void
 }>()
 
 const selected = ref<number[]>([])
 const selectedCustom = ref<number[]>([])
+const selectedCustomEntries = ref<Record<number, string[]>>({})
 const dirty = ref(false)
 const saving = ref(false)
 const error = ref('')
 const savedTip = ref(false)
 
+const pickerOpen = ref(false)
+const pickerSource = ref<CustomNode | null>(null)
+
+function entryMap(entries: CustomNodeEntrySelection[]): Record<number, string[]> {
+  const map: Record<number, string[]> = {}
+  for (const selection of entries) {
+    if (selection.entry_keys.length > 0) map[selection.custom_node_id] = [...selection.entry_keys]
+  }
+  return map
+}
+
+function sortedKeys(keys: string[]): string {
+  return [...keys].sort().join(',')
+}
+
+function entriesEqual(
+  local: Record<number, string[]>,
+  remote: CustomNodeEntrySelection[],
+): boolean {
+  const remoteMap = new Map<number, string>()
+  for (const selection of remote) {
+    if (selection.entry_keys.length > 0) {
+      remoteMap.set(selection.custom_node_id, sortedKeys(selection.entry_keys))
+    }
+  }
+  const localIds = Object.keys(local).map(Number).filter((id) => (local[id]?.length ?? 0) > 0)
+  if (localIds.length !== remoteMap.size) return false
+  return localIds.every((id) => remoteMap.get(id) === sortedKeys(local[id] ?? []))
+}
+
 watch(
-  () => [props.userId, props.nodeIds, props.customNodeIds] as const,
+  () => [props.userId, props.nodeIds, props.customNodeIds, props.customNodeEntries] as const,
   () => {
     selected.value = [...props.nodeIds]
     selectedCustom.value = [...props.customNodeIds]
+    selectedCustomEntries.value = entryMap(props.customNodeEntries)
     dirty.value = false
     savedTip.value = false
     error.value = ''
@@ -46,7 +80,9 @@ function sameIds(a: number[], b: number[]): boolean {
 
 function refreshDirty() {
   dirty.value =
-    !sameIds(selected.value, props.nodeIds) || !sameIds(selectedCustom.value, props.customNodeIds)
+    !sameIds(selected.value, props.nodeIds) ||
+    !sameIds(selectedCustom.value, props.customNodeIds) ||
+    !entriesEqual(selectedCustomEntries.value, props.customNodeEntries)
   savedTip.value = false
 }
 
@@ -60,6 +96,37 @@ function toggleCustom(customNode: CustomNode, checked: boolean) {
   selectedCustom.value = checked
     ? [...selectedCustom.value, customNode.id]
     : selectedCustom.value.filter((id) => id !== customNode.id)
+  if (!checked) {
+    const next = { ...selectedCustomEntries.value }
+    delete next[customNode.id]
+    selectedCustomEntries.value = next
+  }
+  refreshDirty()
+}
+
+function entrySelectionCount(customNodeId: number): number {
+  return selectedCustomEntries.value[customNodeId]?.length ?? 0
+}
+
+function entrySummary(customNodeId: number): string {
+  const count = entrySelectionCount(customNodeId)
+  return count > 0 ? `已选 ${count} 条` : '全部线路'
+}
+
+function openEntryPicker(customNode: CustomNode) {
+  if (!selectedCustom.value.includes(customNode.id) || customNode.status !== 'active') return
+  pickerSource.value = customNode
+  pickerOpen.value = true
+}
+
+function onEntriesConfirmed(entryKeys: string[]) {
+  const source = pickerSource.value
+  pickerOpen.value = false
+  if (!source) return
+  const next = { ...selectedCustomEntries.value }
+  if (entryKeys.length === 0) delete next[source.id]
+  else next[source.id] = [...entryKeys]
+  selectedCustomEntries.value = next
   refreshDirty()
 }
 
@@ -67,11 +134,19 @@ async function save() {
   saving.value = true
   error.value = ''
   try {
+    const entriesPayload: CustomNodeEntrySelection[] = selectedCustom.value
+      .filter((id) => entrySelectionCount(id) > 0)
+      .map((id) => ({ custom_node_id: id, entry_keys: [...(selectedCustomEntries.value[id] ?? [])] }))
     const [nodesResult, customResult] = await Promise.all([
       putUserNodes(props.userId, selected.value),
-      putUserCustomNodes(props.userId, selectedCustom.value),
+      putUserCustomNodes(props.userId, selected.value, entriesPayload),
     ])
-    emit('saved', nodesResult.node_ids, customResult.custom_node_ids)
+    emit(
+      'saved',
+      nodesResult.node_ids,
+      customResult.custom_node_ids,
+      customResult.custom_node_entries,
+    )
     dirty.value = false
     savedTip.value = true
   } catch (err) {
@@ -122,7 +197,7 @@ async function save() {
         自定义节点
       </h3>
       <div class="custom-node-list">
-        <label
+        <div
           v-for="customNode in customNodes"
           :key="customNode.id"
           class="custom-node-item"
@@ -131,17 +206,38 @@ async function save() {
             checked: selectedCustom.includes(customNode.id),
           }"
         >
-          <input
-            type="checkbox"
-            :checked="selectedCustom.includes(customNode.id)"
-            :disabled="customNode.status !== 'active' && !selectedCustom.includes(customNode.id)"
-            @change="toggleCustom(customNode, ($event.target as HTMLInputElement).checked)"
-          >
-          <span class="name">{{ customNode.name }}</span>
+          <label class="custom-node-toggle">
+            <input
+              type="checkbox"
+              :checked="selectedCustom.includes(customNode.id)"
+              :disabled="customNode.status !== 'active' && !selectedCustom.includes(customNode.id)"
+              @change="toggleCustom(customNode, ($event.target as HTMLInputElement).checked)"
+            >
+            <span class="name">{{ customNode.name }}</span>
+          </label>
           <span class="meta chip">{{ customNodeSourceLabel(customNode.source_type) }}</span>
-        </label>
+          <template v-if="selectedCustom.includes(customNode.id)">
+            <span class="meta chip">{{ entrySummary(customNode.id) }}</span>
+            <button
+              type="button"
+              class="btn small secondary"
+              :disabled="customNode.status !== 'active'"
+              @click="openEntryPicker(customNode)"
+            >
+              选择线路
+            </button>
+          </template>
+        </div>
       </div>
     </template>
+
+    <CustomNodeEntryPickerDialog
+      :open="pickerOpen"
+      :node="pickerSource"
+      :selected-keys="pickerSource ? selectedCustomEntries[pickerSource.id] ?? [] : []"
+      @close="pickerOpen = false"
+      @confirm="onEntriesConfirmed"
+    />
   </div>
 </template>
 
@@ -171,13 +267,13 @@ async function save() {
 
 .custom-node-item {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--spacing-sm);
   padding: var(--spacing-sm) var(--spacing-md);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-surface);
-  cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease;
 }
 
@@ -191,8 +287,20 @@ async function save() {
 }
 
 .custom-node-item.disabled {
-  cursor: not-allowed;
   color: var(--color-text-secondary);
+}
+
+.custom-node-toggle {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: var(--spacing-sm);
+  cursor: pointer;
+}
+
+.custom-node-item.disabled .custom-node-toggle {
+  cursor: not-allowed;
 }
 
 .custom-node-item .name {
@@ -206,6 +314,10 @@ async function save() {
 
 .custom-node-item .meta {
   white-space: nowrap;
+}
+
+.custom-node-item .btn.small {
+  flex: none;
 }
 
 @media (max-width: 560px) {

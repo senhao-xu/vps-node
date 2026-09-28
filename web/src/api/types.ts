@@ -362,6 +362,8 @@ export type CustomNode = {
 export type CustomNodeResult = CustomNode & { warnings?: string[] }
 
 export type CustomNodeEntry = {
+  /** Stable per-entry identifier (HMAC-SHA256 hex over the connection params). */
+  key: string
   name: string
   type: string
   server: string
@@ -392,7 +394,14 @@ export type UpdateCustomNodeInput = {
   insecure_skip_verify?: boolean
 }
 
+export type CustomNodeEntrySelection = {
+  custom_node_id: number
+  entry_keys: string[]
+}
+
 export type UserCustomNodes = {
   custom_node_ids: number[]
   custom_nodes: CustomNode[]
+  /** Entry whitelists; only sources with a non-empty whitelist are listed. */
+  custom_node_entries: CustomNodeEntrySelection[]
 }

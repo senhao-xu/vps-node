@@ -18,7 +18,7 @@ import { listNodes } from '@/api/nodes'
 import { getUserCustomNodes, listCustomNodes } from '@/api/customNodes'
 import { listServers } from '@/api/servers'
 import { errorMessage } from '@/api/http'
-import type { CustomNode, NodeBrief, Server, UserDetail } from '@/api/types'
+import type { CustomNode, CustomNodeEntrySelection, NodeBrief, Server, UserDetail } from '@/api/types'
 import ErrorBanner from '@/components/ErrorBanner.vue'
 import ProgressBar from '@/components/ProgressBar.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
@@ -46,6 +46,7 @@ const servers = ref<Server[]>([])
 const customNodes = ref<CustomNode[]>([])
 const authorizedNodeIds = ref<number[]>([])
 const authorizedCustomNodeIds = ref<number[]>([])
+const customNodeEntries = ref<CustomNodeEntrySelection[]>([])
 const loading = ref(false)
 const error = ref('')
 
@@ -131,6 +132,7 @@ async function loadCore() {
     customNodes.value = customNodeList.items
     authorizedNodeIds.value = userNodes.node_ids
     authorizedCustomNodeIds.value = userCustomNodes.custom_node_ids
+    customNodeEntries.value = userCustomNodes.custom_node_entries
   } catch (err) {
     error.value = errorMessage(err)
     if ((err as { status?: number }).status === 404) {
@@ -145,9 +147,14 @@ function onUserUpdated(updated: UserDetail) {
   user.value = updated
 }
 
-function onNodesSaved(nodeIds: number[], customNodeIds: number[]) {
+function onNodesSaved(
+  nodeIds: number[],
+  customNodeIds: number[],
+  customNodeEntriesValue: CustomNodeEntrySelection[],
+) {
   authorizedNodeIds.value = nodeIds
   authorizedCustomNodeIds.value = customNodeIds
+  customNodeEntries.value = customNodeEntriesValue
   void loadCore()
 }
 
@@ -271,6 +278,7 @@ onMounted(() => {
               :node-ids="authorizedNodeIds"
               :custom-nodes="customNodes"
               :custom-node-ids="authorizedCustomNodeIds"
+              :custom-node-entries="customNodeEntries"
               @saved="onNodesSaved"
             />
           </section>

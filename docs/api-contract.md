@@ -404,7 +404,7 @@ IO: `subscription` sources are read from the fetch cache only, so a cache miss r
 list with `has_cache=false` rather than fetching upstream. Unknown id → `404 not_found`.
 
 ```json
-{ "source_type": "subscription", "has_cache": true, "fetched_at": "2026-09-28T10:00:00Z", "entries": [ { "name": "HK-1", "type": "vless", "server": "1.2.3.4", "port": 443 } ], "skipped": ["foo://unsupported"] }
+{ "source_type": "subscription", "has_cache": true, "fetched_at": "2026-09-28T10:00:00Z", "entries": [ { "key": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "name": "HK-1", "type": "vless", "server": "1.2.3.4", "port": 443 } ], "skipped": ["foo://unsupported"] }
 ```
 
 `type` is the Clash proxy type (`ss`/`vless`/`hysteria2`/`anytls`/`trojan`/`vmess`). Entries
@@ -412,6 +412,12 @@ that cannot be parsed or lack `name`/`type`/`server`/`port` are listed in `skipp
 link line, or the proxy name / `proxy #i`) without affecting the others. For `links` sources
 `has_cache` is always `false` and `fetched_at` is `null` (the links are parsed from
 `content_enc`, no cache is involved).
+
+`key` is a stable per-entry identifier used for per-user entry authorization: an
+`HMAC-SHA256(app_key)` hex digest of the entry's canonical connection parameters with the
+display `name` removed, so authorizations survive upstream renames. Unparseable entries have
+no `key` and cannot be authorized individually; two entries with identical connection
+parameters (only `name` differs) share one `key`.
 
 ### POST /api/custom-nodes/:id/refresh
 
@@ -426,18 +432,34 @@ and leaves the previous cache and `fetched_at` untouched.
 Response `200`:
 
 ```json
-{ "custom_node_ids": [1], "custom_nodes": [ { "id": 1, "name": "airport-A", "source_type": "links", "user_agent": "", "insecure_skip_verify": false, "status": "active", "has_cache": false, "fetched_at": null, "created_at": "...", "updated_at": "..." } ] }
+{ "custom_node_ids": [1], "custom_nodes": [ { "id": 1, "name": "airport-A", "source_type": "links", "user_agent": "", "insecure_skip_verify": false, "status": "active", "has_cache": false, "fetched_at": null, "created_at": "...", "updated_at": "..." } ], "custom_node_entries": [ { "custom_node_id": 1, "entry_keys": ["e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"] } ] }
 ```
+
+`custom_node_entries` carries the per-source **entry whitelist** (the list of entry `key`s
+authorized for the user). An empty whitelist means “all entries of that source”. The array is
+always present but only contains sources with a **non-empty** whitelist; `entry_keys` are
+sorted.
 
 ### PUT /api/users/:id/custom-nodes
 
 Full-set replacement:
 
 ```json
-{ "custom_node_ids": [1, 3] }
+{ "custom_node_ids": [1, 3], "custom_node_entries": [ { "custom_node_id": 1, "entry_keys": ["e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"] } ] }
 ```
 
-Idempotent; duplicates do not create duplicate relations; unknown `custom_node_id` → `422 validation`. Because custom nodes never reach agent config, this does **not** bump any server revision. Response `200`: same shape as GET.
+`custom_node_ids` is required. `custom_node_entries` is optional: omitting it clears every
+whitelist (each listed source stays fully authorized = all entries). Each `custom_node_id` in
+`custom_node_entries` must appear in `custom_node_ids`, and each `entry_key` must be a 64-char
+lowercase hex digest; violations → `422 validation`. Duplicates and blank entries are dropped,
+and an empty `entry_keys` array means “all entries”. Idempotent; duplicates do not create
+duplicate relations; unknown `custom_node_id` → `422 validation`. Because custom nodes never
+reach agent config, this does **not** bump any server revision. Response `200`: same shape as GET.
+
+Entries whose `entry_key` no longer exists in the source (upstream content changed) are kept
+but inert: the render filters each source's entries down to the intersection of the whitelist
+and the currently parsed entries. Unparseable `links` lines cannot be whitelisted and are
+dropped while a whitelist is active.
 
 ## Dashboard
 
