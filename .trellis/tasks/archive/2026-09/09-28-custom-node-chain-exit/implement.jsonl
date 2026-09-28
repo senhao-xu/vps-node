@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/node-protocol-settings.md", "reason": "链式出口不变量、nodes 新列需补齐所有显式列清单、revision bump 规则"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "ALTER TABLE 加列迁移、FK/索引与迁移幂等测试约定"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "节点 create/update 校验矩阵与 409/422 语义"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "web/src/api/types.ts 契约镜像需同步新字段"}
