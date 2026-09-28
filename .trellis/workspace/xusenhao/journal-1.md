@@ -248,3 +248,24 @@ Implemented per-user entry (line) authorization for custom nodes (user_custom_no
 ### Status
 
 [OK] **Completed**
+
+
+## Session 7: Custom-node entry as chain exit
+
+**Date**: 2026-09-28
+**Task**: Custom-node entry as chain exit
+**Branch**: `main`
+
+### Summary
+
+Managed entry nodes can now use a single line from a custom-node/subscription source as their chain exit: Clash proxy -> sing-box outbound converter (ss/vless/trojan/vmess/hysteria2/anytls/socks5), nodes.chain_custom_node_id + chain_custom_entry_key (migration 0012), no-network config resolution with direct fallback, delete protection + revision bumps on source update/refresh, and a 3-mode chain selector in the node form. Task archived.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d02af93` | (see git log) |
+
+### Status
+
+[OK] **Completed**

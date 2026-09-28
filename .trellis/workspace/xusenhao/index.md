@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 6
+- **Total Sessions**: 7
 - **Last Active**: 2026-09-28
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~250 | Active |
+| `journal-1.md` | ~271 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 7 | 2026-09-28 | Custom-node entry as chain exit | `d02af93` | `main` |
 | 6 | 2026-09-28 | Custom node per-entry auth + SOCKS5 managed protocol | `95ed101`, `6e97ae1` | `main` |
 | 5 | 2026-09-28 | 自定义节点查看/刷新/UA/跳过证书 + 节点可用性状态点 | `1c5271a`, `846f76f`, `132ab81`, `696ce2e` | `main` |
 | 4 | 2026-09-24 | Stateless agent: panel-issued agent key + panel-owned batch seq | `ef10dc3` | `main` |
