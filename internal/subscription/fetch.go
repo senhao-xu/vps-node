@@ -2,6 +2,7 @@ package subscription
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net/http"
@@ -27,22 +28,35 @@ const (
 
 var errTooManyRedirects = fmt.Errorf("too many redirects")
 
-var fetchClient = &http.Client{
-	Timeout: FetchTimeout,
-	CheckRedirect: func(req *http.Request, via []*http.Request) error {
-		if len(via) >= MaxFetchRedirects {
-			return errTooManyRedirects
-		}
-		return nil
-	},
+func newFetchClient(insecureSkipVerify bool) *http.Client {
+	return &http.Client{
+		Timeout: FetchTimeout,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= MaxFetchRedirects {
+				return errTooManyRedirects
+			}
+			return nil
+		},
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: insecureSkipVerify},
+		},
+	}
 }
 
+var (
+	fetchClient = newFetchClient(false)
+	// insecureFetchClient is only used by admins who explicitly disable TLS
+	// verification on a custom node (e.g. a self-signed upstream).
+	insecureFetchClient = newFetchClient(true)
+)
+
 // FetchSubscription downloads an upstream subscription document with the given
-// User-Agent; an empty userAgent falls back to DefaultUserAgent. SSRF surface
-// is limited to http/https with a hard timeout and a response size cap;
-// administrators may legitimately point at in-network URLs, so no IP range
-// filtering is applied.
-func FetchSubscription(ctx context.Context, rawURL, userAgent string) (string, error) {
+// User-Agent; an empty userAgent falls back to DefaultUserAgent. When
+// insecureSkipVerify is true the upstream's TLS certificate is not verified
+// (admin opt-in per custom node). SSRF surface is limited to http/https with a
+// hard timeout and a response size cap; administrators may legitimately point
+// at in-network URLs, so no IP range filtering is applied.
+func FetchSubscription(ctx context.Context, rawURL, userAgent string, insecureSkipVerify bool) (string, error) {
 	u, err := url.Parse(strings.TrimSpace(rawURL))
 	if err != nil {
 		return "", fmt.Errorf("invalid subscription URL: %w", err)
@@ -61,7 +75,11 @@ func FetchSubscription(ctx context.Context, rawURL, userAgent string) (string, e
 		userAgent = DefaultUserAgent
 	}
 	req.Header.Set("User-Agent", userAgent)
-	resp, err := fetchClient.Do(req)
+	client := fetchClient
+	if insecureSkipVerify {
+		client = insecureFetchClient
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("fetch subscription: %w", err)
 	}

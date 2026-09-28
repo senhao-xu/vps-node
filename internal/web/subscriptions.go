@@ -293,7 +293,7 @@ func (h *Handler) fetchCustomNodeContent(ctx context.Context, cn repo.CustomNode
 	if cn.CachedContent != "" && time.Since(cn.FetchedAt) < subscription.CacheTTL {
 		return cn.CachedContent
 	}
-	content, err := subscription.FetchSubscription(ctx, upstreamURL, cn.UserAgent)
+	content, err := subscription.FetchSubscription(ctx, upstreamURL, cn.UserAgent, cn.InsecureSkipVerify)
 	if err != nil {
 		h.logger.Warn("custom node subscription fetch failed", "custom_node_id", cn.ID, "error", err)
 		return cn.CachedContent

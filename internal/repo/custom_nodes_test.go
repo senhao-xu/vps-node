@@ -49,7 +49,7 @@ func TestCustomNodeCRUD(t *testing.T) {
 	}
 
 	// Content change invalidates the cache.
-	if err := r.UpdateCustomNode(ctx, id, "ext-1-renamed", []byte("new-cipher"), repo.CustomNodeStatusDisabled, "", false); err != nil {
+	if err := r.UpdateCustomNode(ctx, id, "ext-1-renamed", []byte("new-cipher"), repo.CustomNodeStatusDisabled, "", false, false); err != nil {
 		t.Fatalf("update: %v", err)
 	}
 	n, _ = r.GetCustomNode(ctx, id)
@@ -64,7 +64,7 @@ func TestCustomNodeCRUD(t *testing.T) {
 	if err := r.UpdateCustomNodeCache(ctx, id, "cached-again", 456); err != nil {
 		t.Fatalf("cache write: %v", err)
 	}
-	if err := r.UpdateCustomNode(ctx, id, "ext-1-final", nil, repo.CustomNodeStatusActive, "", false); err != nil {
+	if err := r.UpdateCustomNode(ctx, id, "ext-1-final", nil, repo.CustomNodeStatusActive, "", false, false); err != nil {
 		t.Fatalf("update without content: %v", err)
 	}
 	n, _ = r.GetCustomNode(ctx, id)
@@ -72,7 +72,7 @@ func TestCustomNodeCRUD(t *testing.T) {
 		t.Fatalf("update without content clobbered fields: %+v", n)
 	}
 
-	if err := r.UpdateCustomNode(ctx, 9999, "x", nil, repo.CustomNodeStatusActive, "", false); !errors.Is(err, repo.ErrNotFound) {
+	if err := r.UpdateCustomNode(ctx, 9999, "x", nil, repo.CustomNodeStatusActive, "", false, false); !errors.Is(err, repo.ErrNotFound) {
 		t.Fatalf("update missing: %v", err)
 	}
 	if err := r.DeleteCustomNode(ctx, id); err != nil {
@@ -118,7 +118,7 @@ func TestCustomNodeUserAgent(t *testing.T) {
 	if err := r.UpdateCustomNodeCache(ctx, id, "cached", 123); err != nil {
 		t.Fatalf("cache write: %v", err)
 	}
-	if err := r.UpdateCustomNode(ctx, id, "ua-node", nil, repo.CustomNodeStatusActive, "sing-box/1.10.0", true); err != nil {
+	if err := r.UpdateCustomNode(ctx, id, "ua-node", nil, repo.CustomNodeStatusActive, "sing-box/1.10.0", false, true); err != nil {
 		t.Fatalf("update ua: %v", err)
 	}
 	n, _ = r.GetCustomNode(ctx, id)
@@ -133,7 +133,7 @@ func TestCustomNodeUserAgent(t *testing.T) {
 	if err := r.UpdateCustomNodeCache(ctx, id, "cached-again", 456); err != nil {
 		t.Fatalf("cache write: %v", err)
 	}
-	if err := r.UpdateCustomNode(ctx, id, "ua-node", nil, repo.CustomNodeStatusActive, "sing-box/1.10.0", false); err != nil {
+	if err := r.UpdateCustomNode(ctx, id, "ua-node", nil, repo.CustomNodeStatusActive, "sing-box/1.10.0", false, false); err != nil {
 		t.Fatalf("update without invalidation: %v", err)
 	}
 	n, _ = r.GetCustomNode(ctx, id)
@@ -142,12 +142,36 @@ func TestCustomNodeUserAgent(t *testing.T) {
 	}
 
 	// Clearing to the empty string restores the default-UA behavior.
-	if err := r.UpdateCustomNode(ctx, id, "ua-node", nil, repo.CustomNodeStatusActive, "", false); err != nil {
+	if err := r.UpdateCustomNode(ctx, id, "ua-node", nil, repo.CustomNodeStatusActive, "", false, false); err != nil {
 		t.Fatalf("clear ua: %v", err)
 	}
 	n, _ = r.GetCustomNode(ctx, id)
 	if n.UserAgent != "" {
 		t.Fatalf("expected empty user agent, got %q", n.UserAgent)
+	}
+}
+
+func TestCustomNodeInsecureSkipVerify(t *testing.T) {
+	r := newTestRepo(t)
+	ctx := context.Background()
+
+	id, err := r.CreateCustomNode(ctx, repo.NewCustomNode{
+		Name: "insecure-node", SourceType: repo.CustomNodeSourceSubscription,
+		InsecureSkipVerify: true, ContentEnc: []byte("cipher"),
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	n, err := r.GetCustomNode(ctx, id)
+	if err != nil || !n.InsecureSkipVerify {
+		t.Fatalf("get insecure flag: %+v %v", n, err)
+	}
+	if err := r.UpdateCustomNode(ctx, id, "insecure-node", nil, repo.CustomNodeStatusActive, "", false, false); err != nil {
+		t.Fatalf("update insecure flag: %v", err)
+	}
+	n, _ = r.GetCustomNode(ctx, id)
+	if n.InsecureSkipVerify {
+		t.Fatalf("expected insecure flag cleared: %+v", n)
 	}
 }
 
@@ -174,14 +198,14 @@ func TestUserCustomNodeAuthorization(t *testing.T) {
 	}
 
 	// Disabled custom nodes are filtered out of subscription listings.
-	if err := r.UpdateCustomNode(ctx, cn2, "cn-b", nil, repo.CustomNodeStatusDisabled, "", false); err != nil {
+	if err := r.UpdateCustomNode(ctx, cn2, "cn-b", nil, repo.CustomNodeStatusDisabled, "", false, false); err != nil {
 		t.Fatalf("disable: %v", err)
 	}
 	nodes, err := r.ListActiveCustomNodesByUser(ctx, userID)
 	if err != nil || len(nodes) != 1 || nodes[0].ID != cn1 {
 		t.Fatalf("active filter: %v %v", nodes, err)
 	}
-	if err := r.UpdateCustomNode(ctx, cn2, "cn-b", nil, repo.CustomNodeStatusActive, "", false); err != nil {
+	if err := r.UpdateCustomNode(ctx, cn2, "cn-b", nil, repo.CustomNodeStatusActive, "", false, false); err != nil {
 		t.Fatalf("enable: %v", err)
 	}
 

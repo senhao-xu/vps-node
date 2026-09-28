@@ -161,23 +161,25 @@ _ = h.repo.UpdateCustomNodeCache(ctx, cn.ID, content, time.Now().Unix())
 
 ---
 
-## Scenario: Custom node upstream User-Agent
+## Scenario: Custom node upstream fetch options (User-Agent / TLS)
 
 ### 1. Scope / Trigger
-- Trigger: any change to `custom_nodes.user_agent`, `subscription.FetchSubscription`, or the custom-node create/update payloads.
+- Trigger: any change to `custom_nodes.user_agent` / `custom_nodes.insecure_skip_verify`, `subscription.FetchSubscription`, or the custom-node create/update payloads.
 
 ### 2. Signatures
 - `custom_nodes.user_agent TEXT NOT NULL DEFAULT ''` (migration `0008_custom_nodes_user_agent.sql`).
+- `custom_nodes.insecure_skip_verify INTEGER NOT NULL DEFAULT 0` (migration `0009_custom_nodes_insecure_tls.sql`).
 - `subscription.DefaultUserAgent = "clash-verge/v2.0.0"`.
-- `FetchSubscription(ctx, rawURL, userAgent string) (string, error)` (`internal/subscription/fetch.go`).
-- Create/update custom-node payloads accept an optional `user_agent` string.
+- `FetchSubscription(ctx, rawURL, userAgent string, insecureSkipVerify bool) (string, error)` (`internal/subscription/fetch.go`).
+- Create/update custom-node payloads accept optional `user_agent` and `insecure_skip_verify`.
 
 ### 3. Contracts
 - Empty `user_agent` means “use `DefaultUserAgent`”; it is a valid stored value.
 - Only `subscription` sources carry a UA; `links` forces empty and never sends one.
-- The same UA is used by BOTH upstream fetch paths: render lazy fetch (`fetchCustomNodeContent`) and manual refresh (`POST /api/custom-nodes/{id}/refresh`).
-- `customNodeDTO.user_agent` is returned by list / user-custom-nodes / create / update.
-- Changing the UA clears `cached_content`/`fetched_at` (same as changing content), so the next render/refresh re-fetches with the new UA.
+- The same UA and TLS flag are used by BOTH upstream fetch paths: render lazy fetch (`fetchCustomNodeContent`) and manual refresh (`POST /api/custom-nodes/{id}/refresh`).
+- `insecure_skip_verify=true` selects a client whose `tls.Config.InsecureSkipVerify` is set; `false` (default) uses the system trust store. It is a per-node admin opt-in; `links` forces `false`.
+- `customNodeDTO.user_agent` / `insecure_skip_verify` are returned by list / user-custom-nodes / create / update.
+- Changing the UA or the TLS flag clears `cached_content`/`fetched_at` (same as changing content), so the next render/refresh re-fetches.
 
 ### 4. Validation & Error Matrix
 | Condition | Result |
@@ -185,27 +187,33 @@ _ = h.repo.UpdateCustomNodeCache(ctx, cn.ID, content, time.Now().Unix())
 | `user_agent` longer than 255 bytes | `422 validation` |
 | `user_agent` contains a control char (`< 0x20` or `0x7f`, incl. CR/LF) | `422 validation` |
 | `user_agent` empty | accepted → default UA |
-| `user_agent` sent on a `links` source | ignored (stored empty) |
+| `user_agent` / `insecure_skip_verify` sent on a `links` source | ignored (stored `""` / `false`) |
+| upstream cert not in the trust store and `insecure_skip_verify=false` | fetch fails (rendered as `500 internal` on refresh, stale cache on render) |
 
 ### 5. Good/Base/Bad Cases
 - Good: a node with `user_agent="Mihomo/1.18.0"` sends that header on refresh and on render; changing it clears the cache.
-- Base: `user_agent=""` sends `clash-verge/v2.0.0`.
-- Bad: putting `\r\n` in the UA and letting `Header.Set` reflect request smuggling (must be rejected).
+- Good: a self-signed upstream node with `insecure_skip_verify=true` fetches successfully.
+- Base: `user_agent=""` sends `clash-verge/v2.0.0`; `insecure_skip_verify=false` verifies certificates.
+- Bad: enabling `insecure_skip_verify` by default or globally — it disables MITM protection for every subscription.
 
 ### 6. Tests Required
-- `FetchSubscription`: explicit UA is received by the upstream; empty UA sends `DefaultUserAgent`.
-- Web: create/list/update return `user_agent`; refresh + render lazy fetch send the configured UA; UA change clears cache; `links` ignores UA; control-char/overlong UA → `422 validation`.
-- Repo: all read paths return `user_agent`; `UpdateCustomNode` clears cache on UA change and preserves it otherwise.
-- DB: migration upgrade on a pre-0008 row defaults `user_agent` to `''` and is idempotent.
+- `FetchSubscription`: explicit UA is received by the upstream; empty UA sends `DefaultUserAgent`; a self-signed (`httptest.NewTLSServer`) upstream fails without the flag and succeeds with it.
+- Web: create/list/update return `user_agent` + `insecure_skip_verify`; refresh + render lazy fetch send the configured UA/TLS flag; UA/TLS change clears cache; `links` ignores both; control-char/overlong UA → `422 validation`.
+- Repo: all read paths return both columns; `UpdateCustomNode` clears cache on UA/TLS change and preserves it otherwise.
+- DB: migration upgrade on a pre-0008/pre-0009 row defaults `user_agent` to `''` and `insecure_skip_verify` to `0`; migrations are idempotent.
 
 ### 7. Wrong vs Correct
 #### Wrong
 ```go
 req.Header.Set("User-Agent", "vps-node-panel")   // hardcoded; ignores the node's stored UA
+http.DefaultClient.Do(req)                        // never honors the per-node TLS flag
 ```
 #### Correct
 ```go
 ua := userAgent
 if ua == "" { ua = DefaultUserAgent }
 req.Header.Set("User-Agent", ua)
+client := fetchClient
+if insecureSkipVerify { client = insecureFetchClient }
+resp, err := client.Do(req)
 ```

@@ -16,7 +16,7 @@ func TestFetchSubscription(t *testing.T) {
 			_, _ = w.Write([]byte("ss://payload"))
 		}))
 		t.Cleanup(srv.Close)
-		body, err := FetchSubscription(context.Background(), srv.URL, "")
+		body, err := FetchSubscription(context.Background(), srv.URL, "", false)
 		if err != nil || body != "ss://payload" {
 			t.Fatalf("fetch: %q %v", body, err)
 		}
@@ -24,7 +24,7 @@ func TestFetchSubscription(t *testing.T) {
 
 	t.Run("rejects non http schemes", func(t *testing.T) {
 		for _, raw := range []string{"ftp://example.com/x", "file:///etc/passwd", "example.com/x", "http://"} {
-			if _, err := FetchSubscription(context.Background(), raw, ""); err == nil {
+			if _, err := FetchSubscription(context.Background(), raw, "", false); err == nil {
 				t.Fatalf("expected error for %q", raw)
 			}
 		}
@@ -35,7 +35,7 @@ func TestFetchSubscription(t *testing.T) {
 			w.WriteHeader(http.StatusBadGateway)
 		}))
 		t.Cleanup(srv.Close)
-		if _, err := FetchSubscription(context.Background(), srv.URL, ""); err == nil {
+		if _, err := FetchSubscription(context.Background(), srv.URL, "", false); err == nil {
 			t.Fatal("expected error for 502 upstream")
 		}
 	})
@@ -45,7 +45,7 @@ func TestFetchSubscription(t *testing.T) {
 			_, _ = w.Write([]byte(strings.Repeat("a", MaxFetchBytes+1)))
 		}))
 		t.Cleanup(srv.Close)
-		if _, err := FetchSubscription(context.Background(), srv.URL, ""); err == nil {
+		if _, err := FetchSubscription(context.Background(), srv.URL, "", false); err == nil {
 			t.Fatal("expected error for oversized response")
 		}
 	})
@@ -57,7 +57,7 @@ func TestFetchSubscription(t *testing.T) {
 			http.Redirect(w, r, srv.URL+"/next", http.StatusFound)
 		}))
 		t.Cleanup(srv.Close)
-		if _, err := FetchSubscription(context.Background(), srv.URL, ""); err == nil {
+		if _, err := FetchSubscription(context.Background(), srv.URL, "", false); err == nil {
 			t.Fatal("expected error for redirect loop")
 		}
 	})
@@ -69,7 +69,7 @@ func TestFetchSubscription(t *testing.T) {
 		t.Cleanup(srv.Close)
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-		if _, err := FetchSubscription(ctx, srv.URL, ""); err == nil {
+		if _, err := FetchSubscription(ctx, srv.URL, "", false); err == nil {
 			t.Fatal("expected error for cancelled context")
 		}
 	})
@@ -81,7 +81,7 @@ func TestFetchSubscription(t *testing.T) {
 			_, _ = w.Write([]byte("ss://payload"))
 		}))
 		t.Cleanup(srv.Close)
-		if _, err := FetchSubscription(context.Background(), srv.URL, "Mihomo/1.18.0"); err != nil {
+		if _, err := FetchSubscription(context.Background(), srv.URL, "Mihomo/1.18.0", false); err != nil {
 			t.Fatalf("fetch: %v", err)
 		}
 		if got != "Mihomo/1.18.0" {
@@ -96,11 +96,25 @@ func TestFetchSubscription(t *testing.T) {
 			_, _ = w.Write([]byte("ss://payload"))
 		}))
 		t.Cleanup(srv.Close)
-		if _, err := FetchSubscription(context.Background(), srv.URL, ""); err != nil {
+		if _, err := FetchSubscription(context.Background(), srv.URL, "", false); err != nil {
 			t.Fatalf("fetch: %v", err)
 		}
 		if got != DefaultUserAgent {
 			t.Fatalf("upstream received user agent %q, want %q", got, DefaultUserAgent)
+		}
+	})
+
+	t.Run("insecure skip verify allows a self-signed upstream", func(t *testing.T) {
+		srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte("ss://payload"))
+		}))
+		t.Cleanup(srv.Close)
+		if _, err := FetchSubscription(context.Background(), srv.URL, "", false); err == nil {
+			t.Fatal("expected a certificate verification error without insecure skip verify")
+		}
+		body, err := FetchSubscription(context.Background(), srv.URL, "", true)
+		if err != nil || body != "ss://payload" {
+			t.Fatalf("insecure fetch: %q %v", body, err)
 		}
 	})
 }

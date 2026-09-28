@@ -351,6 +351,7 @@ export type CustomNode = {
   name: string
   source_type: CustomNodeSourceType
   user_agent: string
+  insecure_skip_verify: boolean
   status: NodeStatus
   has_cache: boolean
   fetched_at: string | null
@@ -380,6 +381,7 @@ export type CreateCustomNodeInput = {
   source_type: CustomNodeSourceType
   content: string
   user_agent?: string
+  insecure_skip_verify?: boolean
 }
 
 export type UpdateCustomNodeInput = {
@@ -387,6 +389,7 @@ export type UpdateCustomNodeInput = {
   content?: string
   status?: NodeStatus
   user_agent?: string
+  insecure_skip_verify?: boolean
 }
 
 export type UserCustomNodes = {

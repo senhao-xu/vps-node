@@ -14,15 +14,16 @@ import (
 )
 
 type customNodeDTO struct {
-	ID         int64   `json:"id"`
-	Name       string  `json:"name"`
-	SourceType string  `json:"source_type"`
-	UserAgent  string  `json:"user_agent"`
-	Status     string  `json:"status"`
-	HasCache   bool    `json:"has_cache"`
-	FetchedAt  *string `json:"fetched_at"`
-	CreatedAt  string  `json:"created_at"`
-	UpdatedAt  string  `json:"updated_at"`
+	ID                 int64   `json:"id"`
+	Name               string  `json:"name"`
+	SourceType         string  `json:"source_type"`
+	UserAgent          string  `json:"user_agent"`
+	InsecureSkipVerify bool    `json:"insecure_skip_verify"`
+	Status             string  `json:"status"`
+	HasCache           bool    `json:"has_cache"`
+	FetchedAt          *string `json:"fetched_at"`
+	CreatedAt          string  `json:"created_at"`
+	UpdatedAt          string  `json:"updated_at"`
 }
 
 // customNodeResultDTO is the create/update response: the DTO plus non-fatal
@@ -38,15 +39,16 @@ func toCustomNodeDTO(n repo.CustomNode) customNodeDTO {
 		fetchedAt = rfc3339Ptr(&n.FetchedAt)
 	}
 	return customNodeDTO{
-		ID:         n.ID,
-		Name:       n.Name,
-		SourceType: n.SourceType,
-		UserAgent:  n.UserAgent,
-		Status:     n.Status,
-		HasCache:   n.CachedContent != "",
-		FetchedAt:  fetchedAt,
-		CreatedAt:  rfc3339(n.CreatedAt),
-		UpdatedAt:  rfc3339(n.UpdatedAt),
+		ID:                 n.ID,
+		Name:               n.Name,
+		SourceType:         n.SourceType,
+		UserAgent:          n.UserAgent,
+		InsecureSkipVerify: n.InsecureSkipVerify,
+		Status:             n.Status,
+		HasCache:           n.CachedContent != "",
+		FetchedAt:          fetchedAt,
+		CreatedAt:          rfc3339(n.CreatedAt),
+		UpdatedAt:          rfc3339(n.UpdatedAt),
 	}
 }
 
@@ -161,7 +163,7 @@ func (h *Handler) handleCustomNodeRefresh(w http.ResponseWriter, r *http.Request
 		writeErr(w, err)
 		return
 	}
-	content, err := subscription.FetchSubscription(r.Context(), strings.TrimSpace(string(upstream)), cn.UserAgent)
+	content, err := subscription.FetchSubscription(r.Context(), strings.TrimSpace(string(upstream)), cn.UserAgent, cn.InsecureSkipVerify)
 	if err != nil {
 		writeErr(w, errInternal("failed to fetch upstream subscription: "+err.Error()))
 		return
@@ -193,17 +195,19 @@ func (h *Handler) handleCustomNodeList(w http.ResponseWriter, r *http.Request) {
 }
 
 type customNodeRequest struct {
-	Name      string  `json:"name"`
-	Content   *string `json:"content"`
-	Status    string  `json:"status"`
-	UserAgent *string `json:"user_agent"`
+	Name               string  `json:"name"`
+	Content            *string `json:"content"`
+	Status             string  `json:"status"`
+	UserAgent          *string `json:"user_agent"`
+	InsecureSkipVerify *bool   `json:"insecure_skip_verify"`
 }
 
 type createCustomNodeRequest struct {
-	Name       string `json:"name"`
-	SourceType string `json:"source_type"`
-	Content    string `json:"content"`
-	UserAgent  string `json:"user_agent"`
+	Name               string `json:"name"`
+	SourceType         string `json:"source_type"`
+	Content            string `json:"content"`
+	UserAgent          string `json:"user_agent"`
+	InsecureSkipVerify bool   `json:"insecure_skip_verify"`
 }
 
 func validateCustomNodeName(name string) error {
@@ -286,18 +290,21 @@ func (h *Handler) handleCustomNodeCreate(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	userAgent := ""
+	insecureSkipVerify := false
 	if req.SourceType == repo.CustomNodeSourceSubscription {
 		userAgent = strings.TrimSpace(req.UserAgent)
 		if err := validateUserAgent(userAgent); err != nil {
 			writeErr(w, err)
 			return
 		}
+		insecureSkipVerify = req.InsecureSkipVerify
 	}
 	id, err := h.repo.CreateCustomNode(r.Context(), repo.NewCustomNode{
-		Name:       req.Name,
-		SourceType: req.SourceType,
-		UserAgent:  userAgent,
-		ContentEnc: enc,
+		Name:               req.Name,
+		SourceType:         req.SourceType,
+		UserAgent:          userAgent,
+		InsecureSkipVerify: insecureSkipVerify,
+		ContentEnc:         enc,
 	})
 	if err != nil {
 		if err == repo.ErrConflict {
@@ -377,8 +384,16 @@ func (h *Handler) handleCustomNodeUpdate(w http.ResponseWriter, r *http.Request)
 			return
 		}
 	}
-	invalidateCache := contentEnc != nil || userAgent != existing.UserAgent
-	if err := h.repo.UpdateCustomNode(r.Context(), id, name, contentEnc, status, userAgent, invalidateCache); err != nil {
+	insecureSkipVerify := existing.InsecureSkipVerify
+	if existing.SourceType == repo.CustomNodeSourceSubscription {
+		if req.InsecureSkipVerify != nil {
+			insecureSkipVerify = *req.InsecureSkipVerify
+		}
+	} else {
+		insecureSkipVerify = false
+	}
+	invalidateCache := contentEnc != nil || userAgent != existing.UserAgent || insecureSkipVerify != existing.InsecureSkipVerify
+	if err := h.repo.UpdateCustomNode(r.Context(), id, name, contentEnc, status, userAgent, insecureSkipVerify, invalidateCache); err != nil {
 		if err == repo.ErrConflict {
 			writeErr(w, errConflict("a custom node with this name already exists"))
 			return

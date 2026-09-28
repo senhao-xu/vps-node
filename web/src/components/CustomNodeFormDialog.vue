@@ -35,6 +35,7 @@ const content = ref('')
 const status = ref<'active' | 'disabled'>('active')
 const userAgentChoice = ref<string>(DEFAULT_CUSTOM_NODE_USER_AGENT)
 const customUserAgent = ref('')
+const insecureSkipVerify = ref(false)
 
 const submitting = ref(false)
 const error = ref('')
@@ -76,6 +77,7 @@ watch(
       userAgentChoice.value = CUSTOM_USER_AGENT_CHOICE
       customUserAgent.value = userAgent
     }
+    insecureSkipVerify.value = props.node?.insecure_skip_verify ?? false
   },
 )
 
@@ -128,7 +130,7 @@ async function submit() {
             status: status.value,
             ...(trimmedContent ? { content: trimmedContent } : {}),
             ...(sourceType.value === 'subscription'
-              ? { user_agent: effectiveUserAgent.value }
+              ? { user_agent: effectiveUserAgent.value, insecure_skip_verify: insecureSkipVerify.value }
               : {}),
           })
         : await createCustomNode({
@@ -136,7 +138,7 @@ async function submit() {
             source_type: sourceType.value,
             content: trimmedContent,
             ...(sourceType.value === 'subscription'
-              ? { user_agent: effectiveUserAgent.value }
+              ? { user_agent: effectiveUserAgent.value, insecure_skip_verify: insecureSkipVerify.value }
               : {}),
           })
     emit('saved')
@@ -260,6 +262,21 @@ async function submit() {
           部分上游按 User-Agent 返回不同内容；留空使用默认
           <code>{{ DEFAULT_CUSTOM_NODE_USER_AGENT }}</code>。修改后会清空该节点的上游缓存。
         </p>
+      </div>
+
+      <div
+        v-if="sourceType === 'subscription'"
+        class="toggle-row"
+      >
+        <div class="toggle-row-text">
+          <span class="toggle-row-label">跳过证书校验</span>
+          <span class="toggle-row-desc">上游使用自签名证书时启用；会关闭 TLS 校验，存在中间人风险</span>
+        </div>
+        <ToggleSwitch
+          :model-value="insecureSkipVerify"
+          label="跳过上游证书校验"
+          @update:model-value="insecureSkipVerify = $event"
+        />
       </div>
 
       <div
