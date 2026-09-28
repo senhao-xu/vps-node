@@ -269,3 +269,25 @@ Managed entry nodes can now use a single line from a custom-node/subscription so
 ### Status
 
 [OK] **Completed**
+
+
+## Session 8: 新增 HTTP 代理协议节点
+
+**Date**: 2026-09-28
+**Task**: 新增 HTTP 代理协议节点
+**Branch**: `main`
+
+### Summary
+
+新增一等 http 协议（sing-box http 入站）：迁移 0013 放宽 nodes.protocol CHECK；renderHTTP/renderHTTPOutbound、outbound httpProxyOutbound；web 可选 TLS 设置校验 + http-v1 凭据；订阅 general/clash + __HTTP_PROXIES__ + 自定义线路 http(s) 解析（显式端口+空路径守卫）；前端表单/筛选；spec/api-contract 同步。另修复用户节点授权自定义节点保存错传 selected、线路选择单列。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3f4c8ac` | (see git log) |
+| `a12e29f` | (see git log) |
+
+### Status
+
+[OK] **Completed**
