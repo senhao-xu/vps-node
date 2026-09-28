@@ -54,7 +54,7 @@ List endpoints accept `?page=` (default 1) and `?page_size=` (default 20, max 10
 - User status: `active`, `disabled`, `expired`.
 - Server status: `active`, `disabled`, `offline` (`offline` is computed from heartbeat, not stored by admins).
 - Node status: `active`, `disabled`.
-- Protocols: `shadowsocks`, `vless`, `hysteria2`, `anytls`, `socks`.
+- Protocols: `shadowsocks`, `vless`, `hysteria2`, `anytls`, `socks`, `http`.
 
 A user is **eligible** for a node iff `status = active` AND `expires_at > now` AND (`transfer_enable = 0` OR (`u` + `d`) < `transfer_enable`). Only eligible users authorized on the node's server are included in agent payloads.
 
@@ -302,7 +302,7 @@ Generates or resets the server's Agent Key. Response `200`: `{ "agent_key": "<pl
 
 ### GET /api/nodes
 
-Query (all optional, combinable): `server_id` (exact match), `protocol` (`shadowsocks|vless|hysteria2|anytls|socks`), `status` (`active|disabled`), `q` (case-insensitive substring match on node name), plus `page` / `page_size`. Invalid enum values return `400 invalid_request`. Paginated node DTOs:
+Query (all optional, combinable): `server_id` (exact match), `protocol` (`shadowsocks|vless|hysteria2|anytls|socks|http`), `status` (`active|disabled`), `q` (case-insensitive substring match on node name), plus `page` / `page_size`. Invalid enum values return `400 invalid_request`. Paginated node DTOs:
 
 ```json
 { "id": 1, "server_id": 1, "address": "hk01.example.com", "ipv6_enabled": false, "ipv6_address": "", "name": "HK-SS", "protocol": "shadowsocks", "port": 8388, "rate": 1, "tags": [], "status": "active", "server": { "id": 1, "name": "HK-1" }, "chain_node_id": null, "chain_node": null, "chain_custom_node_id": null, "chain_custom_entry_key": "", "chain_custom_node_name": "", "created_at": "..." }
@@ -331,6 +331,7 @@ Protocol secrets are never exposed.
 - `hysteria2`: required secret `certificate`/`private_key` (matching PEM pair covering `tls.server_name`) and `tls.server_name`; optional secret `password`, `version` (integer, must be `2`), `bandwidth{up,down}` (non-negative integers), `obfs{open,type,password}` (`type` empty or `salamander`, `password` at most 64 characters), `tls.allow_insecure`, and `hop_interval` (`start-end`, ports within 1-65535; subscription-only, never rendered into the inbound).
 - `anytls`: required secret `certificate`/`private_key` (matching PEM pair covering `tls.server_name`) and `tls.server_name`; optional secret `password`, `tls.allow_insecure`, and `padding_scheme` (string or array of strings).
 - `socks`: no protocol settings — `settings` must be `{}` (or omitted) and any supplied key returns `422 validation`. Each authorized user authenticates on the inbound with `username = u-<user id>` and `password = <user uuid>`; the sing-box inbound type is `socks` and the shared link scheme/Clash type are `socks` / `socks5`.
+- `http`: optional TLS — a plaintext HTTP proxy accepts `{}` (or omitted); supplying TLS requires `tls.server_name` together with the secret `certificate`/`private_key` (matching PEM pair covering `tls.server_name`, validated exactly like hysteria2/anytls), plus optional `tls.allow_insecure` (client-side only). Supplying only a server name, only part of the pair, or a mismatched pair returns `422 validation`. Each authorized user authenticates with `username = u-<user id>` and `password = <user uuid>`; the sing-box inbound / Clash proxy type are both `http`, and the sing-box outbound type for chain exits is `http`. Once TLS is enabled it cannot be reverted to plaintext through the UI (blank secret fields keep the stored value).
 
 Response `201`: node DTO.
 
@@ -362,7 +363,7 @@ Duplicates a node verbatim onto the same server: name, address, `ipv6_enabled`, 
 
 ### GET /api/nodes/:id/share
 
-Read-only preview of one node's share link(s) for a chosen user. Query: `user_id` (required, an existing user id; missing or unknown → `422 validation`). Response `200`: `{ "node_id": 1, "user_id": 2, "authorized": true, "links": ["ss://...", "vless://..."] }`. `links` are built with the user's credentials exactly as the general subscription renderer does (per-user SS password derivation, user UUID for vless/hysteria2/anytls, `u-<id>` + UUID for socks), and include the IPv6 variant when the node advertises one. `authorized` reports whether the user is currently authorized on the node, so the UI can warn about a link that would not connect (the preview is still returned). A node missing required TLS settings (hysteria2/anytls) or using an unsupported protocol returns `422 validation`. This endpoint never echoes stored secret material beyond the derived credentials.
+Read-only preview of one node's share link(s) for a chosen user. Query: `user_id` (required, an existing user id; missing or unknown → `422 validation`). Response `200`: `{ "node_id": 1, "user_id": 2, "authorized": true, "links": ["ss://...", "vless://..."] }`. `links` are built with the user's credentials exactly as the general subscription renderer does (per-user SS password derivation, user UUID for vless/hysteria2/anytls, `u-<id>` + UUID for socks/http), and include the IPv6 variant when the node advertises one. `authorized` reports whether the user is currently authorized on the node, so the UI can warn about a link that would not connect (the preview is still returned). A node missing required TLS settings (hysteria2/anytls) or using an unsupported protocol returns `422 validation`. This endpoint never echoes stored secret material beyond the derived credentials.
 
 ### DELETE /api/nodes/:id
 
@@ -399,7 +400,7 @@ upstream fetch (self-signed upstreams). Both are always empty/`false` for `links
 { "name": "airport-A", "source_type": "links", "content": "ss://...\nvless://..." }
 ```
 
-`source_type` is `links` (one share URI per line; supported schemes `ss`/`vless`/`hysteria2`/`anytls`/`trojan`/`vmess`) or `subscription` (an `http(s)` URL, fetched server-side with a 5s timeout, 1 MiB cap and at most 3 redirects). `subscription` entries may set `user_agent` (empty/omitted = default `clash-verge/v2.0.0`) and `insecure_skip_verify` (boolean, default `false`; disables TLS verification for self-signed upstreams); `links` entries ignore both. Response `201`: the custom node DTO plus an optional `warnings` array listing lines that could not be converted to a Clash proxy (unparseable lines are still stored and pass through `flag=general` unchanged). Duplicate `name` → `409 conflict`; empty/invalid content → `422 validation`; `user_agent` longer than 255 characters or containing control characters → `422 validation`.
+`source_type` is `links` (one share URI per line; supported schemes `ss`/`vless`/`hysteria2`/`anytls`/`http`/`https`/`trojan`/`vmess`) or `subscription` (an `http(s)` URL, fetched server-side with a 5s timeout, 1 MiB cap and at most 3 redirects). `subscription` entries may set `user_agent` (empty/omitted = default `clash-verge/v2.0.0`) and `insecure_skip_verify` (boolean, default `false`; disables TLS verification for self-signed upstreams); `links` entries ignore both. Response `201`: the custom node DTO plus an optional `warnings` array listing lines that could not be converted to a Clash proxy (unparseable lines are still stored and pass through `flag=general` unchanged). Duplicate `name` → `409 conflict`; empty/invalid content → `422 validation`; `user_agent` longer than 255 characters or containing control characters → `422 validation`.
 
 ### PUT /api/custom-nodes/:id
 
@@ -421,9 +422,9 @@ list with `has_cache=false` rather than fetching upstream. Unknown id → `404 n
 { "source_type": "subscription", "has_cache": true, "fetched_at": "2026-09-28T10:00:00Z", "entries": [ { "key": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "name": "HK-1", "type": "vless", "server": "1.2.3.4", "port": 443, "chain_supported": true } ], "skipped": ["foo://unsupported"] }
 ```
 
-`type` is the Clash proxy type (`ss`/`vless`/`hysteria2`/`anytls`/`trojan`/`vmess`). `chain_supported`
+`type` is the Clash proxy type (`ss`/`vless`/`hysteria2`/`anytls`/`http`/`trojan`/`vmess`). `chain_supported`
 reports whether the type can be converted into a sing-box chain outbound (`ss`/`vless`/`trojan`/
-`vmess`/`hysteria2`/`anytls`/`socks5`); unsupported entries are still renderable in subscriptions
+`vmess`/`hysteria2`/`anytls`/`socks5`/`http`); unsupported entries are still renderable in subscriptions
 but cannot be chosen as an external chain exit and are greyed out by the node form. Entries
 that cannot be parsed or lack `name`/`type`/`server`/`port` are listed in `skipped` (the raw
 link line, or the proxy name / `proxy #i`) without affecting the others. For `links` sources
@@ -596,9 +597,12 @@ families).
 
 Protocol credentials: a `socks` node renders `socks://<base64url("u-<user id>:<user uuid>")>@host:port#<name>`
 under `flag=general` and `{ type: socks5, username: "u-<user id>", password: "<user uuid>", udp: true }`
+under `flag=clash-meta`. An `http` node renders `http://u-<user id>:<user uuid>@host:port#<name>` (plain
+userinfo, optionally `?tls=1&sni=...&allowInsecure=1` when TLS is configured) under `flag=general` and
+`{ type: http, username: "u-<user id>", password: "<user uuid>", udp: true, tls?: true, sni?, skip-cert-verify? }`
 under `flag=clash-meta`. Clash Meta templates may group managed proxies with the placeholders
 `__ALL_PROXIES__`, `__SHADOWSOCKS_PROXIES__`, `__VLESS_PROXIES__`, `__HYSTERIA2_PROXIES__`,
-`__ANYTLS_PROXIES__` and `__SOCKS_PROXIES__`, each expanding to that protocol's proxy names for the
+`__ANYTLS_PROXIES__`, `__SOCKS_PROXIES__` and `__HTTP_PROXIES__`, each expanding to that protocol's proxy names for the
 current user.
 
 After all managed nodes, the output appends the user's authorized active custom nodes in
@@ -663,11 +667,11 @@ Returns the server-scoped rendered configuration.
 }
 ```
 
-`config.singbox` is the complete, rendered sing-box configuration for the server. `renderer_version` identifies the rendering contract (see `internal/singbox.ContractVersion`) so agents can detect renderer changes. `credential` contains protocol-derived secrets (already generated/decrypted by Panel). For `socks` nodes the credential is `{ "contract": "socks-v1", "username": "u-<user id>", "password": "<user uuid>" }`, matching the inbound user the agent must authenticate. `device_limit` and `speed_limit` are copied from the user row so the embedded runtime can enforce them. Only eligible users on the server's nodes are included; expired/disabled/over-transfer users are absent, which instructs the agent to remove them locally.
+`config.singbox` is the complete, rendered sing-box configuration for the server. `renderer_version` identifies the rendering contract (see `internal/singbox.ContractVersion`) so agents can detect renderer changes. `credential` contains protocol-derived secrets (already generated/decrypted by Panel). For `socks` nodes the credential is `{ "contract": "socks-v1", "username": "u-<user id>", "password": "<user uuid>" }` and for `http` nodes `{ "contract": "http-v1", "username": "u-<user id>", "password": "<user uuid>" }`, matching the inbound user the agent must authenticate. `device_limit` and `speed_limit` are copied from the user row so the embedded runtime can enforce them. Only eligible users on the server's nodes are included; expired/disabled/over-transfer users are absent, which instructs the agent to remove them locally.
 
 Chained nodes (see `POST /api/nodes` `chain_node_id`) render one extra outbound per chained entry node (`tag: chain-<node id>`, a full protocol client of the exit node, credentials derived from the panel app key) plus a `route.rules` entry mapping the entry inbound tag to that outbound; `route.final` stays `direct`. Exit-side inbounds carry an additional pseudo user named `relay-<entry server id>` with the same derived credential; agents never map that name to a panel user, so relay traffic is neither attributed nor reported.
 
-External chain exits (`chain_custom_node_id` + `chain_custom_entry_key`) render the same `tag: chain-<node id>` outbound and `route.rules` entry, but the outbound is a protocol client built from the selected custom-node line's own credentials (`ss`/`vless`/`trojan`/`vmess`/`hysteria2`/`anytls`/`socks5`) — no relay user exists on the external server. Config building performs no network IO: `subscription` sources are read from the stored fetch cache, and any unresolvable entry (missing/changed key, disabled source, empty cache, unsupported type) simply renders no chain outbound for that node, leaving it direct. A node whose `chain_node_id` is set ignores `chain_custom_node_id` (they cannot both be set through the API).
+External chain exits (`chain_custom_node_id` + `chain_custom_entry_key`) render the same `tag: chain-<node id>` outbound and `route.rules` entry, but the outbound is a protocol client built from the selected custom-node line's own credentials (`ss`/`vless`/`trojan`/`vmess`/`hysteria2`/`anytls`/`socks5`/`http`) — no relay user exists on the external server. Config building performs no network IO: `subscription` sources are read from the stored fetch cache, and any unresolvable entry (missing/changed key, disabled source, empty cache, unsupported type) simply renders no chain outbound for that node, leaving it direct. A node whose `chain_node_id` is set ignores `chain_custom_node_id` (they cannot both be set through the API).
 
 Agent applies the config by loading it into the embedded sing-box instance; it keeps the previous config and keeps polling with its applied `version` on failure, reporting the failure via heartbeat extension field `last_apply_error`.
 

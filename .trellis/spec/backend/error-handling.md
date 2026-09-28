@@ -126,7 +126,7 @@ id, _ := repo.CreateServerWithAgentKey(ctx, name, active, hash, enc) // one tx
 - `key` is the per-entry authorization id: `HMAC-SHA256(app_key)` hex of the entry's canonical connection JSON with the display `name` removed; it survives upstream renames. Unparseable entries have no key and are listed in `skipped`.
 - View performs **no network IO**: `subscription` reads `custom_nodes.cached_content` only; a cache miss returns `entries:[]`, `has_cache:false`. `links` parses `content_enc`, so `has_cache:false`, `fetched_at:null` always.
 - Refresh ignores the render-path 5-minute `CacheTTL`, calls `subscription.FetchSubscription`, writes the cache + `fetched_at`, then returns the same shape with `has_cache:true`.
-- `type` is the Clash proxy type (`ss`/`vless`/`hysteria2`/`anytls`/`trojan`/`vmess`); `skipped` carries the raw link line or `name`/`proxy #i` for unparseable/incomplete entries.
+- `type` is the Clash proxy type (`ss`/`vless`/`hysteria2`/`anytls`/`http`/`trojan`/`vmess`); `skipped` carries the raw link line or `name`/`proxy #i` for unparseable/incomplete entries.
 
 ### 4. Validation & Error Matrix
 | Condition | Result |

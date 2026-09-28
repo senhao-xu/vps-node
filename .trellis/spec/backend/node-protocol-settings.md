@@ -69,6 +69,17 @@ Reality generation response:
 - Adding the protocol required migration `0011_nodes_socks_protocol.sql`, a full `nodes` rebuild widening the `protocol` CHECK to `('shadowsocks','vless','hysteria2','anytls','socks')` and recreating `idx_nodes_server`, the partial unique `idx_nodes_port_active`, and `idx_nodes_chain_node`.
 - Subscription rendering signatures take `subscription.User{ID, UUID}` (not a bare UUID string) because socks needs the numeric id while every other protocol uses only the UUID; output for the existing four protocols is byte-identical.
 
+## 4.4 HTTP
+
+- Sixth protocol (`http`), **optional TLS**. Settings schema: optional `tls.server_name` / `tls.allow_insecure` (plain) + secret `certificate` / `private_key` (PEM). An all-empty settings object is a valid plaintext HTTP proxy; a node that requests TLS (non-empty `tls.server_name` or a cert/key) must carry the complete, matching pair and is validated by the shared `validateTLSMaterial` in `internal/web/node_settings.go` (pair match, validity window, `VerifyHostname`). `certificate`/`private_key` are the same `certSet != keySet` pair check as hysteria2/anytls.
+- Credential model A, same as socks: `username = u-<id>` (`singbox.NameForUser`) and `password = <user uuid>`; the agent `ConnectionTracker` maps `metadata.User` back to the panel user. Agent credential contract `http-v1` (`agentCredential` in `internal/web/agent_config.go`).
+- sing-box inbound `{type:http, tag:http-<id>, listen:"::", listen_port, users:[...]}` plus `tls:{enabled, server_name, certificate:[...], key:[...]}` **only** when server_name + certificate + private_key are all present (same inline-PEM split-on-`\n` shape as anytls); otherwise the inbound is plaintext. Relay users use `relay-<entry server id>` + `DeriveRelayPassword`.
+- Chain exit: `renderHTTPOutbound` emits `{type:http, server, server_port, username: relay-<sid>, password: derived}` and attaches `tls` (`{enabled, server_name, certificate|insecure}`) **only** when the exit is a TLS proxy. It must NOT use `chainTLS` (which always enables TLS for hy2/anytls).
+- Custom-line converter: `singbox.ProxyToOutbound` maps Clash `type:http` (`httpProxyOutbound`) and `OutboundSupported("http") == true` so an `http` line can be a chain exit (`chain_supported=true`). `ParseShareURI` parses `http`/`https` via `parseHTTPURI`, which guards against subscription URLs by requiring an explicit port and an empty path (bare `/` allowed); `https` or `?tls=1` sets `tls:true`.
+- Subscriptions: general `http://u-<id>:<uuid>@host:port[?tls=1&sni=..&allowInsecure=1]#<name>` (plaintext userinfo via `url.UserPassword`, NOT socks' base64url); Clash `{type:http, username, password, udp:true, tls?/sni?/skip-cert-verify?}`; template placeholder `__HTTP_PROXIES__`. Panel/agent/Clash/sing-box all use the protocol string `http` (no `socks` vs `socks5` split).
+- Migration `0013_nodes_http_protocol.sql` widens the `nodes.protocol` CHECK to include `http`, rebuilding `nodes` with all 0012 columns (`chain_node_id`, `chain_custom_node_id`, `chain_custom_entry_key`) and recreating `idx_nodes_server`, `idx_nodes_port_active`, `idx_nodes_chain_node`, `idx_nodes_chain_custom_node`.
+- UI limitation (same as every protocol): once TLS secrets are stored they cannot be cleared through the form — blank secret fields keep the stored value, so a TLS node cannot be reverted to plaintext from the UI.
+
 ## 4.1 Extended Hysteria2 Settings (obfs / hop)
 
 Both are **plain settings** (never `secretFields`) and optional everywhere (create + patch):
