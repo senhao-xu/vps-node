@@ -60,6 +60,15 @@ Reality generation response:
 - Requires sing-box >= 1.12 on agents (image pins 1.14.1).
 - Adding a new protocol requires a DB migration that rebuilds `nodes` to widen the `protocol` CHECK.
 
+## 4.3 SOCKS5
+
+- Fifth protocol (`socks`), **no protocol settings**: the schema is empty, so `settings` must be `{}` (or omitted) and any supplied key returns `422 validation`; `protocol_settings` stays `{}` and `secret_enc` NULL.
+- Credential model A: each user authenticates with sing-box `username = u-<user id>` and `password = <user uuid>`. `singbox.NameForUser(id)` is the single source of the `u-<id>` form, shared by `renderSOCKS` and the subscription renderer; the agent `ConnectionTracker` maps `metadata.User` (the socks username) back to the panel user, so traffic/devices attribute correctly. Relay users keep the `relay-<entry server id>` + `DeriveRelayPassword` convention.
+- sing-box inbound: `{type: socks, tag: socks-<id>, listen: "::", listen_port, users:[{username,password}]}`; chain exit outbound mirrors it with `server`/`server_port` + relay `username`/`password` and no TLS.
+- Subscriptions: `socks://<base64url("u-<id>:<uuid>")>@host:port#<name>` (SIP002 style) and Clash `{type: socks5, username, password, udp: true}`; template placeholder `__SOCKS_PROXIES__`. The Clash type is `socks5`, unlike the panel/agent protocol string `socks`.
+- Adding the protocol required migration `0011_nodes_socks_protocol.sql`, a full `nodes` rebuild widening the `protocol` CHECK to `('shadowsocks','vless','hysteria2','anytls','socks')` and recreating `idx_nodes_server`, the partial unique `idx_nodes_port_active`, and `idx_nodes_chain_node`.
+- Subscription rendering signatures take `subscription.User{ID, UUID}` (not a bare UUID string) because socks needs the numeric id while every other protocol uses only the UUID; output for the existing four protocols is byte-identical.
+
 ## 4.1 Extended Hysteria2 Settings (obfs / hop)
 
 Both are **plain settings** (never `secretFields`) and optional everywhere (create + patch):

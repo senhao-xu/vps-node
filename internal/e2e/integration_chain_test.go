@@ -36,7 +36,7 @@ func TestEmbeddedSingBoxValidatesChainedPayload(t *testing.T) {
 	relayKey, _ := out["agent_key"].(string)
 
 	port := 31000
-	for _, protocol := range []string{"shadowsocks", "vless", "hysteria2", "anytls"} {
+	for _, protocol := range []string{"shadowsocks", "vless", "hysteria2", "anytls", "socks"} {
 		port++
 		resp, out := env.do("POST", "/api/nodes", map[string]any{
 			"server_id": relayServerID, "address": "relay.example.com", "name": "relay-" + protocol,
@@ -49,7 +49,7 @@ func TestEmbeddedSingBoxValidatesChainedPayload(t *testing.T) {
 		}
 	}
 
-	// Entry-02 config: four chain outbounds; must load in embedded sing-box.
+	// Entry-02 config: one chain outbound per exit protocol; must load in embedded sing-box.
 	relayClient, err := agentclient.New(env.ts.URL)
 	if err != nil {
 		t.Fatalf("agent client: %v", err)

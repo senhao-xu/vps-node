@@ -282,6 +282,38 @@ func TestRenderAnyTLS(t *testing.T) {
 	}
 }
 
+func TestRenderSOCKS(t *testing.T) {
+	node := singbox.Node{
+		ID:       61,
+		Name:     "hk-socks",
+		Protocol: singbox.ProtocolSocks,
+		Port:     1080,
+		Users:    []singbox.User{{ID: 1, UUID: "uuid-1"}, {ID: 2, UUID: "uuid-2"}},
+	}
+	config, err := singbox.Render(testAppKey, []singbox.Node{node})
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	inbound := config["inbounds"].([]map[string]any)[0]
+	if inbound["type"] != "socks" || inbound["tag"] != "socks-61" ||
+		inbound["listen"] != "::" || inbound["listen_port"] != 1080 {
+		t.Fatalf("unexpected inbound: %+v", inbound)
+	}
+	users := inbound["users"].([]map[string]any)
+	if len(users) != 2 {
+		t.Fatalf("expected 2 users, got %d", len(users))
+	}
+	if users[0]["username"] != "u-1" || users[0]["password"] != "uuid-1" ||
+		users[1]["username"] != "u-2" || users[1]["password"] != "uuid-2" {
+		t.Fatalf("socks users must use u-<id> usernames and uuids as passwords, got %+v", users)
+	}
+	for _, absent := range []string{"method", "tls", "password"} {
+		if _, has := inbound[absent]; has {
+			t.Fatalf("socks inbound must not contain %q: %+v", absent, inbound)
+		}
+	}
+}
+
 func TestRenderMultipleNodesShape(t *testing.T) {
 	nodes := []singbox.Node{
 		{ID: 41, Protocol: singbox.ProtocolHysteria2, Port: 10001,

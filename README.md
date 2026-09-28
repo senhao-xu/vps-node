@@ -20,7 +20,7 @@ Browser --> Panel API + Web UI --SQLite
 
 - **Panel** — owns users, servers, nodes, authorizations, traffic totals and online devices.
 - **Server** — one VPS with exactly one Agent; may host many protocol Nodes.
-- **Node** — one sing-box inbound (Shadowsocks 2022 / VLESS Reality / Hysteria2 / AnyTLS) with a port and protocol settings.
+- **Node** — one sing-box inbound (Shadowsocks 2022 / VLESS Reality / Hysteria2 / AnyTLS / SOCKS5) with a port and protocol settings.
 - **Agent** — stateless; polls versioned server-scoped config, runs it in an in-process embedded sing-box, reports per-user traffic, devices and visits.
 
 ### Docker Compose (recommended)
@@ -110,7 +110,7 @@ Layout: `cmd/panel`, `cmd/agent`, `internal/{web,repo,singbox,kernel,agentclient
 
 - **Panel** — 管理用户、服务器、节点、授权、流量总量与在线设备，是唯一业务数据源。
 - **Server** — 一台 VPS 对应恰好一个 Agent，可承载多个协议节点。
-- **Node** — 一个 sing-box 入站（Shadowsocks 2022 / VLESS Reality / Hysteria2 / AnyTLS），含端口与协议参数。
+- **Node** — 一个 sing-box 入站（Shadowsocks 2022 / VLESS Reality / Hysteria2 / AnyTLS / SOCKS5），含端口与协议参数。
 - **Agent** — 无状态；轮询按服务器版本化的配置，在进程内嵌 sing-box 运行，上报各用户流量、设备与访问记录。
 
 ### Docker Compose（推荐）

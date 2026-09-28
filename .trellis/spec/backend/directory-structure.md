@@ -55,7 +55,7 @@ vps-node/
 - Packages: short lowercase (`repo`, `web`, `httpx`, `agentstate`). Files: lowercase with underscores.
 - DB timestamps: INTEGER unix seconds. Byte counters: integer bytes. JSON: snake_case in all API payloads.
 - User status: `active|disabled|expired` (expired is derived at read/filter time from `expires_at`; never a stored state machine).
-- Node protocol: `shadowsocks|vless|hysteria2` (contract spelling — `vless`, not `vless-reality`).
+- Node protocol: `shadowsocks|vless|hysteria2|anytls|socks` (contract spelling — `vless`, not `vless-reality`).
 
 ---
 

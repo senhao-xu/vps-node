@@ -24,6 +24,7 @@ var validProtocols = map[string]bool{
 	repo.ProtocolVLESS:       true,
 	repo.ProtocolHysteria2:   true,
 	repo.ProtocolAnyTLS:      true,
+	repo.ProtocolSocks:       true,
 }
 
 func (h *Handler) handleNodeList(w http.ResponseWriter, r *http.Request) {
@@ -41,7 +42,7 @@ func (h *Handler) handleNodeList(w http.ResponseWriter, r *http.Request) {
 	}
 	if raw := r.URL.Query().Get("protocol"); raw != "" {
 		if !validProtocols[raw] {
-			writeErr(w, errInvalid("invalid protocol, want shadowsocks, vless, hysteria2 or anytls"))
+			writeErr(w, errInvalid("invalid protocol, want shadowsocks, vless, hysteria2, anytls or socks"))
 			return
 		}
 		filter.Protocol = raw
@@ -224,7 +225,7 @@ func validateNodeSpec(address, name, protocol string, port int) error {
 		return errValidation("name must be 1-128 characters")
 	}
 	if !validProtocols[protocol] {
-		return errInvalid("invalid protocol, want shadowsocks, vless, hysteria2 or anytls")
+		return errInvalid("invalid protocol, want shadowsocks, vless, hysteria2, anytls or socks")
 	}
 	if port < 1 || port > 65535 {
 		return errValidation("port must be 1-65535")

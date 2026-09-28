@@ -195,10 +195,30 @@ func TestRenderChainHysteria2AndAnyTLS(t *testing.T) {
 	}
 }
 
+func TestRenderChainSocks(t *testing.T) {
+	entry := singbox.Node{
+		ID: 1, Protocol: singbox.ProtocolShadowsocks, Port: 10001,
+		Settings: map[string]any{"cipher": singbox.SSMethod2022Aes128Gcm},
+	}
+	exit := singbox.Node{ID: 2, Protocol: singbox.ProtocolSocks, Port: 1080}
+	config, err := singbox.Render(testAppKey, []singbox.Node{entry}, singbox.ChainExit{
+		EntryNodeID: 1, EntryServerID: 3, Exit: exit, DialAddress: "exit.example.com",
+	})
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	chain := config["outbounds"].([]map[string]any)[1]
+	if chain["type"] != "socks" || chain["tag"] != "chain-1" ||
+		chain["server"] != "exit.example.com" || chain["server_port"] != 1080 ||
+		chain["username"] != singbox.RelayUserName(3) || chain["password"] != singbox.DeriveRelayPassword(testAppKey, 2, 3) {
+		t.Fatalf("unexpected socks chain outbound: %+v", chain)
+	}
+}
+
 func TestRenderRelayUsersInjected(t *testing.T) {
 	// Exit-side: the inbound carries one relay pseudo user per entry server,
 	// and the credential matches what the entry-side outbound derives.
-	for _, protocol := range []string{singbox.ProtocolShadowsocks, singbox.ProtocolVLESS, singbox.ProtocolHysteria2, singbox.ProtocolAnyTLS} {
+	for _, protocol := range []string{singbox.ProtocolShadowsocks, singbox.ProtocolVLESS, singbox.ProtocolHysteria2, singbox.ProtocolAnyTLS, singbox.ProtocolSocks} {
 		node := singbox.Node{ID: 9, Protocol: protocol, Port: 9000, Relays: []singbox.Relay{{EntryServerID: 3}}}
 		switch protocol {
 		case singbox.ProtocolShadowsocks:
@@ -207,7 +227,7 @@ func TestRenderRelayUsersInjected(t *testing.T) {
 			privateKey, _ := testRealityKey(t)
 			node.Settings = map[string]any{"reality_settings": map[string]any{"server_name": "a.com"}}
 			node.Secret = map[string]any{"private_key": privateKey}
-		case singbox.ProtocolHysteria2, singbox.ProtocolAnyTLS:
+		case singbox.ProtocolHysteria2, singbox.ProtocolAnyTLS, singbox.ProtocolSocks:
 			node.Settings = map[string]any{"tls": map[string]any{"server_name": "a.com"}}
 		}
 		config, err := singbox.Render(testAppKey, []singbox.Node{node})
@@ -215,7 +235,14 @@ func TestRenderRelayUsersInjected(t *testing.T) {
 			t.Fatalf("render %s with relay: %v", protocol, err)
 		}
 		users := config["inbounds"].([]map[string]any)[0]["users"].([]map[string]any)
-		if len(users) != 1 || users[0]["name"] != singbox.RelayUserName(3) {
+		if len(users) != 1 {
+			t.Fatalf("%s must carry the relay pseudo user, got %+v", protocol, users)
+		}
+		nameKey := "name"
+		if protocol == singbox.ProtocolSocks {
+			nameKey = "username"
+		}
+		if users[0][nameKey] != singbox.RelayUserName(3) {
 			t.Fatalf("%s must carry the relay pseudo user, got %+v", protocol, users)
 		}
 		switch protocol {

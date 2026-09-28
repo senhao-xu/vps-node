@@ -32,6 +32,7 @@ const (
 	ProtocolVLESS       = "vless"
 	ProtocolHysteria2   = "hysteria2"
 	ProtocolAnyTLS      = "anytls"
+	ProtocolSocks       = "socks"
 
 	SSMethod2022Aes128Gcm = "2022-blake3-aes-128-gcm"
 	SSMethod2022Aes256Gcm = "2022-blake3-aes-256-gcm"
@@ -105,6 +106,13 @@ func RealityPublicKey(privateKeyB64 string) (string, error) {
 // the exit node's inbound. One name per (exit node, entry server) pair.
 func RelayUserName(entryServerID int64) string {
 	return RelayUserPrefix + strconv.FormatInt(entryServerID, 10)
+}
+
+// NameForUser is the sing-box user name for a panel user. Inbounds that expose
+// an explicit username (socks) and the runtime tracker share this exact form
+// so traffic stays attributed to the user.
+func NameForUser(id int64) string {
+	return "u-" + strconv.FormatInt(id, 10)
 }
 
 func relayCredSubject(entryServerID int64) string {
@@ -222,6 +230,8 @@ func renderInbound(appKey []byte, n Node) (map[string]any, error) {
 		return renderHysteria2(appKey, n)
 	case ProtocolAnyTLS:
 		return renderAnyTLS(appKey, n)
+	case ProtocolSocks:
+		return renderSOCKS(appKey, n)
 	default:
 		return nil, fmt.Errorf("%w: node %d: unknown protocol %q", ErrUnrenderable, n.ID, n.Protocol)
 	}
@@ -411,6 +421,29 @@ func renderAnyTLS(appKey []byte, n Node) (map[string]any, error) {
 	}, nil
 }
 
+func renderSOCKS(appKey []byte, n Node) (map[string]any, error) {
+	users := make([]map[string]any, 0, len(n.Users)+len(n.Relays))
+	for _, u := range n.Users {
+		users = append(users, map[string]any{
+			"username": NameForUser(u.ID),
+			"password": u.UUID,
+		})
+	}
+	for _, relay := range n.Relays {
+		users = append(users, map[string]any{
+			"username": RelayUserName(relay.EntryServerID),
+			"password": DeriveRelayPassword(appKey, n.ID, relay.EntryServerID),
+		})
+	}
+	return map[string]any{
+		"type":        ProtocolSocks,
+		"tag":         inboundTag(n),
+		"listen":      "::",
+		"listen_port": n.Port,
+		"users":       users,
+	}, nil
+}
+
 func renderChainOutbound(appKey []byte, c ChainExit) (map[string]any, error) {
 	tag := chainOutboundTag(c.EntryNodeID)
 	switch c.Exit.Protocol {
@@ -422,6 +455,8 @@ func renderChainOutbound(appKey []byte, c ChainExit) (map[string]any, error) {
 		return renderHysteria2Outbound(appKey, c, tag)
 	case ProtocolAnyTLS:
 		return renderAnyTLSOutbound(appKey, c, tag)
+	case ProtocolSocks:
+		return renderSOCKSOutbound(appKey, c, tag)
 	default:
 		return nil, fmt.Errorf("%w: node %d: unknown protocol %q", ErrUnrenderable, c.Exit.ID, c.Exit.Protocol)
 	}
@@ -537,6 +572,17 @@ func renderAnyTLSOutbound(appKey []byte, c ChainExit, tag string) (map[string]an
 		"server_port": c.Exit.Port,
 		"password":    DeriveRelayPassword(appKey, c.Exit.ID, c.EntryServerID),
 		"tls":         chainTLS(c.Exit),
+	}, nil
+}
+
+func renderSOCKSOutbound(appKey []byte, c ChainExit, tag string) (map[string]any, error) {
+	return map[string]any{
+		"type":        ProtocolSocks,
+		"tag":         tag,
+		"server":      c.DialAddress,
+		"server_port": c.Exit.Port,
+		"username":    RelayUserName(c.EntryServerID),
+		"password":    DeriveRelayPassword(appKey, c.Exit.ID, c.EntryServerID),
 	}, nil
 }
 

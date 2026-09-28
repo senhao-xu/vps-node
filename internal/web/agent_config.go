@@ -159,7 +159,7 @@ func (h *Handler) buildAgentConfigPayload(ctx context.Context, server repo.Serve
 		nodeDTOs := make([]agentUserNodeDTO, 0, len(nodesByUser[u.ID]))
 		for _, nodeID := range nodesByUser[u.ID] {
 			sbNode := renderByID[nodeID]
-			credential, err := agentCredential(h.appKey, sbNode, u.UUID)
+			credential, err := agentCredential(h.appKey, sbNode, u.ID, u.UUID)
 			if err != nil {
 				return agentConfigPayload{}, err
 			}
@@ -298,7 +298,7 @@ func (h *Handler) singboxNode(n repo.Node, users []singbox.User) (singbox.Node, 
 	}, nil
 }
 
-func agentCredential(appKey []byte, n singbox.Node, userUUID string) (map[string]any, error) {
+func agentCredential(appKey []byte, n singbox.Node, userID int64, userUUID string) (map[string]any, error) {
 	switch n.Protocol {
 	case singbox.ProtocolShadowsocks:
 		cipher := singbox.SettingString(n.Settings, "cipher")
@@ -311,6 +311,8 @@ func agentCredential(appKey []byte, n singbox.Node, userUUID string) (map[string
 		return map[string]any{"contract": "uuid-v1", "uuid": userUUID, "flow": "xtls-rprx-vision"}, nil
 	case singbox.ProtocolHysteria2, singbox.ProtocolAnyTLS:
 		return map[string]any{"contract": "uuid-v1", "password": userUUID}, nil
+	case singbox.ProtocolSocks:
+		return map[string]any{"contract": "socks-v1", "username": singbox.NameForUser(userID), "password": userUUID}, nil
 	default:
 		return nil, fmt.Errorf("unknown protocol %q", n.Protocol)
 	}

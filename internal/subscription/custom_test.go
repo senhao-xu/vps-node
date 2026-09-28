@@ -16,7 +16,7 @@ func TestRenderGeneralLinksMergedAppendsCustomVerbatim(t *testing.T) {
 	custom := []CustomSource{
 		{ID: 1, Name: "ext", Links: []string{"ss://ZXh0ZXJuYWw@ext.example.com:8388#ext", "garbage line"}},
 	}
-	encoded := RenderGeneralLinksMerged(appKey, "user-uuid", []Node{node}, custom, nil)
+	encoded := RenderGeneralLinksMerged(appKey, User{UUID: "user-uuid"}, []Node{node}, custom, nil)
 	raw, err := base64.StdEncoding.DecodeString(encoded)
 	if err != nil {
 		t.Fatal(err)
@@ -46,7 +46,7 @@ func TestRenderClashFilteredMergedCustomSources(t *testing.T) {
 	onSkipCustom := func(sourceID int64, item string, err error) {
 		skipped = append(skipped, item)
 	}
-	out, err := RenderClashFilteredMerged(appKey, "user-uuid", customTestTemplate, []Node{node}, custom, nil, onSkipCustom)
+	out, err := RenderClashFilteredMerged(appKey, User{UUID: "user-uuid"}, customTestTemplate, []Node{node}, custom, nil, onSkipCustom)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,19 +88,19 @@ func TestRenderClashFilteredMergedCustomSources(t *testing.T) {
 func TestRenderClashFilteredWithoutCustomMatchesLegacy(t *testing.T) {
 	appKey := make([]byte, 32)
 	nodes := []Node{testNode(t, "shadowsocks"), testNode(t, "vless")}
-	legacy, err := RenderClashFiltered(appKey, "user-uuid", customTestTemplate, nodes, nil)
+	legacy, err := RenderClashFiltered(appKey, User{UUID: "user-uuid"}, customTestTemplate, nodes, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	merged, err := RenderClashFilteredMerged(appKey, "user-uuid", customTestTemplate, nodes, nil, nil, nil)
+	merged, err := RenderClashFilteredMerged(appKey, User{UUID: "user-uuid"}, customTestTemplate, nodes, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(legacy) != string(merged) {
 		t.Fatal("empty custom slice must render byte-identical output")
 	}
-	generalLegacy := RenderGeneralLinks(appKey, "user-uuid", nodes, nil)
-	generalMerged := RenderGeneralLinksMerged(appKey, "user-uuid", nodes, nil, nil)
+	generalLegacy := RenderGeneralLinks(appKey, User{UUID: "user-uuid"}, nodes, nil)
+	generalMerged := RenderGeneralLinksMerged(appKey, User{UUID: "user-uuid"}, nodes, nil, nil)
 	if generalLegacy != generalMerged {
 		t.Fatal("empty custom slice must render byte-identical general output")
 	}

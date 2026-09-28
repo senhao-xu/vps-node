@@ -69,6 +69,7 @@ const protocolOptions: Array<{ value: Protocol | ''; label: string }> = [
   { value: 'vless', label: protocolLabel('vless') },
   { value: 'hysteria2', label: protocolLabel('hysteria2') },
   { value: 'anytls', label: protocolLabel('anytls') },
+  { value: 'socks', label: protocolLabel('socks') },
 ]
 
 const statusOptions: Array<{ value: NodeStatus | ''; label: string }> = [
@@ -271,7 +272,13 @@ function restoreFromQuery() {
   const serverId = typeof raw['server_id'] === 'string' ? Number(raw['server_id']) : NaN
   if (Number.isInteger(serverId) && serverId > 0) serverFilter.value = String(serverId)
   const protocol = raw['protocol']
-  if (protocol === 'shadowsocks' || protocol === 'vless' || protocol === 'hysteria2' || protocol === 'anytls') {
+  if (
+    protocol === 'shadowsocks' ||
+    protocol === 'vless' ||
+    protocol === 'hysteria2' ||
+    protocol === 'anytls' ||
+    protocol === 'socks'
+  ) {
     protocolFilter.value = protocol
   }
   const status = raw['status']

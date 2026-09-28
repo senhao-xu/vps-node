@@ -214,6 +214,8 @@ func TestNodeProtocolSettingsAllowlists(t *testing.T) {
 		{"hysteria2 bad bw", "hysteria2", map[string]any{"bandwidth": map[string]any{"up": 12.5}}, http.StatusUnprocessableEntity},
 		{"hysteria2 negative", "hysteria2", map[string]any{"bandwidth": map[string]any{"down": -1}}, http.StatusUnprocessableEntity},
 		{"ss empty settings", "shadowsocks", nil, http.StatusUnprocessableEntity},
+		{"socks empty settings", "socks", map[string]any{}, http.StatusCreated},
+		{"socks unknown field", "socks", map[string]any{"cipher": "none"}, http.StatusUnprocessableEntity},
 	}
 	for i, tc := range cases {
 		resp, body := e.do(t, "POST", "/api/nodes", map[string]any{

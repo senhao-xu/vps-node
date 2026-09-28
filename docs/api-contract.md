@@ -54,7 +54,7 @@ List endpoints accept `?page=` (default 1) and `?page_size=` (default 20, max 10
 - User status: `active`, `disabled`, `expired`.
 - Server status: `active`, `disabled`, `offline` (`offline` is computed from heartbeat, not stored by admins).
 - Node status: `active`, `disabled`.
-- Protocols: `shadowsocks`, `vless`, `hysteria2`, `anytls`.
+- Protocols: `shadowsocks`, `vless`, `hysteria2`, `anytls`, `socks`.
 
 A user is **eligible** for a node iff `status = active` AND `expires_at > now` AND (`transfer_enable = 0` OR (`u` + `d`) < `transfer_enable`). Only eligible users authorized on the node's server are included in agent payloads.
 
@@ -302,7 +302,7 @@ Generates or resets the server's Agent Key. Response `200`: `{ "agent_key": "<pl
 
 ### GET /api/nodes
 
-Query (all optional, combinable): `server_id` (exact match), `protocol` (`shadowsocks|vless|hysteria2|anytls`), `status` (`active|disabled`), `q` (case-insensitive substring match on node name), plus `page` / `page_size`. Invalid enum values return `400 invalid_request`. Paginated node DTOs:
+Query (all optional, combinable): `server_id` (exact match), `protocol` (`shadowsocks|vless|hysteria2|anytls|socks`), `status` (`active|disabled`), `q` (case-insensitive substring match on node name), plus `page` / `page_size`. Invalid enum values return `400 invalid_request`. Paginated node DTOs:
 
 ```json
 { "id": 1, "server_id": 1, "address": "hk01.example.com", "ipv6_enabled": false, "ipv6_address": "", "name": "HK-SS", "protocol": "shadowsocks", "port": 8388, "rate": 1, "tags": [], "status": "active", "server": { "id": 1, "name": "HK-1" }, "chain_node_id": null, "chain_node": null, "created_at": "..." }
@@ -328,6 +328,7 @@ Protocol secrets are never exposed.
 - `vless`: required secret `private_key` (X25519, 32 decoded bytes) and `reality_settings.server_name`; `tls` (integer, must be `2`), `reality_settings.server_port` (1-65535, default `443`), `reality_settings.short_id` (even-length hex of at most 16 characters), `reality_settings.allow_insecure`, `flow` (empty or `xtls-rprx-vision`), `network` (empty or `tcp`), `tls_settings`, `network_settings`, `multiplex`, `utls` are optional. `reality_settings.public_key` is derived from `private_key`; a contradicting value returns `422 validation`.
 - `hysteria2`: required secret `certificate`/`private_key` (matching PEM pair covering `tls.server_name`) and `tls.server_name`; optional secret `password`, `version` (integer, must be `2`), `bandwidth{up,down}` (non-negative integers), `obfs{open,type,password}` (`type` empty or `salamander`, `password` at most 64 characters), `tls.allow_insecure`, and `hop_interval` (`start-end`, ports within 1-65535; subscription-only, never rendered into the inbound).
 - `anytls`: required secret `certificate`/`private_key` (matching PEM pair covering `tls.server_name`) and `tls.server_name`; optional secret `password`, `tls.allow_insecure`, and `padding_scheme` (string or array of strings).
+- `socks`: no protocol settings — `settings` must be `{}` (or omitted) and any supplied key returns `422 validation`. Each authorized user authenticates on the inbound with `username = u-<user id>` and `password = <user uuid>`; the sing-box inbound type is `socks` and the shared link scheme/Clash type are `socks` / `socks5`.
 
 Response `201`: node DTO.
 
@@ -576,6 +577,13 @@ credentials are identical to the primary entry. Both entries share the node's si
 traffic and visit logs stay attributed to that node (the visit `client_ip` distinguishes the
 families).
 
+Protocol credentials: a `socks` node renders `socks://<base64url("u-<user id>:<user uuid>")>@host:port#<name>`
+under `flag=general` and `{ type: socks5, username: "u-<user id>", password: "<user uuid>", udp: true }`
+under `flag=clash-meta`. Clash Meta templates may group managed proxies with the placeholders
+`__ALL_PROXIES__`, `__SHADOWSOCKS_PROXIES__`, `__VLESS_PROXIES__`, `__HYSTERIA2_PROXIES__`,
+`__ANYTLS_PROXIES__` and `__SOCKS_PROXIES__`, each expanding to that protocol's proxy names for the
+current user.
+
 After all managed nodes, the output appends the user's authorized active custom nodes in
 `custom_nodes.id` order. `flag=general` passes `links`-type lines through verbatim;
 `flag=clash-meta` converts them to proxies and drops the ones that cannot be parsed. Names that
@@ -638,7 +646,7 @@ Returns the server-scoped rendered configuration.
 }
 ```
 
-`config.singbox` is the complete, rendered sing-box configuration for the server. `renderer_version` identifies the rendering contract (see `internal/singbox.ContractVersion`) so agents can detect renderer changes. `credential` contains protocol-derived secrets (already generated/decrypted by Panel). `device_limit` and `speed_limit` are copied from the user row so the embedded runtime can enforce them. Only eligible users on the server's nodes are included; expired/disabled/over-transfer users are absent, which instructs the agent to remove them locally.
+`config.singbox` is the complete, rendered sing-box configuration for the server. `renderer_version` identifies the rendering contract (see `internal/singbox.ContractVersion`) so agents can detect renderer changes. `credential` contains protocol-derived secrets (already generated/decrypted by Panel). For `socks` nodes the credential is `{ "contract": "socks-v1", "username": "u-<user id>", "password": "<user uuid>" }`, matching the inbound user the agent must authenticate. `device_limit` and `speed_limit` are copied from the user row so the embedded runtime can enforce them. Only eligible users on the server's nodes are included; expired/disabled/over-transfer users are absent, which instructs the agent to remove them locally.
 
 Chained nodes (see `POST /api/nodes` `chain_node_id`) render one extra outbound per chained entry node (`tag: chain-<node id>`, a full protocol client of the exit node, credentials derived from the panel app key) plus a `route.rules` entry mapping the entry inbound tag to that outbound; `route.final` stays `direct`. Exit-side inbounds carry an additional pseudo user named `relay-<entry server id>` with the same derived credential; agents never map that name to a panel user, so relay traffic is neither attributed nor reported.
 

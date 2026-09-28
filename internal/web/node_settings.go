@@ -79,6 +79,7 @@ var nodeSettingsSchemas = map[string]map[string]settingField{
 		"certificate": {secret: true, validate: pemField("settings.certificate")},
 		"private_key": {secret: true, validate: pemField("settings.private_key")},
 	},
+	repo.ProtocolSocks: {},
 }
 
 func (h *Handler) buildNodeSettings(protocol string, raw json.RawMessage, currentSettings string, currentSecret []byte) (string, []byte, error) {
@@ -259,6 +260,8 @@ func validateProtocolSettings(protocol string, plain, secretFields map[string]an
 		}
 	case repo.ProtocolHysteria2, repo.ProtocolAnyTLS:
 		return validateTLSMaterial(protocol, plain, secretFields)
+	case repo.ProtocolSocks:
+		return nil
 	default:
 		return errInvalid("invalid protocol")
 	}

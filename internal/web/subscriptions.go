@@ -218,7 +218,7 @@ func (h *Handler) handlePublicSubscription(w http.ResponseWriter, r *http.Reques
 		w.Header().Set("Content-Disposition", "attachment; filename*=UTF-8''"+url.PathEscape(name))
 	}
 	if flag == "general" {
-		body := subscription.RenderGeneralLinksMerged(h.appKey, u.UUID, nodes, customSources, skipNode)
+		body := subscription.RenderGeneralLinksMerged(h.appKey, subscription.User{ID: u.ID, UUID: u.UUID}, nodes, customSources, skipNode)
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = w.Write([]byte(body))
 		return
@@ -228,7 +228,7 @@ func (h *Handler) handlePublicSubscription(w http.ResponseWriter, r *http.Reques
 		writeErr(w, err)
 		return
 	}
-	body, err := subscription.RenderClashFilteredMerged(h.appKey, u.UUID, template, nodes, customSources, skipNode, skipCustom)
+	body, err := subscription.RenderClashFilteredMerged(h.appKey, subscription.User{ID: u.ID, UUID: u.UUID}, template, nodes, customSources, skipNode, skipCustom)
 	if err != nil {
 		writeErr(w, err)
 		return

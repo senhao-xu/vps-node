@@ -164,6 +164,14 @@ type Node struct {
 	Secret      map[string]any
 }
 
+// User carries the subscriber identity used to derive per-user credentials.
+// UUID drives every protocol except socks, whose sing-box inbound
+// authenticates with the username u-<id> instead.
+type User struct {
+	ID   int64
+	UUID string
+}
+
 // expandIPv6 returns the render targets for a node: the node itself plus, when
 // an IPv6 address is configured, a second entry differing only in the
 // client-facing host and name. Both entries share the sing-box inbound, so
@@ -187,10 +195,10 @@ func expandNodes(nodes []Node) []Node {
 	return out
 }
 
-func RenderGeneral(appKey []byte, userUUID string, nodes []Node) (string, error) {
+func RenderGeneral(appKey []byte, user User, nodes []Node) (string, error) {
 	links := make([]string, 0, len(nodes))
 	for _, node := range expandNodes(nodes) {
-		link, err := renderURI(appKey, userUUID, node)
+		link, err := renderURI(appKey, user, node)
 		if err != nil {
 			return "", err
 		}
@@ -215,17 +223,17 @@ type CustomSource struct {
 // RenderGeneralLinks renders each node's share link, skipping nodes that
 // cannot be rendered (reported via onSkip) so a single broken node does not
 // break the whole subscription.
-func RenderGeneralLinks(appKey []byte, userUUID string, nodes []Node, onSkip func(Node, error)) string {
-	return RenderGeneralLinksMerged(appKey, userUUID, nodes, nil, onSkip)
+func RenderGeneralLinks(appKey []byte, user User, nodes []Node, onSkip func(Node, error)) string {
+	return RenderGeneralLinksMerged(appKey, user, nodes, nil, onSkip)
 }
 
 // RenderGeneralLinksMerged behaves like RenderGeneralLinks and then appends
 // the custom sources' share links verbatim (including lines that would not
 // parse — general clients ignore them).
-func RenderGeneralLinksMerged(appKey []byte, userUUID string, nodes []Node, custom []CustomSource, onSkip func(Node, error)) string {
+func RenderGeneralLinksMerged(appKey []byte, user User, nodes []Node, custom []CustomSource, onSkip func(Node, error)) string {
 	links := make([]string, 0, len(nodes))
 	for _, node := range expandNodes(nodes) {
-		link, err := renderURI(appKey, userUUID, node)
+		link, err := renderURI(appKey, user, node)
 		if err != nil {
 			if onSkip != nil {
 				onSkip(node, err)
@@ -242,8 +250,8 @@ func RenderGeneralLinksMerged(appKey []byte, userUUID string, nodes []Node, cust
 
 // RenderClashFiltered assembles the Clash Meta config from the renderable
 // nodes, skipping broken nodes (reported via onSkip).
-func RenderClashFiltered(appKey []byte, userUUID, template string, nodes []Node, onSkip func(Node, error)) ([]byte, error) {
-	return RenderClashFilteredMerged(appKey, userUUID, template, nodes, nil, onSkip, nil)
+func RenderClashFiltered(appKey []byte, user User, template string, nodes []Node, onSkip func(Node, error)) ([]byte, error) {
+	return RenderClashFilteredMerged(appKey, user, template, nodes, nil, onSkip, nil)
 }
 
 // RenderClashFilteredMerged behaves like RenderClashFiltered and then merges
@@ -252,12 +260,12 @@ func RenderClashFiltered(appKey []byte, userUUID, template string, nodes []Node,
 // appended as-is. Custom proxy names colliding with an earlier name are
 // suffixed with the source id so Clash proxy names stay unique. Custom
 // proxies join the __ALL_PROXIES__ group only.
-func RenderClashFilteredMerged(appKey []byte, userUUID, template string, nodes []Node, custom []CustomSource, onSkip func(Node, error), onSkipCustom func(sourceID int64, item string, err error)) ([]byte, error) {
+func RenderClashFilteredMerged(appKey []byte, user User, template string, nodes []Node, custom []CustomSource, onSkip func(Node, error), onSkipCustom func(sourceID int64, item string, err error)) ([]byte, error) {
 	proxies := make([]map[string]any, 0, len(nodes))
 	names := map[string][]string{"all": {}}
 	usedNames := map[string]bool{}
 	for _, n := range expandNodes(nodes) {
-		proxy, err := renderProxy(appKey, userUUID, n)
+		proxy, err := renderProxy(appKey, user, n)
 		if err != nil {
 			if onSkip != nil {
 				onSkip(n, err)
@@ -316,13 +324,13 @@ func uniqueProxyName(used map[string]bool, name string, sourceID int64) string {
 	return candidate
 }
 
-func renderURI(appKey []byte, userUUID string, n Node) (string, error) {
+func renderURI(appKey []byte, user User, n Node) (string, error) {
 	host := net.JoinHostPort(n.Address, strconv.Itoa(n.Port))
 	name := url.PathEscape(n.Name)
 	switch n.Protocol {
 	case singbox.ProtocolShadowsocks:
 		cipher := singbox.SettingString(n.Settings, "cipher")
-		password, err := ssClientPassword(appKey, n, userUUID, cipher)
+		password, err := ssClientPassword(appKey, n, user.UUID, cipher)
 		if err != nil {
 			return "", err
 		}
@@ -346,7 +354,7 @@ func renderURI(appKey []byte, userUUID string, n Node) (string, error) {
 		if sid := singbox.SettingString(reality, "short_id"); sid != "" {
 			q.Set("sid", sid)
 		}
-		return "vless://" + url.PathEscape(userUUID) + "@" + host + "?" + q.Encode() + "#" + name, nil
+		return "vless://" + url.PathEscape(user.UUID) + "@" + host + "?" + q.Encode() + "#" + name, nil
 	case singbox.ProtocolHysteria2:
 		serverName := singbox.SettingString(singbox.SettingMap(n.Settings, "tls"), "server_name")
 		if serverName == "" {
@@ -361,14 +369,17 @@ func renderURI(appKey []byte, userUUID string, n Node) (string, error) {
 		if hopPorts := singbox.SettingString(n.Settings, "hop_interval"); hopPorts != "" {
 			q.Set("mport", hopPorts)
 		}
-		return "hysteria2://" + url.PathEscape(userUUID) + "@" + host + "?" + q.Encode() + "#" + name, nil
+		return "hysteria2://" + url.PathEscape(user.UUID) + "@" + host + "?" + q.Encode() + "#" + name, nil
 	case singbox.ProtocolAnyTLS:
 		serverName := singbox.SettingString(singbox.SettingMap(n.Settings, "tls"), "server_name")
 		if serverName == "" {
 			return "", fmt.Errorf("anytls node %d has no server name", n.ID)
 		}
 		q := url.Values{"sni": {serverName}}
-		return "anytls://" + url.PathEscape(userUUID) + "@" + host + "?" + q.Encode() + "#" + name, nil
+		return "anytls://" + url.PathEscape(user.UUID) + "@" + host + "?" + q.Encode() + "#" + name, nil
+	case singbox.ProtocolSocks:
+		credential := base64.RawURLEncoding.EncodeToString([]byte(singbox.NameForUser(user.ID) + ":" + user.UUID))
+		return "socks://" + credential + "@" + host + "#" + name, nil
 	default:
 		return "", fmt.Errorf("unsupported protocol %q", n.Protocol)
 	}
@@ -443,11 +454,11 @@ func hasForbidden(value any) bool {
 	return false
 }
 
-func RenderClash(appKey []byte, userUUID, template string, nodes []Node) ([]byte, error) {
+func RenderClash(appKey []byte, user User, template string, nodes []Node) ([]byte, error) {
 	proxies := make([]map[string]any, 0, len(nodes))
 	names := map[string][]string{"all": {}}
 	for _, n := range expandNodes(nodes) {
-		proxy, err := renderProxy(appKey, userUUID, n)
+		proxy, err := renderProxy(appKey, user, n)
 		if err != nil {
 			return nil, err
 		}
@@ -480,12 +491,12 @@ func assembleClash(template string, proxies []map[string]any, names map[string][
 	return yaml.Marshal(config)
 }
 
-func renderProxy(appKey []byte, userUUID string, n Node) (map[string]any, error) {
+func renderProxy(appKey []byte, user User, n Node) (map[string]any, error) {
 	p := map[string]any{"name": n.Name, "server": n.Address, "port": n.Port, "type": n.Protocol}
 	switch n.Protocol {
 	case singbox.ProtocolShadowsocks:
 		cipher := singbox.SettingString(n.Settings, "cipher")
-		password, err := ssClientPassword(appKey, n, userUUID, cipher)
+		password, err := ssClientPassword(appKey, n, user.UUID, cipher)
 		if err != nil {
 			return nil, err
 		}
@@ -504,11 +515,11 @@ func renderProxy(appKey []byte, userUUID string, n Node) (map[string]any, error)
 			}
 			publicKey = derived
 		}
-		p["uuid"], p["flow"], p["network"], p["tls"] = userUUID, "xtls-rprx-vision", "tcp", true
+		p["uuid"], p["flow"], p["network"], p["tls"] = user.UUID, "xtls-rprx-vision", "tcp", true
 		p["servername"], p["client-fingerprint"] = serverName, "chrome"
 		p["reality-opts"] = map[string]any{"public-key": publicKey, "short-id": singbox.SettingString(reality, "short_id")}
 	case singbox.ProtocolHysteria2:
-		p["password"], p["sni"] = userUUID, singbox.SettingString(singbox.SettingMap(n.Settings, "tls"), "server_name")
+		p["password"], p["sni"] = user.UUID, singbox.SettingString(singbox.SettingMap(n.Settings, "tls"), "server_name")
 		p["skip-cert-verify"] = false
 		obfs := singbox.SettingMap(n.Settings, "obfs")
 		if obfsPassword := singbox.SettingString(obfs, "password"); obfsPassword != "" && obfsEnabled(obfs) {
@@ -523,8 +534,13 @@ func renderProxy(appKey []byte, userUUID string, n Node) (map[string]any, error)
 		if serverName == "" {
 			return nil, fmt.Errorf("anytls node %d has no server name", n.ID)
 		}
-		p["password"], p["sni"] = userUUID, serverName
+		p["password"], p["sni"] = user.UUID, serverName
 		p["skip-cert-verify"] = false
+		p["udp"] = true
+	case singbox.ProtocolSocks:
+		p["type"] = "socks5"
+		p["username"] = singbox.NameForUser(user.ID)
+		p["password"] = user.UUID
 		p["udp"] = true
 	default:
 		return nil, fmt.Errorf("unsupported protocol %q", n.Protocol)
@@ -586,7 +602,7 @@ func expandGroups(config map[string]any, names map[string][]string, validating b
 			}
 		}
 	}
-	placeholders := map[string]string{"__ALL_PROXIES__": "all", "__SHADOWSOCKS_PROXIES__": singbox.ProtocolShadowsocks, "__VLESS_PROXIES__": singbox.ProtocolVLESS, "__HYSTERIA2_PROXIES__": singbox.ProtocolHysteria2, "__ANYTLS_PROXIES__": singbox.ProtocolAnyTLS}
+	placeholders := map[string]string{"__ALL_PROXIES__": "all", "__SHADOWSOCKS_PROXIES__": singbox.ProtocolShadowsocks, "__VLESS_PROXIES__": singbox.ProtocolVLESS, "__HYSTERIA2_PROXIES__": singbox.ProtocolHysteria2, "__ANYTLS_PROXIES__": singbox.ProtocolAnyTLS, "__SOCKS_PROXIES__": singbox.ProtocolSocks}
 	for _, rawGroup := range groups {
 		group := rawGroup.(map[string]any)
 		items, ok := group["proxies"].([]any)

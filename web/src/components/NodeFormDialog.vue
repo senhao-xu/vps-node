@@ -176,6 +176,8 @@ async function loadNodeDetail(nodeId: number) {
       anytlsAllowInsecure.value = tls?.allow_insecure ?? false
       const scheme = settings.padding_scheme
       anytlsPaddingScheme.value = Array.isArray(scheme) ? scheme.join('\n') : (scheme ?? '')
+    } else if (protocol.value === 'socks') {
+      // SOCKS5 无协议设置，服务端返回的 settings 恒为 {}，无需读取。
     }
     detailLoaded.value = true
   } catch (err) {
@@ -204,6 +206,7 @@ const protocolOptions: Array<{ value: Protocol; label: string; dot: string }> = 
   { value: 'vless', label: protocolLabel('vless'), dot: 'primary' },
   { value: 'hysteria2', label: protocolLabel('hysteria2'), dot: 'warning' },
   { value: 'anytls', label: protocolLabel('anytls'), dot: 'danger' },
+  { value: 'socks', label: protocolLabel('socks'), dot: 'muted' },
 ]
 
 const serverSelectValue = computed<number>({
@@ -332,6 +335,8 @@ const settingsPayload = computed<NodeSettingsInput | undefined>(() => {
     if (scheme.length > 0) payload.padding_scheme = scheme
     if (tlsCertificate.value) payload.certificate = tlsCertificate.value
     if (tlsPrivateKey.value) payload.private_key = tlsPrivateKey.value
+  } else if (protocol.value === 'socks') {
+    return {}
   }
   if (Object.keys(payload).length === 0) return undefined
   return payload
@@ -417,6 +422,8 @@ const validationMessage = computed(() => {
     if (tlsServerName.value.trim() && !/^[A-Za-z0-9.-]+$/.test(tlsServerName.value.trim())) {
       return 'Server Name 格式不正确'
     }
+  } else if (protocol.value === 'socks') {
+    // SOCKS5 无协议设置，端口/地址等通用校验已在上方处理。
   }
   return ''
 })
@@ -440,6 +447,7 @@ function changeProtocol() {
   tlsServerName.value = ''
   tlsCertificate.value = ''
   tlsPrivateKey.value = ''
+  // SOCKS5 无协议设置状态，无需额外重置。
   error.value = ''
 }
 
@@ -969,6 +977,18 @@ async function submit() {
           </div>
           <p class="field-hint">
             用户 UUID 直接作为认证凭据；证书和私钥必须成对替换。
+          </p>
+        </div>
+
+        <div
+          v-else-if="protocol === 'socks'"
+          class="settings-box"
+        >
+          <div class="section-label">
+            SOCKS5
+          </div>
+          <p class="protocol-note">
+            SOCKS5 节点无需协议设置，Panel 会为每个用户自动分配独立的用户名和密码进行鉴权，并按用户归属流量与设备。
           </p>
         </div>
       </section>

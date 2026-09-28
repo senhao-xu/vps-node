@@ -20,7 +20,7 @@ func TestNodesProtocolAndDeviceSchema(t *testing.T) {
 	if _, err := d.ExecContext(ctx, `INSERT INTO servers (id, name, created_at, updated_at) VALUES (1, 's1', 1, 1)`); err != nil {
 		t.Fatalf("seed server: %v", err)
 	}
-	for i, protocol := range []string{"shadowsocks", "vless", "hysteria2", "anytls"} {
+	for i, protocol := range []string{"shadowsocks", "vless", "hysteria2", "anytls", "socks"} {
 		if _, err := d.ExecContext(ctx,
 			`INSERT INTO nodes (server_id, name, protocol, port, created_at, updated_at) VALUES (1, ?, ?, ?, 1, 1)`,
 			protocol, protocol, 8000+i); err != nil {

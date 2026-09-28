@@ -70,6 +70,7 @@ const (
 	ProtocolVLESS       = "vless"
 	ProtocolHysteria2   = "hysteria2"
 	ProtocolAnyTLS      = "anytls"
+	ProtocolSocks       = "socks"
 )
 
 const nodeSelect = `SELECT id, server_id, address, ipv6_enabled, ipv6_address, name, protocol, port, protocol_settings, rate, tags, secret_enc, status, chain_node_id, created_at, updated_at FROM nodes`

@@ -267,7 +267,7 @@ onMounted(() => {
               spellcheck="false"
             />
             <p class="form-help">
-              允许 DNS、代理组、规则、规则集和基础运行参数。代理组使用 __ALL_PROXIES__、__SHADOWSOCKS_PROXIES__、__VLESS_PROXIES__、__HYSTERIA2_PROXIES__、__ANYTLS_PROXIES__ 注入动态节点；不得添加 proxies、proxy-providers、监听器或控制接口。
+              允许 DNS、代理组、规则、规则集和基础运行参数。代理组使用 __ALL_PROXIES__、__SHADOWSOCKS_PROXIES__、__VLESS_PROXIES__、__HYSTERIA2_PROXIES__、__ANYTLS_PROXIES__、__SOCKS_PROXIES__ 注入动态节点；不得添加 proxies、proxy-providers、监听器或控制接口。
             </p>
           </div>
           <div>

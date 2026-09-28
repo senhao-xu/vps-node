@@ -31,9 +31,9 @@ func TestRenderGeneralIncludesAllProtocolsWithoutPrivateKey(t *testing.T) {
 	if _, err := rand.Read(key); err != nil {
 		t.Fatal(err)
 	}
-	nodes := []Node{testNode(t, "shadowsocks"), testNode(t, "vless"), testNode(t, "hysteria2"), testNode(t, "anytls")}
-	nodes[1].ID, nodes[2].ID, nodes[3].ID = 2, 3, 4
-	encoded, err := RenderGeneral(key, "user-uuid", nodes)
+	nodes := []Node{testNode(t, "shadowsocks"), testNode(t, "vless"), testNode(t, "hysteria2"), testNode(t, "anytls"), testNode(t, "socks")}
+	nodes[1].ID, nodes[2].ID, nodes[3].ID, nodes[4].ID = 2, 3, 4, 5
+	encoded, err := RenderGeneral(key, User{UUID: "user-uuid"}, nodes)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +42,7 @@ func TestRenderGeneralIncludesAllProtocolsWithoutPrivateKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(raw)
-	for _, prefix := range []string{"ss://", "vless://", "hysteria2://", "anytls://"} {
+	for _, prefix := range []string{"ss://", "vless://", "hysteria2://", "anytls://", "socks://"} {
 		if !strings.Contains(text, prefix) {
 			t.Fatalf("missing %s in %q", prefix, text)
 		}
@@ -54,7 +54,7 @@ func TestRenderGeneralIncludesAllProtocolsWithoutPrivateKey(t *testing.T) {
 
 func renderSS(t *testing.T, appKey []byte, node Node) (string, map[string]any) {
 	t.Helper()
-	encoded, err := RenderGeneral(appKey, "user-uuid", []Node{node})
+	encoded, err := RenderGeneral(appKey, User{UUID: "user-uuid"}, []Node{node})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +77,7 @@ func renderSS(t *testing.T, appKey []byte, node Node) (string, map[string]any) {
 	}
 
 	template := "proxy-groups:\n  - {name: all, type: select, proxies: [__ALL_PROXIES__]}\n"
-	out, err := RenderClash(appKey, "user-uuid", template, []Node{node})
+	out, err := RenderClash(appKey, User{UUID: "user-uuid"}, template, []Node{node})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +156,7 @@ func TestRenderAnyTLSLinkAndProxy(t *testing.T) {
 	key := make([]byte, 32)
 	node := testNode(t, "anytls")
 
-	encoded, err := RenderGeneral(key, "user-uuid", []Node{node})
+	encoded, err := RenderGeneral(key, User{UUID: "user-uuid"}, []Node{node})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +170,7 @@ func TestRenderAnyTLSLinkAndProxy(t *testing.T) {
 	}
 
 	template := "proxy-groups:\n  - {name: anytls, type: select, proxies: [__ANYTLS_PROXIES__]}\n"
-	out, err := RenderClash(key, "user-uuid", template, []Node{node})
+	out, err := RenderClash(key, User{UUID: "user-uuid"}, template, []Node{node})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,23 +191,62 @@ func TestRenderAnyTLSLinkAndProxy(t *testing.T) {
 
 	broken := testNode(t, "anytls")
 	broken.Settings["tls"] = map[string]any{"server_name": ""}
-	if _, err := RenderGeneral(key, "user-uuid", []Node{broken}); err == nil {
+	if _, err := RenderGeneral(key, User{UUID: "user-uuid"}, []Node{broken}); err == nil {
 		t.Fatal("anytls node without server_name must fail to render")
 	}
 }
 
+func TestRenderSocksLinkAndProxy(t *testing.T) {
+	key := make([]byte, 32)
+	node := testNode(t, "socks")
+	user := User{ID: 9, UUID: "uuid-9"}
+
+	encoded, err := RenderGeneral(key, user, []Node{node})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "socks://" + base64.RawURLEncoding.EncodeToString([]byte("u-9:uuid-9")) + "@[2001:db8::1]:443#node%20one"
+	if string(raw) != want {
+		t.Fatalf("socks link = %q, want %q", string(raw), want)
+	}
+
+	template := "proxy-groups:\n  - {name: socks, type: select, proxies: [__SOCKS_PROXIES__]}\n"
+	out, err := RenderClash(key, user, template, []Node{node})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config map[string]any
+	if err := yaml.Unmarshal(out, &config); err != nil {
+		t.Fatal(err)
+	}
+	proxy := config["proxies"].([]any)[0].(map[string]any)
+	if proxy["type"] != "socks5" || proxy["username"] != "u-9" || proxy["password"] != "uuid-9" || proxy["udp"] != true {
+		t.Fatalf("unexpected socks clash proxy: %+v", proxy)
+	}
+	groups := config["proxy-groups"].([]any)
+	expanded := groups[0].(map[string]any)["proxies"].([]any)
+	if len(expanded) != 1 || expanded[0].(string) != "node one" {
+		t.Fatalf("__SOCKS_PROXIES__ must expand to the socks node, got %v", expanded)
+	}
+}
+
 func TestRenderClashPlaceholdersAndRestrictions(t *testing.T) {
-	nodes := []Node{testNode(t, "shadowsocks"), testNode(t, "vless"), testNode(t, "hysteria2")}
-	nodes[0].Name, nodes[1].Name, nodes[2].Name = "ss-node", "vless-node", "hy2-node"
-	nodes[1].ID, nodes[2].ID = 2, 3
+	nodes := []Node{testNode(t, "shadowsocks"), testNode(t, "vless"), testNode(t, "hysteria2"), testNode(t, "socks")}
+	nodes[0].Name, nodes[1].Name, nodes[2].Name, nodes[3].Name = "ss-node", "vless-node", "hy2-node", "socks-node"
+	nodes[1].ID, nodes[2].ID, nodes[3].ID = 2, 3, 4
 	template := `proxy-groups:
   - {name: all, type: select, proxies: [__ALL_PROXIES__]}
   - {name: ss, type: select, proxies: [__SHADOWSOCKS_PROXIES__]}
   - {name: vless, type: select, proxies: [__VLESS_PROXIES__]}
   - {name: hy2, type: select, proxies: [__HYSTERIA2_PROXIES__]}
+  - {name: socks, type: select, proxies: [__SOCKS_PROXIES__]}
   - {name: static, type: select, proxies: [DIRECT]}
 `
-	out, err := RenderClash(make([]byte, 32), "uuid", template, nodes)
+	out, err := RenderClash(make([]byte, 32), User{UUID: "uuid"}, template, nodes)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -216,7 +255,7 @@ func TestRenderClashPlaceholdersAndRestrictions(t *testing.T) {
 		t.Fatal(err)
 	}
 	groups := config["proxy-groups"].([]any)
-	want := map[string][]string{"all": {"ss-node", "vless-node", "hy2-node"}, "ss": {"ss-node"}, "vless": {"vless-node"}, "hy2": {"hy2-node"}, "static": {"DIRECT"}}
+	want := map[string][]string{"all": {"ss-node", "vless-node", "hy2-node", "socks-node"}, "ss": {"ss-node"}, "vless": {"vless-node"}, "hy2": {"hy2-node"}, "socks": {"socks-node"}, "static": {"DIRECT"}}
 	for _, raw := range groups {
 		group := raw.(map[string]any)
 		items := group["proxies"].([]any)
@@ -232,7 +271,7 @@ func TestRenderClashPlaceholdersAndRestrictions(t *testing.T) {
 	if err := ValidateTemplate(templateWithProxies); err != nil {
 		t.Fatalf("rejected ignored proxies field: %v", err)
 	}
-	outWithProxies, err := RenderClash(make([]byte, 32), "uuid", templateWithProxies, nodes)
+	outWithProxies, err := RenderClash(make([]byte, 32), User{UUID: "uuid"}, templateWithProxies, nodes)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -240,7 +279,7 @@ func TestRenderClashPlaceholdersAndRestrictions(t *testing.T) {
 	if err := yaml.Unmarshal(outWithProxies, &configWithProxies); err != nil {
 		t.Fatal(err)
 	}
-	if renderedProxies := configWithProxies["proxies"].([]any); len(renderedProxies) != 3 {
+	if renderedProxies := configWithProxies["proxies"].([]any); len(renderedProxies) != 4 {
 		t.Fatalf("expected generated proxies to replace template proxies, got %v", renderedProxies)
 	}
 	if err := ValidateTemplate("proxy-groups:\n  - name: x\n    type: select\n    proxies: [STATIC]\n"); err == nil {
@@ -256,7 +295,7 @@ func TestRenderClashPlaceholdersAndRestrictions(t *testing.T) {
 		}
 	}
 	tunTemplate := "tun:\n  enable: true\n  stack: gvisor\nproxy-groups:\n  - {name: x, type: select, proxies: [DIRECT]}\n"
-	keptTun, err := RenderClash(make([]byte, 32), "uuid", tunTemplate, nodes)
+	keptTun, err := RenderClash(make([]byte, 32), User{UUID: "uuid"}, tunTemplate, nodes)
 	if err != nil {
 		t.Fatalf("rejected tun: %v", err)
 	}
@@ -268,7 +307,7 @@ func TestRenderClashPlaceholdersAndRestrictions(t *testing.T) {
 		if err := ValidateTemplate(template); err != nil {
 			t.Fatalf("rejected stripped field %s: %v", field, err)
 		}
-		stripped, err := RenderClash(make([]byte, 32), "uuid", template, nodes)
+		stripped, err := RenderClash(make([]byte, 32), User{UUID: "uuid"}, template, nodes)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -288,7 +327,7 @@ func TestDefaultClashMetaTemplate(t *testing.T) {
 	nodes := []Node{testNode(t, "shadowsocks"), testNode(t, "hysteria2")}
 	nodes[1].ID = 2
 	nodes[1].Name = "node two"
-	out, err := RenderClash(make([]byte, 32), "user-uuid", DefaultClashMetaTemplate, nodes)
+	out, err := RenderClash(make([]byte, 32), User{UUID: "user-uuid"}, DefaultClashMetaTemplate, nodes)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -321,7 +360,7 @@ func TestRenderHysteria2ObfsAndHopPorts(t *testing.T) {
 	node.Settings["obfs"] = map[string]any{"open": true, "type": "salamander", "password": "obfs-secret"}
 	node.Settings["hop_interval"] = "30000-40000"
 
-	encoded, err := RenderGeneral(key, "user-uuid", []Node{node})
+	encoded, err := RenderGeneral(key, User{UUID: "user-uuid"}, []Node{node})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -337,7 +376,7 @@ func TestRenderHysteria2ObfsAndHopPorts(t *testing.T) {
 	}
 
 	template := "proxy-groups:\n  - {name: all, type: select, proxies: [__ALL_PROXIES__]}\n"
-	out, err := RenderClash(key, "user-uuid", template, []Node{node})
+	out, err := RenderClash(key, User{UUID: "user-uuid"}, template, []Node{node})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -352,7 +391,7 @@ func TestRenderHysteria2ObfsAndHopPorts(t *testing.T) {
 
 	// Legacy nodes without the new keys render exactly as before.
 	legacy := testNode(t, "hysteria2")
-	encoded, err = RenderGeneral(key, "user-uuid", []Node{legacy})
+	encoded, err = RenderGeneral(key, User{UUID: "user-uuid"}, []Node{legacy})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -363,7 +402,7 @@ func TestRenderHysteria2ObfsAndHopPorts(t *testing.T) {
 			t.Fatalf("legacy hy2 link must not contain %q: %s", absent, link)
 		}
 	}
-	out, err = RenderClash(key, "user-uuid", template, []Node{legacy})
+	out, err = RenderClash(key, User{UUID: "user-uuid"}, template, []Node{legacy})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -391,7 +430,7 @@ func TestRenderFilteredSkipsBrokenNodes(t *testing.T) {
 	broken.Secret["private_key"] = "aaaa"
 
 	var skipped []int64
-	text := RenderGeneralLinks(key, "uuid", []Node{broken, good}, func(n Node, err error) {
+	text := RenderGeneralLinks(key, User{UUID: "uuid"}, []Node{broken, good}, func(n Node, err error) {
 		skipped = append(skipped, n.ID)
 	})
 	raw, err := base64.StdEncoding.DecodeString(text)
@@ -406,7 +445,7 @@ func TestRenderFilteredSkipsBrokenNodes(t *testing.T) {
 	}
 
 	template := "proxy-groups:\n  - {name: all, type: select, proxies: [__ALL_PROXIES__]}\n"
-	out, err := RenderClashFiltered(key, "uuid", template, []Node{broken, good}, func(n Node, err error) {
+	out, err := RenderClashFiltered(key, User{UUID: "uuid"}, template, []Node{broken, good}, func(n Node, err error) {
 		skipped = append(skipped, n.ID)
 	})
 	if err != nil {
@@ -431,7 +470,7 @@ func TestRenderIPv6ExtraEntry(t *testing.T) {
 	node.Address = "hk01.example.com"
 	node.IPv6Address = "2001:db8::1"
 
-	out, err := RenderClash(appKey, "user-uuid", DefaultClashMetaTemplate, []Node{node})
+	out, err := RenderClash(appKey, User{UUID: "user-uuid"}, DefaultClashMetaTemplate, []Node{node})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -452,7 +491,7 @@ func TestRenderIPv6ExtraEntry(t *testing.T) {
 		t.Fatalf("IPv6 proxy must differ only by host and name: %v", extra)
 	}
 
-	encoded, err := RenderGeneral(appKey, "user-uuid", []Node{node})
+	encoded, err := RenderGeneral(appKey, User{UUID: "user-uuid"}, []Node{node})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -466,7 +505,7 @@ func TestRenderIPv6ExtraEntry(t *testing.T) {
 	}
 
 	node.IPv6Address = "hk01.example.com"
-	out, err = RenderClash(appKey, "user-uuid", DefaultClashMetaTemplate, []Node{node})
+	out, err = RenderClash(appKey, User{UUID: "user-uuid"}, DefaultClashMetaTemplate, []Node{node})
 	if err != nil {
 		t.Fatal(err)
 	}
