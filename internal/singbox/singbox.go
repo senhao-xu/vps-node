@@ -598,6 +598,7 @@ func renderVLESSOutbound(appKey []byte, c ChainExit, tag string) (map[string]any
 				"public_key": publicKey,
 				"short_id":   SettingString(reality, "short_id"),
 			},
+			"utls": map[string]any{"enabled": true, "fingerprint": "chrome"},
 		},
 	}, nil
 }

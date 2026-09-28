@@ -254,6 +254,13 @@ func v2rayTLS(proxy map[string]any) map[string]any {
 			realityOut["short_id"] = shortID
 		}
 		tls["reality"] = realityOut
+		// sing-box refuses to build a reality client without uTLS (it lives
+		// under tls), so attach it using the proxy fingerprint or a default.
+		fingerprint := SettingString(proxy, "client-fingerprint")
+		if fingerprint == "" {
+			fingerprint = "chrome"
+		}
+		tls["utls"] = map[string]any{"enabled": true, "fingerprint": fingerprint}
 	}
 	return tls
 }

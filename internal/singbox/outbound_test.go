@@ -47,8 +47,9 @@ func TestProxyToOutboundVLESSReality(t *testing.T) {
 		"name": "ext-vless", "type": "vless", "server": "vless.example.com", "port": 443,
 		"uuid": "11111111-2222-3333-4444-555555555555", "flow": "xtls-rprx-vision",
 		"tls": true, "servername": "reality.example.com", "network": "ws",
-		"reality-opts": map[string]any{"public-key": "pbk", "short-id": "abcd1234"},
-		"ws-opts":      map[string]any{"path": "/ws", "headers": map[string]any{"Host": "h.example.com"}},
+		"reality-opts":       map[string]any{"public-key": "pbk", "short-id": "abcd1234"},
+		"client-fingerprint": "firefox",
+		"ws-opts":            map[string]any{"path": "/ws", "headers": map[string]any{"Host": "h.example.com"}},
 	})
 	if err != nil {
 		t.Fatalf("convert vless: %v", err)
@@ -63,6 +64,10 @@ func TestProxyToOutboundVLESSReality(t *testing.T) {
 	reality := tls["reality"].(map[string]any)
 	if reality["enabled"] != true || reality["public_key"] != "pbk" || reality["short_id"] != "abcd1234" {
 		t.Fatalf("unexpected reality block: %+v", reality)
+	}
+	utls := tls["utls"].(map[string]any)
+	if utls["enabled"] != true || utls["fingerprint"] != "firefox" {
+		t.Fatalf("reality client requires tls.utls with the proxy fingerprint: %+v", tls["utls"])
 	}
 	transport := outbound["transport"].(map[string]any)
 	if transport["type"] != "ws" || transport["path"] != "/ws" {
@@ -88,6 +93,9 @@ func TestProxyToOutboundVLESSPlainTLS(t *testing.T) {
 	}
 	if _, has := tls["reality"]; has {
 		t.Fatalf("no reality-opts means no reality block: %+v", tls)
+	}
+	if _, has := tls["utls"]; has {
+		t.Fatalf("non-reality vless must not carry tls.utls: %+v", tls)
 	}
 	validateOutbound(t, outbound)
 }

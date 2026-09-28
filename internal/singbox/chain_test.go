@@ -133,6 +133,10 @@ func TestRenderChainVLESS(t *testing.T) {
 	if reality["short_id"] != "abcd1234" {
 		t.Fatalf("short id mismatch: %+v", reality)
 	}
+	utls := tlsMap["utls"].(map[string]any)
+	if utls["enabled"] != true || utls["fingerprint"] != "chrome" {
+		t.Fatalf("reality client outbound requires tls.utls, got %+v", tlsMap["utls"])
+	}
 }
 
 func TestRenderChainHysteria2AndAnyTLS(t *testing.T) {
