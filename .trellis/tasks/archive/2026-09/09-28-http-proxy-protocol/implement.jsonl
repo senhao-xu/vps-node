@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/node-protocol-settings.md", "reason": "Node settings schemas, secret/public split, per-protocol validation, and the socks TLS-less protocol precedent this task mirrors"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Migration + revision-bump invariants for the nodes.protocol CHECK widening rebuild"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Validation error envelope/status matrix used by node settings and share endpoints"}
+{"file": ".trellis/tasks/09-22-xboard-parity/research/xboard-model.md", "reason": "Xboard http protocol model (type list, tls/tls_settings, buildHttp, auth.User credential) for parity decisions"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "NodeFormDialog protocol-section and component conventions to extend for http"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Protocol union type and API typing conventions for the new http value"}

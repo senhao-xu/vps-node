@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Backend quality/verification conventions and forbidden patterns to check http wiring against"}
+{"file": ".trellis/spec/backend/node-protocol-settings.md", "reason": "Verify http settings validation, secret handling, and subscription rendering match the documented protocol contract"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Verify NodeFormDialog/NodesPage changes follow component conventions"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Frontend quality checks for the protocol form changes"}
