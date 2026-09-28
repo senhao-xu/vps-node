@@ -23,6 +23,10 @@ type Node struct {
 	SecretEnc        []byte
 	Status           string
 	ServerName       string
+	// ServerStatus / ServerLastSeenAt are populated by the WithServerName
+	// queries so callers can derive the server's effective online status.
+	ServerStatus     string
+	ServerLastSeenAt *time.Time
 	ChainNodeID      *int64
 	// ChainNodeName / ChainServerName are populated by the WithServerName
 	// queries for display (chain exit "server/name"); plain selects leave
@@ -70,7 +74,7 @@ const (
 
 const nodeSelect = `SELECT id, server_id, address, ipv6_enabled, ipv6_address, name, protocol, port, protocol_settings, rate, tags, secret_enc, status, chain_node_id, created_at, updated_at FROM nodes`
 
-const nodeSelectWithServer = `SELECT n.id, n.server_id, n.address, n.ipv6_enabled, n.ipv6_address, n.name, n.protocol, n.port, n.protocol_settings, n.rate, n.tags, n.secret_enc, n.status, n.chain_node_id, n.created_at, n.updated_at, s.name, cn.name, cs.name
+const nodeSelectWithServer = `SELECT n.id, n.server_id, n.address, n.ipv6_enabled, n.ipv6_address, n.name, n.protocol, n.port, n.protocol_settings, n.rate, n.tags, n.secret_enc, n.status, n.chain_node_id, n.created_at, n.updated_at, s.name, cn.name, cs.name, s.status, s.last_seen_at
 	FROM nodes n JOIN servers s ON s.id = n.server_id
 	LEFT JOIN nodes cn ON cn.id = n.chain_node_id
 	LEFT JOIN servers cs ON cs.id = cn.server_id`
@@ -325,7 +329,8 @@ func scanNodeWithServerName(scan func(dest ...any) error) (Node, error) {
 	var ipv6Enabled int
 	var chainNodeID sql.NullInt64
 	var chainNodeName, chainServerName sql.NullString
-	err := scan(&n.ID, &n.ServerID, &n.Address, &ipv6Enabled, &n.IPv6Address, &n.Name, &n.Protocol, &n.Port, &n.ProtocolSettings, &n.Rate, &n.Tags, &secretEnc, &n.Status, &chainNodeID, &createdAt, &updatedAt, &n.ServerName, &chainNodeName, &chainServerName)
+	var serverLastSeenAt sql.NullInt64
+	err := scan(&n.ID, &n.ServerID, &n.Address, &ipv6Enabled, &n.IPv6Address, &n.Name, &n.Protocol, &n.Port, &n.ProtocolSettings, &n.Rate, &n.Tags, &secretEnc, &n.Status, &chainNodeID, &createdAt, &updatedAt, &n.ServerName, &chainNodeName, &chainServerName, &n.ServerStatus, &serverLastSeenAt)
 	if err != nil {
 		return Node{}, mapErr(err)
 	}
@@ -336,6 +341,7 @@ func scanNodeWithServerName(scan func(dest ...any) error) (Node, error) {
 	}
 	n.ChainNodeName = chainNodeName.String
 	n.ChainServerName = chainServerName.String
+	n.ServerLastSeenAt = toTimePtr(serverLastSeenAt)
 	n.CreatedAt = toTime(createdAt)
 	n.UpdatedAt = toTime(updatedAt)
 	return n, nil

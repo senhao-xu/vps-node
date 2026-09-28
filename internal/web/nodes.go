@@ -13,6 +13,7 @@ import (
 	"math"
 	"net/http"
 	"strings"
+	"time"
 
 	"vps-node/internal/httpx"
 	"vps-node/internal/repo"
@@ -60,7 +61,15 @@ func (h *Handler) handleNodeList(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	writePage(w, toNodeDTOs(nodes), total, page)
+	offlineAfter := h.offlineAfter(r.Context())
+	now := time.Now()
+	items := make([]nodeDTO, 0, len(nodes))
+	for _, n := range nodes {
+		dto := toNodeDTO(n)
+		dto.ServerStatus = effectiveServerStatus(repo.Server{Status: n.ServerStatus, LastSeenAt: n.ServerLastSeenAt}, offlineAfter, now)
+		items = append(items, dto)
+	}
+	writePage(w, items, total, page)
 }
 
 type createNodeRequest struct {

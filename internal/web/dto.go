@@ -93,21 +93,24 @@ type chainRefDTO struct {
 }
 
 type nodeDTO struct {
-	ID          int64        `json:"id"`
-	ServerID    int64        `json:"server_id"`
-	Address     string       `json:"address"`
-	IPv6Enabled bool         `json:"ipv6_enabled"`
-	IPv6Address string       `json:"ipv6_address"`
-	Name        string       `json:"name"`
-	Protocol    string       `json:"protocol"`
-	Port        int          `json:"port"`
-	Rate        float64      `json:"rate"`
-	Tags        []string     `json:"tags"`
-	Status      string       `json:"status"`
-	Server      nodeRefDTO   `json:"server"`
-	ChainNodeID *int64       `json:"chain_node_id"`
-	ChainNode   *chainRefDTO `json:"chain_node"`
-	CreatedAt   string       `json:"created_at"`
+	ID          int64      `json:"id"`
+	ServerID    int64      `json:"server_id"`
+	Address     string     `json:"address"`
+	IPv6Enabled bool       `json:"ipv6_enabled"`
+	IPv6Address string     `json:"ipv6_address"`
+	Name        string     `json:"name"`
+	Protocol    string     `json:"protocol"`
+	Port        int        `json:"port"`
+	Rate        float64    `json:"rate"`
+	Tags        []string   `json:"tags"`
+	Status      string     `json:"status"`
+	Server      nodeRefDTO `json:"server"`
+	// ServerStatus is the server's effective status (active/disabled/offline)
+	// computed at query time; empty when the caller has no server context.
+	ServerStatus string       `json:"server_status,omitempty"`
+	ChainNodeID  *int64       `json:"chain_node_id"`
+	ChainNode    *chainRefDTO `json:"chain_node"`
+	CreatedAt    string       `json:"created_at"`
 }
 
 type nodeDetailDTO struct {

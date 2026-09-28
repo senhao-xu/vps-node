@@ -113,6 +113,7 @@ Start from stored values, merge only allowlisted supplied fields, validate the c
 - When a field is added to `nodeDTO` (e.g. `server: {id, name}`), EVERY query path that feeds it must populate it: `ListNodesPage`, `ListNodesByServer`, `ListNodesByIDs`, plus the create/update handlers. A path that skips population emits a zero-value object and silently violates the contract.
 - Prefer one shared SELECT helper (join `servers`, shared row scanner) across node list queries instead of per-method inline SQL.
 - Regression pattern: handler test asserts the field is present and non-zero for each endpoint family.
+- Exception: `nodeDTO.server_status` (`omitempty`) is a **node-list-only** computed field, populated solely by `handleNodeList` from the joined server's effective status (`effectiveServerStatus`). Other paths leave it empty on purpose (they have no server context or already expose the server); do not "fix" the zero value by adding it to every query.
 
 ## 9. Optional IPv6 Entry
 

@@ -18,7 +18,7 @@ import PageHeader from '@/components/ui/PageHeader.vue'
 import SearchInput from '@/components/ui/SearchInput.vue'
 import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
 import { formatDateTime } from '@/utils/format'
-import { nodeStatusInfo, protocolLabel } from '@/utils/labels'
+import { nodeStatusInfo, protocolLabel, type Tone } from '@/utils/labels'
 
 const route = useRoute()
 const router = useRouter()
@@ -76,6 +76,21 @@ const statusOptions: Array<{ value: NodeStatus | ''; label: string }> = [
   { value: 'active', label: '启用' },
   { value: 'disabled', label: '停用' },
 ]
+
+// Node availability is computed by the backend: the server_status field folds
+// in the owning server's heartbeat. A node is unavailable when it is disabled
+// or its server is offline (red); a server disabled by an admin is grey.
+function nodeDotTone(node: NodeBrief): Tone {
+  if (node.status !== 'active') return 'danger'
+  switch (node.server_status) {
+    case 'offline':
+      return 'danger'
+    case 'disabled':
+      return 'muted'
+    default:
+      return 'success'
+  }
+}
 
 const serverChipLabel = computed(() => {
   if (!serverFilter.value) return '全部服务器'
@@ -398,7 +413,7 @@ onMounted(() => {
           <span class="name-cell">
             <i
               class="status-dot"
-              :class="row.status === 'active' ? 'success' : 'muted'"
+              :class="nodeDotTone(row)"
             />
             {{ row.name }}
           </span>

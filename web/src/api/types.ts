@@ -69,6 +69,8 @@ export type NodeBrief = {
   status: NodeStatus
   created_at: string
   server: NodeRef
+  /** Effective server status; only present on the node list response. */
+  server_status?: ServerStatus
   chain_node_id: number | null
   chain_node: ChainNodeRef | null
 }
