@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 4
-- **Last Active**: 2026-09-24
+- **Total Sessions**: 5
+- **Last Active**: 2026-09-28
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~136 | Active |
+| `journal-1.md` | ~228 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 5 | 2026-09-28 | 自定义节点查看/刷新/UA/跳过证书 + 节点可用性状态点 | `1c5271a`, `846f76f`, `132ab81`, `696ce2e` | `main` |
 | 4 | 2026-09-24 | Stateless agent: panel-issued agent key + panel-owned batch seq | `ef10dc3` | `main` |
 | 3 | 2026-09-24 | 节点可选 IPv6 入口（订阅追加 v6 条目） | `b60efbd` | `main` |
 | 2 | 2026-09-23 | 节点编辑回显公开协议配置 | `2086dfb` | `main` |

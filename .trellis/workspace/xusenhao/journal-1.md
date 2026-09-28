@@ -202,3 +202,27 @@ Added two ranking cards to the dashboard (节点流量消耗排行 / 用户消�
 ### Status
 
 [OK] **Completed** (task archived; panel docker rebuilt locally)
+
+
+## Session 5: 自定义节点查看/刷新/UA/跳过证书 + 节点可用性状态点
+
+**Date**: 2026-09-28
+**Task**: 自定义节点查看/刷新/UA/跳过证书 + 节点可用性状态点
+**Branch**: `main`
+
+### Summary
+
+节点列表状态点改为按节点+服务器可用性着色；新增自定义节点查看节点(entries)与手动更新订阅；上游订阅支持按节点持久化 User-Agent(默认 clash-verge/v2.0.0) 与跳过证书校验(默认关闭)。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1c5271a` | (see git log) |
+| `846f76f` | (see git log) |
+| `132ab81` | (see git log) |
+| `696ce2e` | (see git log) |
+
+### Status
+
+[OK] **Completed**
