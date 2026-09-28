@@ -139,7 +139,7 @@ async function save() {
       .map((id) => ({ custom_node_id: id, entry_keys: [...(selectedCustomEntries.value[id] ?? [])] }))
     const [nodesResult, customResult] = await Promise.all([
       putUserNodes(props.userId, selected.value),
-      putUserCustomNodes(props.userId, selected.value, entriesPayload),
+      putUserCustomNodes(props.userId, selectedCustom.value, entriesPayload),
     ])
     emit(
       'saved',

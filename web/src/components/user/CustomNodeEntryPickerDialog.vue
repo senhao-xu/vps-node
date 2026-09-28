@@ -205,8 +205,8 @@ watch(
 }
 
 .entry-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: var(--spacing-sm);
   max-height: 320px;
   overflow-y: auto;
@@ -251,11 +251,5 @@ watch(
   margin: var(--spacing-sm) 0 0;
   color: var(--color-danger);
   font-size: var(--font-size-sm);
-}
-
-@media (max-width: 560px) {
-  .entry-list {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 </style>
