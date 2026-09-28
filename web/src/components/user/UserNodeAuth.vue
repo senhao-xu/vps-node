@@ -163,6 +163,7 @@ async function save() {
       <h2 class="card-title">
         节点授权
       </h2>
+      <span class="auth-count">已选 {{ selected.length }} / {{ nodes.length }}</span>
       <div class="card-head-actions">
         <span
           v-if="savedTip"
@@ -190,6 +191,7 @@ async function save() {
       :nodes="props.nodes"
       :servers="props.servers"
       :model-value="selected"
+      variant="list"
       @update:model-value="onSelectionChange"
     />
     <template v-if="customNodes.length > 0">
@@ -242,6 +244,12 @@ async function save() {
 </template>
 
 <style scoped>
+.auth-count {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+}
+
 .saved-tip {
   color: var(--color-success);
   font-size: var(--font-size-sm);

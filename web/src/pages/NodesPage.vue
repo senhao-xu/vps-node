@@ -19,7 +19,7 @@ import PageHeader from '@/components/ui/PageHeader.vue'
 import SearchInput from '@/components/ui/SearchInput.vue'
 import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
 import { formatDateTime } from '@/utils/format'
-import { nodeStatusInfo, protocolLabel, type Tone } from '@/utils/labels'
+import { protocolLabel, type Tone } from '@/utils/labels'
 
 const route = useRoute()
 const router = useRouter()
@@ -51,17 +51,12 @@ const shareTarget = ref<NodeBrief | null>(null)
 const deleting = ref(false)
 
 const columns: Column[] = [
-  { key: 'name', label: '名称', width: '180px', sortable: true },
-  { key: 'address', label: '地址', width: '170px' },
-  { key: 'protocol', label: '协议', width: '90px' },
-  { key: 'port', label: '端口', align: 'right', width: '72px', sortable: true },
-  { key: 'rate', label: '倍率', align: 'right', width: '70px' },
-  { key: 'tags', label: '标签', width: '150px' },
-  { key: 'server', label: '所属服务器', width: '140px' },
-  { key: 'chain', label: '链路', width: '150px' },
-  { key: 'status', label: '状态', width: '80px' },
-  { key: 'enabled', label: '启用', width: '64px' },
-  { key: 'created_at', label: '创建时间', width: '140px', sortable: true },
+  { key: 'name', label: '节点', width: '270px', sortable: true },
+  { key: 'server', label: '所属服务器', width: '170px' },
+  { key: 'protocol', label: '协议 / 倍率', width: '140px' },
+  { key: 'port', label: '端口', align: 'right', width: '80px', sortable: true },
+  { key: 'chain', label: '出口线路', width: '190px' },
+  { key: 'enabled', label: '启用', width: '68px' },
   { key: 'actions', label: '', width: '48px', divider: true },
 ]
 
@@ -422,46 +417,43 @@ onMounted(() => {
         @sort="onSort"
       >
         <template #cell-name="{ row }">
-          <span class="name-cell">
-            <i
-              class="status-dot"
-              :class="nodeDotTone(row)"
-            />
-            {{ row.name }}
-          </span>
-        </template>
-        <template #cell-address="{ row }">
-          <span class="mono">{{ row.address }}</span>
-        </template>
-        <template #cell-protocol="{ row }">
-          <StatusBadge
-            :label="protocolLabel(row.protocol)"
-            tone="purple"
-          />
-        </template>
-        <template #cell-rate="{ row }">
-          {{ row.rate }}×
-        </template>
-        <template #cell-tags="{ row }">
-          <span
-            v-if="row.tags.length === 0"
-            class="text-secondary"
-          >—</span>
-          <span
-            v-else
-            class="tag-list"
-          >
+          <div class="node-identity">
+            <span class="name-cell">
+              <i
+                class="status-dot"
+                :class="nodeDotTone(row)"
+              />
+              <strong>{{ row.name }}</strong>
+            </span>
             <span
-              v-for="tag in row.tags"
-              :key="tag"
-              class="chip"
-            >{{ tag }}</span>
-          </span>
+              class="node-meta mono"
+              :title="row.address"
+            >{{ row.address }}</span>
+            <span
+              v-if="row.tags.length"
+              class="node-meta"
+              :title="row.tags.join('、')"
+            >
+              {{ row.tags.join(' · ') }}
+            </span>
+          </div>
         </template>
         <template #cell-server="{ row }">
-          <RouterLink :to="`/servers/${row.server.id}`">
-            {{ row.server.name }}
-          </RouterLink>
+          <div class="node-identity">
+            <RouterLink :to="`/servers/${row.server.id}`">
+              {{ row.server.name }}
+            </RouterLink>
+            <span class="node-meta">创建于 {{ formatDateTime(row.created_at) }}</span>
+          </div>
+        </template>
+        <template #cell-protocol="{ row }">
+          <div class="node-identity">
+            <StatusBadge
+              :label="protocolLabel(row.protocol)"
+              tone="purple"
+            />
+            <span class="node-meta">倍率 {{ row.rate }}×</span>
+          </div>
         </template>
         <template #cell-chain="{ row }">
           <span
@@ -477,10 +469,7 @@ onMounted(() => {
           <span
             v-else
             class="text-secondary"
-          >—</span>
-        </template>
-        <template #cell-status="{ row }">
-          <StatusBadge v-bind="nodeStatusInfo(row.status)" />
+          >直连</span>
         </template>
         <template #cell-enabled="{ row }">
           <ToggleSwitch
@@ -489,9 +478,6 @@ onMounted(() => {
             :label="`${row.status === 'active' ? '禁用' : '启用'}节点 ${row.name}`"
             @update:model-value="toggleStatus(row)"
           />
-        </template>
-        <template #cell-created_at="{ row }">
-          {{ formatDateTime(row.created_at) }}
         </template>
         <template #cell-actions="{ row }">
           <OverflowMenu
@@ -574,11 +560,36 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.node-identity {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+
 .name-cell {
   display: inline-flex;
+  max-width: 100%;
   align-items: center;
   gap: var(--spacing-sm);
-  font-weight: 500;
+}
+
+.name-cell strong {
+  overflow: hidden;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-meta {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .batch-bar {
@@ -588,12 +599,4 @@ onMounted(() => {
   gap: var(--spacing-sm);
   padding-top: var(--spacing-md);
 }
-
-.tag-list {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-
 </style>

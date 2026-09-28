@@ -1,7 +1,6 @@
 <script setup lang="ts" generic="T extends Record<string, unknown>">
 import { computed } from 'vue'
-import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-vue-next'
-import EmptyState from '@/components/ui/EmptyState.vue'
+import { ArrowDown, ArrowUp, ArrowUpDown, Inbox } from 'lucide-vue-next'
 
 export interface Column {
   key: string
@@ -106,8 +105,11 @@ function display(value: unknown): string {
     tabindex="0"
     :aria-label="props.ariaLabel"
   >
-    <table class="data-table">
-      <thead>
+    <table
+      class="data-table"
+      :class="{ empty: !props.loading && props.rows.length === 0 }"
+    >
+      <thead v-if="props.rows.length > 0 || props.loading">
         <tr>
           <th
             v-if="props.selectable"
@@ -184,9 +186,17 @@ function display(value: unknown): string {
               :colspan="columnSpan"
               class="empty-cell"
             >
-              <slot name="empty">
-                <EmptyState title="暂无数据" />
-              </slot>
+              <div class="table-empty">
+                <Inbox
+                  :size="24"
+                  aria-hidden="true"
+                />
+                <p>
+                  <slot name="empty">
+                    暂无数据
+                  </slot>
+                </p>
+              </div>
             </td>
           </tr>
         </template>
@@ -249,14 +259,16 @@ function display(value: unknown): string {
 .table-box {
   overflow-x: auto;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--color-surface);
+  box-shadow: var(--shadow-card);
   scrollbar-color: var(--color-border-strong) transparent;
 }
 
 .table-box.plain {
   border: none;
   border-radius: 0;
+  box-shadow: none;
 }
 
 .table-box:focus-visible {
@@ -272,6 +284,10 @@ function display(value: unknown): string {
   font-variant-numeric: tabular-nums;
 }
 
+.data-table.empty {
+  min-width: 0;
+}
+
 .data-table th,
 .data-table td {
   border-bottom: 1px solid var(--color-border);
@@ -280,8 +296,8 @@ function display(value: unknown): string {
 }
 
 .data-table th {
-  height: 36px;
-  padding: 0 12px;
+  height: 42px;
+  padding: 0 14px;
   background: var(--color-surface-muted);
   color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
@@ -291,8 +307,8 @@ function display(value: unknown): string {
 }
 
 .data-table td {
-  height: 44px;
-  padding: 9px 12px;
+  height: 52px;
+  padding: 11px 14px;
 }
 
 .data-table .col-divider {
@@ -354,8 +370,26 @@ function display(value: unknown): string {
   text-align: center;
 }
 
-.empty-cell :deep(.empty-tip) {
-  padding: var(--spacing-lg) 0;
+.table-empty {
+  display: flex;
+  min-height: 150px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: var(--spacing-lg);
+  color: var(--color-text-secondary);
+}
+
+.table-empty svg {
+  color: var(--color-text-secondary);
+  opacity: 0.7;
+}
+
+.table-empty p {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
 }
 
 .skeleton-row td {

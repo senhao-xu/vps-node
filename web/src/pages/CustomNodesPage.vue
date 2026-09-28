@@ -9,14 +9,13 @@ import CustomNodeFormDialog from '@/components/CustomNodeFormDialog.vue'
 import CustomNodeNodesDialog from '@/components/CustomNodeNodesDialog.vue'
 import DataTable, { type Column } from '@/components/DataTable.vue'
 import ErrorBanner from '@/components/ErrorBanner.vue'
-import StatusBadge from '@/components/StatusBadge.vue'
 import FilterChip from '@/components/ui/FilterChip.vue'
 import OverflowMenu, { type OverflowMenuItem } from '@/components/ui/OverflowMenu.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import SearchInput from '@/components/ui/SearchInput.vue'
 import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
 import { formatDateTime } from '@/utils/format'
-import { customNodeSourceLabel, nodeStatusInfo } from '@/utils/labels'
+import { customNodeSourceLabel } from '@/utils/labels'
 
 const items = ref<CustomNode[]>([])
 const loading = ref(false)
@@ -35,12 +34,9 @@ const viewTarget = ref<CustomNode | null>(null)
 const viewRefreshOnOpen = ref(false)
 
 const columns: Column[] = [
-  { key: 'name', label: '名称', width: '200px' },
-  { key: 'source_type', label: '来源', width: '100px' },
-  { key: 'cache', label: '上游缓存', width: '170px' },
-  { key: 'status', label: '状态', width: '80px' },
-  { key: 'enabled', label: '启用', width: '64px' },
-  { key: 'created_at', label: '创建时间', width: '140px' },
+  { key: 'name', label: '自定义节点', width: '290px' },
+  { key: 'cache', label: '上游缓存', width: '210px' },
+  { key: 'enabled', label: '状态', width: '100px' },
   { key: 'actions', label: '', width: '48px', divider: true },
 ]
 
@@ -201,16 +197,16 @@ onMounted(() => {
         aria-label="自定义节点列表"
       >
         <template #cell-name="{ row }">
-          <span class="name-cell">
-            <i
-              class="status-dot"
-              :class="row.status === 'active' ? 'success' : 'muted'"
-            />
-            {{ row.name }}
-          </span>
-        </template>
-        <template #cell-source_type="{ row }">
-          {{ customNodeSourceLabel(row.source_type) }}
+          <div class="node-identity">
+            <button
+              type="button"
+              class="node-name"
+              @click="openNodes(row, false)"
+            >
+              {{ row.name }}
+            </button>
+            <span class="node-meta">{{ customNodeSourceLabel(row.source_type) }} · 创建于 {{ formatDateTime(row.created_at) }}</span>
+          </div>
         </template>
         <template #cell-cache="{ row }">
           <template v-if="row.source_type === 'subscription'">
@@ -225,9 +221,6 @@ onMounted(() => {
             class="text-secondary"
           >—</span>
         </template>
-        <template #cell-status="{ row }">
-          <StatusBadge v-bind="nodeStatusInfo(row.status)" />
-        </template>
         <template #cell-enabled="{ row }">
           <ToggleSwitch
             :model-value="row.status === 'active'"
@@ -235,9 +228,6 @@ onMounted(() => {
             :label="`${row.status === 'active' ? '禁用' : '启用'}自定义节点 ${row.name}`"
             @update:model-value="toggleStatus(row)"
           />
-        </template>
-        <template #cell-created_at="{ row }">
-          {{ formatDateTime(row.created_at) }}
         </template>
         <template #cell-actions="{ row }">
           <OverflowMenu
@@ -285,10 +275,32 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.name-cell {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  font-weight: 500;
+.node-identity {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.node-name {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-primary);
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.node-name:hover {
+  text-decoration: underline;
+}
+
+.node-meta {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
 }
 </style>

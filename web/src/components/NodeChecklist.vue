@@ -7,6 +7,7 @@ const props = defineProps<{
   nodes: NodeBrief[]
   servers: Server[]
   modelValue: number[]
+  variant?: 'grid' | 'list'
 }>()
 
 const emit = defineEmits<{
@@ -49,7 +50,10 @@ function toggle(node: NodeBrief, checked: boolean) {
 </script>
 
 <template>
-  <div class="node-checklist">
+  <div
+    class="node-checklist"
+    :class="{ list: props.variant === 'list' }"
+  >
     <div
       v-if="groups.length === 0"
       class="empty-tip"
@@ -98,6 +102,44 @@ function toggle(node: NodeBrief, checked: boolean) {
   border-radius: var(--radius-md);
   padding: var(--spacing-sm) var(--spacing-md);
   background: var(--color-surface-muted);
+}
+
+
+.node-checklist.list {
+  gap: 0;
+  max-height: 320px;
+  padding: 0;
+  background: var(--color-surface);
+}
+
+.node-checklist.list .group {
+  display: block;
+  padding: 0 var(--spacing-md) var(--spacing-xs);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.node-checklist.list .group:last-child {
+  border-bottom: 0;
+}
+
+.node-checklist.list .group-title {
+  margin: 0;
+  padding: 12px 0 8px;
+  font-weight: 650;
+}
+
+.node-checklist.list .node-item {
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 12px;
+  border: 0;
+  border-top: 1px solid var(--color-border);
+  border-radius: 0;
+  background: transparent;
+}
+
+.node-checklist.list .node-item.checked {
+  background: var(--color-primary-soft);
 }
 
 .group {

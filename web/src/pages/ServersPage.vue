@@ -35,12 +35,10 @@ const deleting = ref(false)
 const statusUpdatingId = ref<number | null>(null)
 
 const columns: Column[] = [
-  { key: 'name', label: '名称', width: '140px' },
-  { key: 'status', label: '状态', width: '72px' },
-  { key: 'agent_version', label: 'Agent 版本', width: '84px' },
-  { key: 'last_seen_at', label: '最后心跳', width: '110px' },
-  { key: 'node_count', label: '节点数', align: 'right', width: '56px' },
-  { key: 'online_users', label: '在线用户', align: 'right', width: '64px' },
+  { key: 'name', label: '服务器', width: '240px' },
+  { key: 'status', label: '状态', width: '110px' },
+  { key: 'agent', label: 'Agent', width: '200px' },
+  { key: 'usage', label: '资源', width: '150px' },
   { key: 'actions', label: '', width: '48px', divider: true },
 ]
 
@@ -189,25 +187,35 @@ onMounted(() => {
         aria-label="服务器列表"
       >
         <template #cell-name="{ row }">
-          <RouterLink :to="`/servers/${row.id}`">
-            {{ row.name }}
-          </RouterLink>
+          <div class="server-identity">
+            <RouterLink
+              :to="'/servers/' + row.id"
+              class="server-name"
+            >
+              {{ row.name }}
+            </RouterLink>
+            <span class="server-meta">#{{ row.id }}</span>
+          </div>
         </template>
         <template #cell-status="{ row }">
           <StatusBadge v-bind="serverStatusInfo(row.status)" />
         </template>
-        <template #cell-agent_version="{ row }">
-          {{ row.agent_version || '—' }}
+        <template #cell-agent="{ row }">
+          <div class="agent-cell">
+            <span>{{ row.agent_version || '未注册' }}</span>
+            <span
+              class="server-meta"
+              :title="row.last_seen_at ? formatDateTime(row.last_seen_at) : undefined"
+            >
+              {{ row.last_seen_at ? '心跳 ' + formatRelative(row.last_seen_at) : '暂无心跳' }}
+            </span>
+          </div>
         </template>
-        <template #cell-last_seen_at="{ row }">
-          <span v-if="row.last_seen_at">
-            {{ formatRelative(row.last_seen_at) }}
-            <span class="text-secondary heartbeat">{{ formatDateTime(row.last_seen_at) }}</span>
-          </span>
-          <span
-            v-else
-            class="text-secondary"
-          >从未</span>
+        <template #cell-usage="{ row }">
+          <div class="usage-cell">
+            <span><strong>{{ row.node_count }}</strong> 个节点</span>
+            <span class="server-meta"><strong>{{ row.online_users }}</strong> 位用户在线</span>
+          </div>
         </template>
         <template #cell-actions="{ row }">
           <OverflowMenu
@@ -259,8 +267,27 @@ onMounted(() => {
   min-width: 0;
 }
 
-.heartbeat {
-  display: block;
+.server-identity,
+.agent-cell,
+.usage-cell {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.server-name {
+  overflow-wrap: anywhere;
+  font-weight: 700;
+}
+
+.server-meta {
+  color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
+}
+
+.usage-cell strong {
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
 }
 </style>

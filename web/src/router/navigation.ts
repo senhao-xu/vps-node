@@ -25,9 +25,9 @@ export const navigationItems: NavigationItem[] = [
     icon: LayoutDashboard,
     exact: true,
   },
-  { to: '/users', label: '用户', keywords: 'users yonghu', icon: Users },
   { to: '/servers', label: '服务器', keywords: 'servers fuwuqi', icon: Server },
   { to: '/nodes', label: '节点', keywords: 'nodes jiedian', icon: Waypoints },
+  { to: '/users', label: '用户', keywords: 'users yonghu', icon: Users },
   {
     to: '/custom-nodes',
     label: '自定义节点',

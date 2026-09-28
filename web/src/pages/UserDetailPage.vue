@@ -86,6 +86,7 @@ const userMetrics = computed<MetricStripItem[]>(() => {
       key: 'nodes',
       label: '授权节点',
       value: authorizedNodeIds.value.length,
+      hint: `覆盖 ${authorizedServerCount.value} 台服务器`,
       icon: Waypoints,
     },
   ]
@@ -228,7 +229,6 @@ onMounted(() => {
           >
             <div class="section-heading">
               <div class="section-heading-copy">
-                <span class="section-kicker">Account</span>
                 <h2>账户配置</h2>
                 <p>管理身份凭证、订阅入口、流量配额与账户有效期。</p>
               </div>
@@ -255,7 +255,6 @@ onMounted(() => {
           >
             <div class="section-heading">
               <div class="section-heading-copy">
-                <span class="section-kicker">Access</span>
                 <h2>访问策略</h2>
                 <p>限制并发设备和带宽，控制该用户可以连接的节点范围。</p>
               </div>
@@ -289,7 +288,6 @@ onMounted(() => {
           >
             <div class="section-heading">
               <div class="section-heading-copy">
-                <span class="section-kicker">Usage</span>
                 <h2>用量趋势</h2>
                 <p>按小时或天查看上行、下行及累计流量变化。</p>
               </div>
@@ -303,7 +301,6 @@ onMounted(() => {
           >
             <div class="section-heading">
               <div class="section-heading-copy">
-                <span class="section-kicker">Activity</span>
                 <h2>访问活动</h2>
                 <p>核对最近访问目标、来源地址和所使用的节点。</p>
               </div>
@@ -408,14 +405,18 @@ onMounted(() => {
 
 .two-col {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-  align-items: stretch;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  gap: 16px;
+  align-items: start;
   margin-top: 14px;
 }
 
+.two-col > * {
+  min-width: 0;
+}
+
 .two-col + :deep(.card) {
-  margin-top: 14px;
+  margin-top: 16px;
 }
 
 .detail-main :deep(.card) {
@@ -442,21 +443,4 @@ onMounted(() => {
   font-weight: 700;
 }
 
-@media (max-width: 1240px) {
-  .two-col {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-@media (max-width: 1024px) {
-  .two-col {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 700px) {
-  .two-col {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
 </style>

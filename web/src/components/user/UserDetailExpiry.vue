@@ -91,11 +91,11 @@ async function save() {
       <div class="expiry-rows">
         <div class="expiry-row">
           <span class="expiry-label text-secondary">开始时间</span>
-          <span>{{ props.user.started_at ? formatDate(props.user.started_at) : '—' }}</span>
+          <strong>{{ props.user.started_at ? formatDate(props.user.started_at) : '未设置' }}</strong>
         </div>
         <div class="expiry-row">
           <span class="expiry-label text-secondary">到期时间</span>
-          <span>{{ props.user.expires_at ? formatDate(props.user.expires_at) : '—' }}</span>
+          <strong>{{ props.user.expires_at ? formatDate(props.user.expires_at) : '不设到期时间' }}</strong>
         </div>
       </div>
     </div>
@@ -129,22 +129,16 @@ async function save() {
 </template>
 
 <style scoped>
-.card {
-  display: flex;
-  flex-direction: column;
-}
-
 .expiry-view {
-  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-sm);
+  gap: 14px;
   margin-top: var(--spacing-md);
 }
 
 .expiry-headline {
-  font-size: var(--font-size-lg);
-  font-weight: 600;
+  font-size: 26px;
+  font-weight: 750;
   line-height: 1.2;
 }
 
@@ -157,22 +151,32 @@ async function save() {
 }
 
 .expiry-rows {
-  margin-top: auto;
-  padding-top: var(--spacing-sm);
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xs);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-sm);
 }
 
 .expiry-row {
   display: flex;
-  align-items: center;
-  gap: var(--spacing-md);
-  font-size: var(--font-size-sm);
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted);
 }
 
 .expiry-label {
-  flex: 0 0 72px;
+  font-size: var(--font-size-xs);
+}
+
+.expiry-row strong {
+  overflow: hidden;
+  font-size: var(--font-size-md);
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .expiry-editor {
@@ -181,5 +185,10 @@ async function save() {
   gap: var(--spacing-sm);
   flex-wrap: wrap;
   margin-top: var(--spacing-md);
+}
+@media (max-width: 560px) {
+  .expiry-rows {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 </style>

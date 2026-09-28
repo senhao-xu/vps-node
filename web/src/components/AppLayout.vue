@@ -343,14 +343,14 @@ onBeforeUnmount(() => {
   height: 100dvh;
   min-width: 0;
   flex-direction: column;
-  padding: 14px 12px 12px;
+  padding: 18px 12px 14px;
   border-right: 1px solid var(--color-shell-border);
   background: var(--color-shell);
 }
 
 .sidebar-head {
   display: flex;
-  min-height: 42px;
+  min-height: 44px;
   align-items: center;
   justify-content: space-between;
   padding: 0 6px;
@@ -393,15 +393,15 @@ onBeforeUnmount(() => {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 3px;
-  margin-top: 22px;
+  gap: 5px;
+  margin-top: 24px;
 }
 
 .nav-item {
   position: relative;
   display: flex;
   min-width: 0;
-  min-height: 38px;
+  min-height: 42px;
   align-items: center;
   gap: 10px;
   padding: 0 11px;
@@ -427,8 +427,10 @@ onBeforeUnmount(() => {
   gap: 9px;
   min-width: 0;
   margin-top: auto;
-  padding: 13px 10px 4px;
-  border-top: 1px solid var(--color-shell-border);
+  padding: 13px 12px;
+  border: 1px solid var(--color-shell-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
   color: var(--color-shell-muted);
   font-size: var(--font-size-xs);
 }
@@ -520,7 +522,7 @@ onBeforeUnmount(() => {
 .toolbar-icon-button,
 .admin-avatar,
 .sidebar-close {
-  height: 32px;
+  height: 36px;
   align-items: center;
   justify-content: center;
   border: 1px solid var(--color-border);
@@ -536,7 +538,7 @@ onBeforeUnmount(() => {
 }
 
 .search-trigger {
-  min-width: 148px;
+  min-width: 168px;
   justify-content: flex-start;
   gap: 7px;
   padding: 0 9px;
@@ -559,7 +561,7 @@ onBeforeUnmount(() => {
 .toolbar-icon-button,
 .admin-avatar,
 .sidebar-close {
-  width: 32px;
+  width: 36px;
   flex: none;
   padding: 0;
 }

@@ -120,15 +120,18 @@ onBeforeUnmount(() => {
   inset: 0;
   z-index: 100;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
   overflow-y: auto;
-  padding: 56px var(--spacing-md) var(--spacing-lg);
+  padding: var(--spacing-lg) var(--spacing-md);
   background: var(--color-overlay);
 }
 
 .dialog {
+  display: flex;
   max-width: 100%;
+  max-height: calc(100dvh - 48px);
+  flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-dialog);
@@ -142,7 +145,9 @@ onBeforeUnmount(() => {
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--spacing-md);
-  padding: 18px 20px 10px;
+  flex: none;
+  padding: 20px 22px 14px;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .dialog-heading {
@@ -185,14 +190,19 @@ onBeforeUnmount(() => {
 }
 
 .dialog-body {
-  padding: 10px 20px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 18px 22px;
 }
 
 .dialog-footer {
   display: flex;
   justify-content: flex-end;
   gap: var(--spacing-sm);
-  padding: 10px 20px 18px;
+  flex: none;
+  padding: 14px 22px 18px;
+  border-top: 1px solid var(--color-border);
 }
 
 @media (max-width: 560px) {
@@ -202,6 +212,7 @@ onBeforeUnmount(() => {
 
   .dialog {
     width: 100% !important;
+    max-height: calc(100dvh - 16px);
   }
 
   .dialog-header,

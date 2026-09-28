@@ -355,6 +355,7 @@ type updateNodeRequest struct {
 	IPv6Enabled *bool           `json:"ipv6_enabled"`
 	IPv6Address *string         `json:"ipv6_address"`
 	Name        *string         `json:"name"`
+	Protocol    *string         `json:"protocol"`
 	Port        *int            `json:"port"`
 	Rate        *float64        `json:"rate"`
 	Tags        *[]string       `json:"tags"`
@@ -402,6 +403,7 @@ func (h *Handler) handleNodeUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	address, name, port := current.Address, current.Name, current.Port
+	protocol := current.Protocol
 	ipv6Enabled, ipv6Address := current.IPv6Enabled, current.IPv6Address
 	if req.Address != nil {
 		address = *req.Address
@@ -414,6 +416,9 @@ func (h *Handler) handleNodeUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Name != nil {
 		name = *req.Name
+	}
+	if req.Protocol != nil {
+		protocol = *req.Protocol
 	}
 	if req.Port != nil {
 		port = *req.Port
@@ -432,7 +437,7 @@ func (h *Handler) handleNodeUpdate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := validateNodeSpec(address, name, current.Protocol, port); err != nil {
+	if err := validateNodeSpec(address, name, protocol, port); err != nil {
 		writeErr(w, err)
 		return
 	}
@@ -450,7 +455,13 @@ func (h *Handler) handleNodeUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	settingsJSON, secretEnc, err := h.buildNodeSettings(current.Protocol, req.Settings, current.ProtocolSettings, current.SecretEnc)
+	currentSettings, currentSecret := current.ProtocolSettings, current.SecretEnc
+	if protocol != current.Protocol {
+		// Settings and encrypted secrets belong to the old protocol and must
+		// never be merged into the replacement protocol's configuration.
+		currentSettings, currentSecret = "", nil
+	}
+	settingsJSON, secretEnc, err := h.buildNodeSettings(protocol, req.Settings, currentSettings, currentSecret)
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -502,7 +513,7 @@ func (h *Handler) handleNodeUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := h.repo.UpdateNodeAndBump(r.Context(), id, current.ServerID, address, name, ipv6Address, ipv6Enabled, port, settingsJSON, secretEnc, rate, string(tagsJSON), chainNodeID, chainCustomNodeID, chainCustomEntryKey, req.Status); err != nil {
+	if err := h.repo.UpdateNodeAndBump(r.Context(), id, current.ServerID, address, name, protocol, ipv6Address, ipv6Enabled, port, settingsJSON, secretEnc, rate, string(tagsJSON), chainNodeID, chainCustomNodeID, chainCustomEntryKey, req.Status); err != nil {
 		if err == repo.ErrConflict {
 			writeErr(w, errConflict("a node with this port is already enabled on this server"))
 			return

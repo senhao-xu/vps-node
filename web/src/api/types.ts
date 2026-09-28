@@ -350,6 +350,7 @@ export type UpdateNodeInput = {
   ipv6_enabled?: boolean
   ipv6_address?: string
   name?: string
+  protocol?: Protocol
   port?: number
   rate?: number
   tags?: string[]

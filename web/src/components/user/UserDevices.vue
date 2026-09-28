@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { MonitorSmartphone } from 'lucide-vue-next'
 import { getUserDevices } from '@/api/users'
 import { errorMessage } from '@/api/http'
 import type { NodeBrief, OnlineDevice, Server } from '@/api/types'
 import DataTable, { type Column } from '@/components/DataTable.vue'
 import ErrorBanner from '@/components/ErrorBanner.vue'
+import EmptyState from '@/components/ui/EmptyState.vue'
+import LoadingSpinner from '@/components/ui/LoadingSpinner.vue'
 import { formatDateTime, formatRelative } from '@/utils/format'
 import { buildNameMap, lookupName } from '@/utils/names'
 
@@ -58,7 +61,7 @@ onMounted(() => {
   <div class="card">
     <div class="card-head">
       <h2 class="card-title">
-        在线设备
+        在线设备 <span class="device-count">{{ items.length }}</span>
       </h2>
       <button
         type="button"
@@ -73,7 +76,22 @@ onMounted(() => {
       :message="error"
       @dismiss="error = ''"
     />
+    <div
+      v-if="loading && items.length === 0"
+      class="devices-loading"
+      role="status"
+    >
+      <LoadingSpinner size="sm" />
+      正在读取在线设备…
+    </div>
+    <EmptyState
+      v-else-if="!error && items.length === 0"
+      :icon="MonitorSmartphone"
+      title="暂无在线设备"
+      hint="用户连接节点后，设备会显示在这里。"
+    />
     <DataTable
+      v-else-if="items.length > 0"
       :columns="columns"
       :rows="items"
       :row-key="(row) => `${row.node_id}-${row.ip}`"
@@ -97,9 +115,29 @@ onMounted(() => {
         {{ formatDateTime(row.last_seen_at) }}
         <span class="text-secondary">（{{ formatRelative(row.last_seen_at) }}）</span>
       </template>
-      <template #empty>
-        当前没有在线设备
-      </template>
     </DataTable>
   </div>
 </template>
+
+<style scoped>
+.device-count {
+  margin-left: var(--spacing-xs);
+  padding: 2px 7px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-muted);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+.devices-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  min-height: 96px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+</style>

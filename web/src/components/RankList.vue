@@ -101,7 +101,7 @@ function formatPercent(percent: number): string {
 .rank-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 0;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -112,6 +112,17 @@ function formatPercent(percent: number): string {
   min-width: 0;
   align-items: flex-start;
   gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.rank-item:first-child {
+  padding-top: 0;
+}
+
+.rank-item:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
 }
 
 .rank-badge {

@@ -31,7 +31,7 @@ Reality generation response:
 - `rate` is a positive number (default `1`); `tags` is at most 20 non-empty strings of at most 32 characters.
 - `protocol_settings` is the Xboard-style nested object; private material (`vless` `private_key`, TLS `certificate`/`private_key`, server `password`) is AES-GCM encrypted in `secret_enc` and never appears in generic Node DTOs.
 - Validated sections (`reality_settings`, `tls`, `bandwidth`, `obfs`) reject unknown keys and deep-merge leaf by leaf. The reserved free-form sections `tls_settings`, `network_settings`, `multiplex`, `utls` (vless) and `obfs_settings` (shadowsocks) are accepted as arbitrary JSON objects, stored verbatim (a supplied section replaces the stored one as a whole), and are inert: the renderer and subscription code never read them, so they never reach agents or subscription output.
-- Update `settings` is a **section-wise patch**: omitted nested public fields and encrypted secret fields retain their stored values.
+- Update `settings` is a **section-wise patch** while the protocol is unchanged: omitted nested public fields and encrypted secret fields retain their stored values. When `PUT /api/nodes/{id}` changes `protocol`, settings are validated from an empty configuration and the previous protocol's public settings and encrypted secrets are discarded. The update saves `protocol`, settings, secrets, and the server revision in one transaction; the node id and user/chain relationships stay intact.
 
 ## 4. Validation & Error Matrix
 

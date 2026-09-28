@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { ChevronDown, SlidersHorizontal } from 'lucide-vue-next'
 import { createNode, generateRealityKeypair, getNode, listNodes, updateNode } from '@/api/nodes'
 import { getCustomNodeEntries, listCustomNodes } from '@/api/customNodes'
 import { listServers } from '@/api/servers'
@@ -11,6 +12,7 @@ import type {
   Hysteria2BandwidthInput,
   Hysteria2ObfsInput,
   NodeBrief,
+  NodeSettings,
   NodeSettingsInput,
   Protocol,
   RealitySettingsInput,
@@ -50,6 +52,7 @@ const protocol = ref<Protocol>('shadowsocks')
 const status = ref<'active' | 'disabled'>('active')
 const rate = ref<number | null>(1)
 const tags = ref('')
+const advancedOpen = ref(false)
 
 const ssCipher = ref<string>(SHADOWSOCKS_METHODS[0])
 
@@ -81,6 +84,7 @@ const error = ref('')
 const isEdit = ref(false)
 const loadingDetail = ref(false)
 const detailLoaded = ref(false)
+const originalSettings = ref<NodeSettings | null>(null)
 
 const servers = ref<Server[]>([])
 const serverChoice = ref<number | null>(null)
@@ -124,6 +128,7 @@ watch(
     status.value = props.node?.status === 'disabled' ? 'disabled' : 'active'
     rate.value = props.node?.rate ?? 1
     tags.value = props.node?.tags.join(', ') ?? ''
+    advancedOpen.value = isEdit.value
     ssCipher.value = SHADOWSOCKS_METHODS[0]
     vlessPrivateKey.value = ''
     vlessPublicKey.value = ''
@@ -154,6 +159,7 @@ watch(
     customSourcesLoaded.value = false
     customEntriesResult.value = null
     detailLoaded.value = false
+    originalSettings.value = null
     void loadChainCandidates()
     if (chainMode.value === 'custom') {
       void ensureCustomSources()
@@ -295,48 +301,51 @@ const customEntriesEmptyHint = computed(() => {
   return '该来源未解析出任何线路。'
 })
 
+function applyNodeSettings(settings: NodeSettings) {
+  if (protocol.value === 'shadowsocks') {
+    if (settings.cipher) ssCipher.value = settings.cipher
+  } else if (protocol.value === 'vless') {
+    const reality = settings.reality_settings
+    if (reality) {
+      vlessServerName.value = reality.server_name ?? ''
+      vlessServerPort.value = reality.server_port ?? null
+      vlessShortId.value = reality.short_id ?? ''
+      vlessAllowInsecure.value = reality.allow_insecure ?? false
+      vlessPublicKey.value = reality.public_key ?? ''
+    }
+  } else if (protocol.value === 'hysteria2') {
+    const tls = typeof settings.tls === 'object' ? settings.tls : undefined
+    tlsServerName.value = tls?.server_name ?? ''
+    hy2AllowInsecure.value = tls?.allow_insecure ?? false
+    hy2Up.value = settings.bandwidth?.up ?? null
+    hy2Down.value = settings.bandwidth?.down ?? null
+    const obfs = typeof settings.obfs === 'object' ? settings.obfs : undefined
+    hy2ObfsOpen.value = obfs?.open ?? false
+    hy2ObfsPassword.value = obfs?.password ?? ''
+    hy2HopInterval.value = settings.hop_interval ?? ''
+  } else if (protocol.value === 'anytls') {
+    const tls = typeof settings.tls === 'object' ? settings.tls : undefined
+    tlsServerName.value = tls?.server_name ?? ''
+    anytlsAllowInsecure.value = tls?.allow_insecure ?? false
+    const scheme = settings.padding_scheme
+    anytlsPaddingScheme.value = Array.isArray(scheme) ? scheme.join('\n') : (scheme ?? '')
+  } else if (protocol.value === 'http') {
+    const tls = typeof settings.tls === 'object' ? settings.tls : undefined
+    tlsServerName.value = tls?.server_name ?? ''
+    httpAllowInsecure.value = tls?.allow_insecure ?? false
+  } else if (protocol.value === 'socks') {
+    // SOCKS5 无协议设置，服务端返回的 settings 恒为 {}，无需读取。
+  }
+}
+
 async function loadNodeDetail(nodeId: number) {
   loadingDetail.value = true
   try {
     const detail = await getNode(nodeId)
-    const settings = detail.settings
-    if (!settings) {
-      detailLoaded.value = true
-      return
-    }
-    if (protocol.value === 'shadowsocks') {
-      if (settings.cipher) ssCipher.value = settings.cipher
-    } else if (protocol.value === 'vless') {
-      const reality = settings.reality_settings
-      if (reality) {
-        vlessServerName.value = reality.server_name ?? ''
-        vlessServerPort.value = reality.server_port ?? null
-        vlessShortId.value = reality.short_id ?? ''
-        vlessAllowInsecure.value = reality.allow_insecure ?? false
-        vlessPublicKey.value = reality.public_key ?? ''
-      }
-    } else if (protocol.value === 'hysteria2') {
-      const tls = typeof settings.tls === 'object' ? settings.tls : undefined
-      tlsServerName.value = tls?.server_name ?? ''
-      hy2AllowInsecure.value = tls?.allow_insecure ?? false
-      hy2Up.value = settings.bandwidth?.up ?? null
-      hy2Down.value = settings.bandwidth?.down ?? null
-      const obfs = typeof settings.obfs === 'object' ? settings.obfs : undefined
-      hy2ObfsOpen.value = obfs?.open ?? false
-      hy2ObfsPassword.value = obfs?.password ?? ''
-      hy2HopInterval.value = settings.hop_interval ?? ''
-    } else if (protocol.value === 'anytls') {
-      const tls = typeof settings.tls === 'object' ? settings.tls : undefined
-      tlsServerName.value = tls?.server_name ?? ''
-      anytlsAllowInsecure.value = tls?.allow_insecure ?? false
-      const scheme = settings.padding_scheme
-      anytlsPaddingScheme.value = Array.isArray(scheme) ? scheme.join('\n') : (scheme ?? '')
-    } else if (protocol.value === 'http') {
-      const tls = typeof settings.tls === 'object' ? settings.tls : undefined
-      tlsServerName.value = tls?.server_name ?? ''
-      httpAllowInsecure.value = tls?.allow_insecure ?? false
-    } else if (protocol.value === 'socks') {
-      // SOCKS5 无协议设置，服务端返回的 settings 恒为 {}，无需读取。
+    if (!props.open || props.node?.id !== nodeId) return
+    originalSettings.value = detail.settings ?? null
+    if (detail.settings && protocol.value === detail.protocol) {
+      applyNodeSettings(detail.settings)
     }
     detailLoaded.value = true
   } catch (err) {
@@ -359,14 +368,15 @@ async function loadServers() {
 }
 
 const title = computed(() => (isEdit.value ? '编辑节点' : '添加节点'))
+const needsNewSettings = computed(() => !isEdit.value || protocol.value !== props.node?.protocol)
 
 const protocolOptions: Array<{ value: Protocol; label: string; dot: string }> = [
   { value: 'shadowsocks', label: protocolLabel('shadowsocks'), dot: 'success' },
   { value: 'vless', label: protocolLabel('vless'), dot: 'primary' },
   { value: 'hysteria2', label: protocolLabel('hysteria2'), dot: 'warning' },
   { value: 'anytls', label: protocolLabel('anytls'), dot: 'danger' },
-  { value: 'socks', label: protocolLabel('socks'), dot: 'muted' },
-  { value: 'http', label: protocolLabel('http'), dot: 'muted' },
+  { value: 'socks', label: protocolLabel('socks'), dot: 'purple' },
+  { value: 'http', label: protocolLabel('http'), dot: 'info' },
 ]
 
 const serverSelectValue = computed<number>({
@@ -516,6 +526,7 @@ const settingsPayload = computed<NodeSettingsInput | undefined>(() => {
 })
 
 const validationMessage = computed(() => {
+  if (isEdit.value && !detailLoaded.value) return '节点详情尚未加载完成，请稍后重试'
   if (!isEdit.value && props.serverId === undefined && serverChoice.value === null) {
     return '请选择服务器'
   }
@@ -542,8 +553,8 @@ const validationMessage = computed(() => {
       return '请选择受支持的加密方式'
     }
   } else if (protocol.value === 'vless') {
-    if (!isEdit.value && !vlessPrivateKey.value) return '请生成或填写 Reality 私钥'
-    if (!isEdit.value && !vlessServerName.value.trim()) return '请填写 Reality Server Name'
+    if (needsNewSettings.value && !vlessPrivateKey.value) return '请生成或填写 Reality 私钥'
+    if (needsNewSettings.value && !vlessServerName.value.trim()) return '请填写 Reality Server Name'
     if (vlessPrivateKey.value && !/^[A-Za-z0-9_-]{43}$/.test(vlessPrivateKey.value)) {
       return 'Reality 私钥格式不正确'
     }
@@ -574,8 +585,8 @@ const validationMessage = computed(() => {
         return '端口跳跃范围必须在 1-65535 之间且起始端口不大于结束端口'
       }
     }
-    if (!isEdit.value && !tlsServerName.value.trim()) return '请填写 Hysteria2 Server Name'
-    if (!isEdit.value && (!tlsCertificate.value || !tlsPrivateKey.value)) {
+    if (needsNewSettings.value && !tlsServerName.value.trim()) return '请填写 Hysteria2 Server Name'
+    if (needsNewSettings.value && (!tlsCertificate.value || !tlsPrivateKey.value)) {
       return '请填写 Hysteria2 PEM 证书链和私钥'
     }
     if ((tlsCertificate.value && !tlsPrivateKey.value) || (!tlsCertificate.value && tlsPrivateKey.value)) {
@@ -585,8 +596,8 @@ const validationMessage = computed(() => {
       return 'Server Name 格式不正确'
     }
   } else if (protocol.value === 'anytls') {
-    if (!isEdit.value && !tlsServerName.value.trim()) return '请填写 AnyTLS Server Name'
-    if (!isEdit.value && (!tlsCertificate.value || !tlsPrivateKey.value)) {
+    if (needsNewSettings.value && !tlsServerName.value.trim()) return '请填写 AnyTLS Server Name'
+    if (needsNewSettings.value && (!tlsCertificate.value || !tlsPrivateKey.value)) {
       return '请填写 AnyTLS PEM 证书链和私钥'
     }
     if ((tlsCertificate.value && !tlsPrivateKey.value) || (!tlsCertificate.value && tlsPrivateKey.value)) {
@@ -598,11 +609,11 @@ const validationMessage = computed(() => {
   } else if (protocol.value === 'http') {
     // Optional TLS: all fields empty means a plaintext HTTP proxy; otherwise
     // the server name must be well-formed and certificate/private key paired.
-    if (!isEdit.value && tlsServerName.value.trim() && (!tlsCertificate.value || !tlsPrivateKey.value)) {
+    if (needsNewSettings.value && tlsServerName.value.trim() && (!tlsCertificate.value || !tlsPrivateKey.value)) {
       return '请填写 HTTP PEM 证书链和私钥'
     }
     if (
-      !isEdit.value &&
+      needsNewSettings.value &&
       !tlsServerName.value.trim() &&
       (tlsCertificate.value || tlsPrivateKey.value)
     ) {
@@ -637,7 +648,9 @@ const validationMessage = computed(() => {
   return ''
 })
 
-function changeProtocol() {
+function changeProtocol(next: Protocol) {
+  if (next === protocol.value) return
+  protocol.value = next
   ssCipher.value = SHADOWSOCKS_METHODS[0]
   vlessPrivateKey.value = ''
   vlessPublicKey.value = ''
@@ -658,6 +671,9 @@ function changeProtocol() {
   tlsPrivateKey.value = ''
   httpAllowInsecure.value = false
   // SOCKS5 无协议设置状态，无需额外重置。
+  if (protocol.value === props.node?.protocol && originalSettings.value) {
+    applyNodeSettings(originalSettings.value)
+  }
   error.value = ''
 }
 
@@ -714,6 +730,7 @@ async function submit() {
     if (isEdit.value && props.node) {
       await updateNode(props.node.id, {
         name: name.value.trim(),
+        protocol: protocol.value,
         address: address.value.trim(),
         ipv6_enabled: ipv6Enabled.value,
         ipv6_address: ipv6Address.value.trim(),
@@ -753,7 +770,7 @@ async function submit() {
   <ModalDialog
     :open="props.open"
     :title="title"
-    :subtitle="isEdit ? '修改节点配置，协议不可变更' : '创建入站节点并配置协议参数'"
+    :subtitle="isEdit ? '修改节点配置及协议参数' : '创建入站节点并配置协议参数'"
     :width="640"
     @close="emit('close')"
   >
@@ -797,27 +814,6 @@ async function submit() {
             用户连接使用的域名或 IP，订阅链接按该地址生成。
           </p>
         </div>
-        <div class="field">
-          <div class="toggle-row">
-            <div class="toggle-row-text">
-              <span class="toggle-row-label">IPv6 入口</span>
-            </div>
-            <ToggleSwitch
-              v-model="ipv6Enabled"
-              label="启用 IPv6 入口"
-            />
-          </div>
-          <input
-            v-if="ipv6Enabled"
-            id="node-ipv6-address"
-            v-model="ipv6Address"
-            type="text"
-            placeholder="例如 2001:db8::1 或 v6.example.com"
-          >
-          <p class="field-hint">
-            启用后订阅会额外生成一条使用该 IPv6 地址的节点条目，端口与协议参数不变。
-          </p>
-        </div>
         <div class="form-row">
           <div class="field">
             <label for="node-name">名称</label>
@@ -843,12 +839,18 @@ async function submit() {
           <div class="field protocol-field">
             <label id="node-protocol-label">协议</label>
             <AppSelect
-              v-model="protocol"
+              :model-value="protocol"
               :options="protocolOptions"
-              :disabled="isEdit"
+              :disabled="isEdit && !detailLoaded"
               label="协议"
               @update:model-value="changeProtocol"
             />
+            <p
+              v-if="isEdit && protocol !== props.node?.protocol"
+              class="field-hint"
+            >
+              切换协议后请重新配置协议参数；保存时会清除旧协议的参数和密钥。
+            </p>
           </div>
           <div class="field rate-field">
             <label for="node-rate">流量倍率</label>
@@ -877,100 +879,147 @@ async function submit() {
             </div>
           </div>
         </div>
-        <div class="field">
-          <label for="node-tags">标签（可选）</label>
-          <input
-            id="node-tags"
-            v-model="tags"
-            type="text"
-            placeholder="逗号分隔，最多 20 个，例如 hk, premium"
-          >
-          <p class="field-hint">
-            用于订阅分组与筛选；单个标签最长 32 个字符。
-          </p>
-        </div>
-        <div class="field">
-          <label id="node-chain-mode-label">出口模式</label>
-          <SegmentedControl
-            :model-value="chainMode"
-            :items="chainModeItems"
-            aria-label="出口模式"
-            @update:model-value="onChainModeChange"
-          />
-          <p class="field-hint">
-            选择本节点流量的出口：直连、经托管节点转发，或使用自定义来源中的单条线路。
-          </p>
-        </div>
-        <div
-          v-if="chainMode === 'managed'"
-          class="field"
+        <button
+          type="button"
+          class="advanced-toggle"
+          :aria-expanded="advancedOpen"
+          aria-controls="node-advanced-fields"
+          @click="advancedOpen = !advancedOpen"
         >
-          <label id="node-chain-label">出站节点</label>
-          <AppSelect
-            v-model="chainSelectValue"
-            :options="chainOptions"
-            :disabled="loadingChainCandidates"
-            label="出站节点"
+          <SlidersHorizontal
+            :size="16"
+            aria-hidden="true"
           />
-          <p class="field-hint">
-            选择后，连接本节点的流量会经该节点转发落地（链式代理）；订阅中仍只展示本节点。
-          </p>
-        </div>
+          <span>更多设置</span>
+          <span class="advanced-summary">IPv6、标签和出口线路</span>
+          <ChevronDown
+            :size="16"
+            class="advanced-chevron"
+            :class="{ open: advancedOpen }"
+            aria-hidden="true"
+          />
+        </button>
         <div
-          v-else-if="chainMode === 'custom'"
-          class="field"
+          v-show="advancedOpen"
+          id="node-advanced-fields"
+          class="advanced-fields"
         >
-          <label id="node-chain-source-label">自定义线路来源</label>
-          <AppSelect
-            v-model="customSourceSelectValue"
-            :options="customSourceOptions"
-            :disabled="loadingCustomSources"
-            label="自定义线路来源"
-          />
-          <p class="field-hint">
-            仅启用状态的自定义来源可选；订阅来源需先“更新订阅”产生缓存。
-          </p>
-          <div
-            v-if="chainCustomNodeId !== null"
-            class="field chain-entry-field"
-          >
-            <label id="node-chain-entry-label">线路</label>
-            <div
-              v-if="loadingCustomEntries"
-              class="detail-loading"
-            >
-              <LoadingSpinner size="sm" />
-              <span>正在加载线路…</span>
+          <div class="field">
+            <div class="toggle-row">
+              <div class="toggle-row-text">
+                <span class="toggle-row-label">IPv6 入口</span>
+              </div>
+              <ToggleSwitch
+                v-model="ipv6Enabled"
+                label="启用 IPv6 入口"
+              />
             </div>
+            <input
+              v-if="ipv6Enabled"
+              id="node-ipv6-address"
+              v-model="ipv6Address"
+              type="text"
+              placeholder="例如 2001:db8::1 或 v6.example.com"
+            >
+            <p class="field-hint">
+              启用后订阅会额外生成一条使用该 IPv6 地址的节点条目，端口与协议参数不变。
+            </p>
+          </div>
+          <div class="field">
+            <label for="node-tags">标签（可选）</label>
+            <input
+              id="node-tags"
+              v-model="tags"
+              type="text"
+              placeholder="逗号分隔，最多 20 个，例如 hk, premium"
+            >
+            <p class="field-hint">
+              用于订阅分组与筛选；单个标签最长 32 个字符。
+            </p>
+          </div>
+          <div class="field">
+            <label id="node-chain-mode-label">出口模式</label>
+            <SegmentedControl
+              :model-value="chainMode"
+              :items="chainModeItems"
+              aria-label="出口模式"
+              @update:model-value="onChainModeChange"
+            />
+            <p class="field-hint">
+              选择本节点流量的出口：直连、经托管节点转发，或使用自定义来源中的单条线路。
+            </p>
+          </div>
+          <div
+            v-if="chainMode === 'managed'"
+            class="field"
+          >
+            <label id="node-chain-label">出站节点</label>
             <AppSelect
-              v-else-if="customEntryOptions.length > 0"
-              v-model="customEntrySelectValue"
-              :options="customEntryOptions"
-              label="自定义线路"
+              v-model="chainSelectValue"
+              :options="chainOptions"
+              :disabled="loadingChainCandidates"
+              label="出站节点"
             />
-            <EmptyState
-              v-else
-              :title="customEntriesEmptyTitle"
-              :hint="customEntriesEmptyHint"
+            <p class="field-hint">
+              选择后，连接本节点的流量会经该节点转发落地（链式代理）；订阅中仍只展示本节点。
+            </p>
+          </div>
+          <div
+            v-else-if="chainMode === 'custom'"
+            class="field"
+          >
+            <label id="node-chain-source-label">自定义线路来源</label>
+            <AppSelect
+              v-model="customSourceSelectValue"
+              :options="customSourceOptions"
+              :disabled="loadingCustomSources"
+              label="自定义线路来源"
             />
-            <p
-              v-if="storedEntryMissing"
-              class="field-hint field-warning"
-            >
-              已保存的线路在当前来源中不存在（上游可能已更改），保存后将回退直连。
+            <p class="field-hint">
+              仅启用状态的自定义来源可选；订阅来源需先“更新订阅”产生缓存。
             </p>
-            <p
-              v-else-if="storedEntryUnsupported"
-              class="field-hint field-warning"
+            <div
+              v-if="chainCustomNodeId !== null"
+              class="field chain-entry-field"
             >
-              已保存的线路类型不支持作为出口，请重新选择其他线路。
-            </p>
-            <p
-              v-else
-              class="field-hint"
-            >
-              入口 Agent 使用该线路自带的凭据直连外部服务器；不支持的类型置灰不可选。
-            </p>
+              <label id="node-chain-entry-label">线路</label>
+              <div
+                v-if="loadingCustomEntries"
+                class="detail-loading"
+              >
+                <LoadingSpinner size="sm" />
+                <span>正在加载线路…</span>
+              </div>
+              <AppSelect
+                v-else-if="customEntryOptions.length > 0"
+                v-model="customEntrySelectValue"
+                :options="customEntryOptions"
+                label="自定义线路"
+              />
+              <EmptyState
+                v-else
+                :title="customEntriesEmptyTitle"
+                :hint="customEntriesEmptyHint"
+              />
+              <p
+                v-if="storedEntryMissing"
+                class="field-hint field-warning"
+              >
+                已保存的线路在当前来源中不存在（上游可能已更改），保存后将回退直连。
+              </p>
+              <p
+                v-else-if="storedEntryUnsupported"
+                class="field-hint field-warning"
+              >
+                已保存的线路类型不支持作为出口，请重新选择其他线路。
+              </p>
+              <p
+                v-else
+                class="field-hint"
+              >
+                入口 Agent 使用该线路自带的凭据直连外部服务器；不支持的类型置灰不可选。
+              </p>
+            </div>
           </div>
         </div>
       </section>
@@ -1353,7 +1402,7 @@ async function submit() {
       </section>
 
       <p class="text-secondary tip">
-        协议密钥由 Panel 加密保存且不会回显；编辑时密钥类字段留空即保持不变，公开字段展示即当前生效值。
+        协议密钥由 Panel 加密保存且不会回显；协议不变时密钥类字段留空即保持不变，切换协议后需重新填写。
       </p>
     </div>
     <template #footer>
@@ -1369,7 +1418,7 @@ async function submit() {
         type="button"
         class="btn"
         :class="{ 'is-loading': submitting }"
-        :disabled="submitting || loadingDetail"
+        :disabled="submitting || (isEdit && !detailLoaded)"
         @click="submit"
       >
         <LoadingSpinner
@@ -1387,6 +1436,52 @@ async function submit() {
   display: flex;
   flex-direction: column;
   gap: 28px;
+}
+
+.advanced-toggle {
+  display: flex;
+  width: 100%;
+  min-height: 42px;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: 0 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
+}
+
+.advanced-toggle:hover {
+  border-color: var(--color-border-strong);
+}
+
+.advanced-summary {
+  margin-left: auto;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 400;
+}
+
+.advanced-chevron {
+  flex: none;
+  transition: transform 0.15s ease;
+}
+
+.advanced-chevron.open {
+  transform: rotate(180deg);
+}
+
+.advanced-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
 }
 
 .form-section {
@@ -1587,6 +1682,10 @@ async function submit() {
 
   .settings-box {
     padding: var(--spacing-md);
+  }
+
+  .advanced-summary {
+    display: none;
   }
 
   .section-heading {

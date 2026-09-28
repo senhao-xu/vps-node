@@ -70,10 +70,9 @@ const installTabItems: { value: InstallTab; label: string }[] = [
 ]
 
 const detailNavItems: DetailNavItem[] = [
-  { id: 'overview', label: '运行概览', hint: '身份与承载状态', icon: ServerIcon },
-  { id: 'agent', label: 'Agent 管理', hint: '凭证与安装', icon: Radio },
   { id: 'health', label: '系统指标', hint: '资源压力与运行时间', icon: HeartPulse },
   { id: 'nodes', label: '节点拓扑', hint: '协议与服务端口', icon: Waypoints },
+  { id: 'agent', label: 'Agent 管理', hint: '凭证与安装', icon: Radio },
   { id: 'activity', label: '访问活动', hint: '最近连接目标', icon: Activity },
 ]
 const { copied: commandCopied, copy } = useCopyFeedback()
@@ -453,42 +452,95 @@ onMounted(() => {
       <div class="detail-workspace">
         <main class="detail-main">
           <section
-            id="overview"
+            id="health"
             class="detail-section"
           >
             <div class="section-heading">
               <div class="section-heading-copy">
-                <span class="section-kicker">Overview</span>
-                <h2>运行概览</h2>
-                <p>核对服务器身份、配置修订和当前承载情况。</p>
+                <h2>系统指标</h2>
+                <p>持续观察 CPU、内存、磁盘和运行时长。</p>
               </div>
             </div>
             <div class="card">
               <h2 class="card-title">
-                基础信息
+                系统指标
               </h2>
-              <div class="info-grid">
-                <div class="info-item">
-                  <span class="info-label">名称</span>
-                  <span>{{ server.name }}</span>
-                </div>
-                <div class="info-item">
-                  <span class="info-label">Server ID</span>
-                  <span>{{ server.id }}</span>
-                </div>
-                <div class="info-item">
-                  <span class="info-label">配置版本（revision）</span>
-                  <span class="mono">{{ server.revision }}</span>
-                </div>
-                <div class="info-item">
-                  <span class="info-label">在线用户</span>
-                  <span>{{ server.online_users }}</span>
-                </div>
-                <div class="info-item">
-                  <span class="info-label">创建时间</span>
-                  <span>{{ formatDateTime(server.created_at) }}</span>
+              <div class="metrics">
+                <MetricBar
+                  label="CPU"
+                  :percent="server.cpu_percent"
+                />
+                <MetricBar
+                  label="内存"
+                  :percent="server.memory_percent"
+                />
+                <MetricBar
+                  label="磁盘"
+                  :percent="server.disk_percent"
+                />
+                <div class="uptime-row">
+                  <span class="text-secondary">运行时间</span>
+                  <span>{{ formatDuration(server.uptime_seconds) }}</span>
                 </div>
               </div>
+            </div>
+          </section>
+
+          <section
+            id="nodes"
+            class="detail-section"
+          >
+            <div class="section-heading">
+              <div class="section-heading-copy">
+                <h2>节点拓扑</h2>
+                <p>查看并维护该服务器承载的协议、端口和节点状态。</p>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-head">
+                <h2 class="card-title">
+                  节点（{{ server.nodes.length }}）
+                </h2>
+                <div class="node-head-actions">
+                  <RouterLink
+                    class="btn secondary small"
+                    :to="`/nodes?server_id=${server.id}`"
+                  >
+                    在节点页查看
+                  </RouterLink>
+                  <button
+                    type="button"
+                    class="btn small"
+                    @click="showNodeDialog = true"
+                  >
+                    添加节点
+                  </button>
+                </div>
+              </div>
+              <DataTable
+                :columns="nodeColumns"
+                :rows="server.nodes"
+                :row-key="(row) => row.id"
+                :loading="loading"
+                :bordered="false"
+                aria-label="服务器节点列表"
+              >
+                <template #cell-protocol="{ row }">
+                  {{ protocolLabel(row.protocol) }}
+                </template>
+                <template #cell-status="{ row }">
+                  <StatusBadge v-bind="nodeStatusInfo(row.status)" />
+                </template>
+                <template #cell-actions="{ row }">
+                  <OverflowMenu
+                    :items="nodeActions(row)"
+                    :label="`节点 ${row.name} 的操作`"
+                  />
+                </template>
+                <template #empty>
+                  该服务器还没有节点，点击右上角添加
+                </template>
+              </DataTable>
             </div>
           </section>
 
@@ -498,7 +550,6 @@ onMounted(() => {
           >
             <div class="section-heading">
               <div class="section-heading-copy">
-                <span class="section-kicker">Agent</span>
                 <h2>Agent 管理</h2>
                 <p>管理 Agent Key、安装方式和运行端连接状态。</p>
               </div>
@@ -640,107 +691,11 @@ onMounted(() => {
           </section>
 
           <section
-            id="health"
-            class="detail-section"
-          >
-            <div class="section-heading">
-              <div class="section-heading-copy">
-                <span class="section-kicker">Health</span>
-                <h2>系统指标</h2>
-                <p>持续观察 CPU、内存、磁盘和运行时长。</p>
-              </div>
-            </div>
-            <div class="card">
-              <h2 class="card-title">
-                系统指标
-              </h2>
-              <div class="metrics">
-                <MetricBar
-                  label="CPU"
-                  :percent="server.cpu_percent"
-                />
-                <MetricBar
-                  label="内存"
-                  :percent="server.memory_percent"
-                />
-                <MetricBar
-                  label="磁盘"
-                  :percent="server.disk_percent"
-                />
-                <div class="uptime-row">
-                  <span class="text-secondary">Uptime</span>
-                  <span>{{ formatDuration(server.uptime_seconds) }}</span>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section
-            id="nodes"
-            class="detail-section"
-          >
-            <div class="section-heading">
-              <div class="section-heading-copy">
-                <span class="section-kicker">Topology</span>
-                <h2>节点拓扑</h2>
-                <p>查看并维护该服务器承载的协议、端口和节点状态。</p>
-              </div>
-            </div>
-            <div class="card">
-              <div class="card-head">
-                <h2 class="card-title">
-                  节点（{{ server.nodes.length }}）
-                </h2>
-                <div class="node-head-actions">
-                  <RouterLink
-                    class="btn secondary small"
-                    :to="`/nodes?server_id=${server.id}`"
-                  >
-                    在节点页查看
-                  </RouterLink>
-                  <button
-                    type="button"
-                    class="btn small"
-                    @click="showNodeDialog = true"
-                  >
-                    添加节点
-                  </button>
-                </div>
-              </div>
-              <DataTable
-                :columns="nodeColumns"
-                :rows="server.nodes"
-                :row-key="(row) => row.id"
-                :loading="loading"
-                :bordered="false"
-                aria-label="服务器节点列表"
-              >
-                <template #cell-protocol="{ row }">
-                  {{ protocolLabel(row.protocol) }}
-                </template>
-                <template #cell-status="{ row }">
-                  <StatusBadge v-bind="nodeStatusInfo(row.status)" />
-                </template>
-                <template #cell-actions="{ row }">
-                  <OverflowMenu
-                    :items="nodeActions(row)"
-                    :label="`节点 ${row.name} 的操作`"
-                  />
-                </template>
-                <template #empty>
-                  该服务器还没有节点，点击右上角添加
-                </template>
-              </DataTable>
-            </div>
-          </section>
-
-          <section
             id="activity"
             class="detail-section"
           >
             <div class="section-heading">
               <div class="section-heading-copy">
-                <span class="section-kicker">Activity</span>
                 <h2>访问活动</h2>
                 <p>检查用户、节点、目标地址和来源 IP 的最近访问记录。</p>
               </div>
@@ -939,7 +894,7 @@ onMounted(() => {
 
 <style scoped>
 .detail-page {
-  max-width: 1540px;
+  max-width: 1440px;
 }
 
 .detail-main :deep(.card) {

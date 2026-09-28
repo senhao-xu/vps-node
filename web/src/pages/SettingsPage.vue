@@ -338,26 +338,32 @@ onMounted(() => {
 
 .settings-layout {
   display: grid;
-  grid-template-columns: 200px minmax(0, 1fr);
-  gap: var(--spacing-lg);
+  grid-template-columns: 210px minmax(0, 1fr);
+  gap: 18px;
   align-items: start;
 }
 
 .settings-nav {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-xs);
+  gap: 4px;
   position: sticky;
   top: calc(var(--shell-toolbar-offset) + var(--spacing-md));
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
 }
 
 .settings-nav-item {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  padding: 7px 11px;
+  min-height: 42px;
+  padding: 9px 12px;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: none;
   color: var(--color-text-secondary);
   font-size: var(--font-size-md);
@@ -412,7 +418,7 @@ onMounted(() => {
     position: static;
     flex-direction: row;
     overflow-x: auto;
-    padding-bottom: var(--spacing-xs);
+    padding: 6px;
   }
 
   .settings-nav-item {

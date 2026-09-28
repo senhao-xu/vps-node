@@ -66,12 +66,11 @@ defineSlots<{
 <style scoped>
 .page-header {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   gap: var(--spacing-md);
-  margin-bottom: 18px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 20px;
+  padding-bottom: 2px;
 }
 
 .heading {
@@ -123,7 +122,7 @@ defineSlots<{
   min-width: 0;
   margin: 0;
   overflow-wrap: anywhere;
-  font-size: 25px;
+  font-size: clamp(24px, 2.4vw, 30px);
   font-weight: 780;
   letter-spacing: 0;
   line-height: 1.25;

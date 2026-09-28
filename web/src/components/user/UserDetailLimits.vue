@@ -73,7 +73,7 @@ async function save() {
   <div class="card compact">
     <div class="card-head">
       <h2 class="card-title">
-        限制与在线
+        连接概况
       </h2>
       <button
         type="button"
@@ -90,23 +90,23 @@ async function save() {
 
     <div
       v-if="!editing"
-      class="info-grid"
+      class="info-grid limits-grid"
     >
       <div class="info-item">
         <span class="info-label">限速</span>
-        <span>{{ speedText }}</span>
+        <strong>{{ speedText }}</strong>
       </div>
       <div class="info-item">
         <span class="info-label">设备数限制</span>
-        <span>{{ deviceText }}</span>
+        <strong>{{ deviceText }}</strong>
       </div>
       <div class="info-item">
         <span class="info-label">在线设备</span>
-        <span>{{ props.user.online_count }} 台</span>
+        <strong>{{ props.user.online_count }} 台</strong>
       </div>
       <div class="info-item">
         <span class="info-label">最后在线</span>
-        <span>{{ props.user.last_online_at ? formatDateTime(props.user.last_online_at) : '—' }}</span>
+        <strong>{{ props.user.last_online_at ? formatDateTime(props.user.last_online_at) : '—' }}</strong>
       </div>
     </div>
 
@@ -152,6 +152,24 @@ async function save() {
 </template>
 
 <style scoped>
+.limits-grid {
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-md);
+}
+
+.limits-grid .info-item {
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted);
+}
+
+.limits-grid .info-item strong {
+  overflow-wrap: anywhere;
+  font-size: var(--font-size-md);
+  font-weight: 650;
+}
+
 .limits-editor {
   display: flex;
   align-items: flex-end;

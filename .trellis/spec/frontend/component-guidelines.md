@@ -21,7 +21,7 @@ Vue 3 SFC (`<script setup>`), TypeScript strict, no UI library. Two component ti
 - `.card.compact` is the only way to shrink a card's padding (`--card-padding`) for dense two-column panels; do not re-declare `--card-padding` in a scoped `.card`.
 - `.card-head` is globally responsive at `max-width: 560px` (stacks to a column) — do not add a per-component `.card-head` media block.
 - `.card-head-actions` is the shared right-aligned action group inside `.card-head` (has `margin-left: auto`); page/panel-specific mobile overrides may still target it in scoped CSS.
-- `.status-dot` (8px circle) is the shared dot primitive; use the tone modifiers `.success/.warning/.danger/.primary/.muted` instead of a local dot class.
+- `.status-dot` (8px circle) is the shared dot primitive; use the tone modifiers `.success/.warning/.danger/.primary/.muted/.purple/.info` instead of a local dot class.
 - Async error banners must carry `role="alert"`; scrollable `DataTable` regions must expose `role="region"` + `tabindex="0"` + `aria-label` (pass `ariaLabel` for multiple tables on one page).
 
 ## Props Conventions

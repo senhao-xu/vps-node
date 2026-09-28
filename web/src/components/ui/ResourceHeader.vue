@@ -82,8 +82,7 @@ defineSlots<{
   margin-bottom: 14px;
   overflow: hidden;
   border: 1px solid var(--color-border);
-  border-top: 3px solid var(--color-primary);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--color-surface);
   box-shadow: var(--shadow-card);
 }
@@ -93,7 +92,7 @@ defineSlots<{
   min-height: 34px;
   align-items: center;
   gap: 6px;
-  margin: 12px 18px 0;
+  margin: 14px 20px 0;
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
   font-weight: 600;
@@ -109,7 +108,7 @@ defineSlots<{
   align-items: center;
   justify-content: space-between;
   gap: var(--spacing-lg);
-  padding: 12px 20px 20px;
+  padding: 12px 20px 22px;
 }
 
 .resource-identity {
@@ -126,7 +125,7 @@ defineSlots<{
   flex: none;
   place-items: center;
   border: 1px solid var(--color-primary-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--color-primary-soft);
   color: var(--color-primary);
   font-size: 12px;
@@ -162,7 +161,7 @@ defineSlots<{
   min-width: 0;
   margin: 0;
   overflow-wrap: anywhere;
-  font-size: 27px;
+  font-size: clamp(24px, 2.5vw, 30px);
   font-weight: 780;
   line-height: 1.2;
 }

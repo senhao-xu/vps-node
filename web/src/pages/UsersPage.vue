@@ -16,7 +16,7 @@ import FilterChip from '@/components/ui/FilterChip.vue'
 import OverflowMenu, { type OverflowMenuItem } from '@/components/ui/OverflowMenu.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import SearchInput from '@/components/ui/SearchInput.vue'
-import { formatBytes, formatDate, formatDateTime, formatRemaining } from '@/utils/format'
+import { formatBytes, formatDate, formatRemaining } from '@/utils/format'
 import { displayUserStatus } from '@/utils/labels'
 
 const router = useRouter()
@@ -44,14 +44,11 @@ const sortKey = ref('')
 const sortDir = ref<'asc' | 'desc'>('asc')
 
 const columns: Column[] = [
-  { key: 'id', label: 'ID', width: '80px', sortable: true },
-  { key: 'username', label: '用户名', width: '150px', sortable: true },
-  { key: 'traffic', label: '流量', width: '200px', sortable: true },
-  { key: 'expires_at', label: '到期时间', width: '150px', sortable: true },
-  { key: 'node_count', label: '节点数', align: 'right', width: '70px' },
-  { key: 'online_count', label: '在线设备', align: 'right', width: '80px' },
-  { key: 'created_at', label: '创建时间', width: '150px', sortable: true },
-  { key: 'status', label: '状态', width: '80px' },
+  { key: 'username', label: '用户', width: '230px', sortable: true },
+  { key: 'status', label: '状态', width: '100px' },
+  { key: 'traffic', label: '流量用量', width: '220px', sortable: true },
+  { key: 'expires_at', label: '到期时间', width: '170px', sortable: true },
+  { key: 'resources', label: '资源', width: '145px' },
   { key: 'actions', label: '', width: '48px', divider: true },
 ]
 
@@ -60,16 +57,12 @@ const sortedItems = computed(() => {
   const dir = sortDir.value === 'asc' ? 1 : -1
   return [...items.value].sort((a, b) => {
     switch (sortKey.value) {
-      case 'id':
-        return (a.id - b.id) * dir
       case 'username':
         return a.username.localeCompare(b.username) * dir
       case 'traffic':
         return (a.used_bytes - b.used_bytes) * dir
       case 'expires_at':
         return (a.expires_at ?? '').localeCompare(b.expires_at ?? '') * dir
-      case 'created_at':
-        return a.created_at.localeCompare(b.created_at) * dir
       default:
         return 0
     }
@@ -316,13 +309,16 @@ onMounted(() => {
       @update:selected="selectedIds = $event.map(Number)"
       @sort="onSort"
     >
-      <template #cell-id="{ row }">
-        <span class="chip mono">#{{ row.id }}</span>
-      </template>
       <template #cell-username="{ row }">
-        <RouterLink :to="`/users/${row.id}`">
-          {{ row.username }}
-        </RouterLink>
+        <div class="user-identity">
+          <RouterLink
+            :to="'/users/' + row.id"
+            class="user-name"
+          >
+            {{ row.username }}
+          </RouterLink>
+          <span class="user-meta">#{{ row.id }} · 创建于 {{ formatDate(row.created_at) }}</span>
+        </div>
       </template>
       <template #cell-status="{ row }">
         <StatusBadge v-bind="displayUserStatus(row)" />
@@ -337,6 +333,7 @@ onMounted(() => {
             >{{ trafficPercentText(row) }}</span>
           </div>
           <ProgressBar
+            v-if="row.transfer_enable > 0"
             :percent="trafficPercent(row)"
             compact
           />
@@ -365,8 +362,11 @@ onMounted(() => {
           >{{ formatRemaining(row.expires_at) }}</span>
         </div>
       </template>
-      <template #cell-created_at="{ row }">
-        {{ formatDateTime(row.created_at) }}
+      <template #cell-resources="{ row }">
+        <div class="resources-cell">
+          <span><strong>{{ row.node_count }}</strong> 个节点</span>
+          <span class="text-secondary"><strong>{{ row.online_count }}</strong> 台在线</span>
+        </div>
       </template>
       <template #cell-actions="{ row }">
         <OverflowMenu
@@ -436,6 +436,29 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.user-identity,
+.resources-cell {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.user-name {
+  overflow-wrap: anywhere;
+  font-weight: 700;
+}
+
+.user-meta {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.resources-cell strong {
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
 .traffic-cell {
   display: flex;
   flex-direction: column;

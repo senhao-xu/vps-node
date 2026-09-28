@@ -7,6 +7,7 @@ import {
   Cpu,
   MonitorSmartphone,
   Plus,
+  RefreshCw,
   Server,
   ServerOff,
   Users,
@@ -46,6 +47,7 @@ type AttentionItem = {
 const router = useRouter()
 const overview = useOverviewStore()
 const showCreate = ref(false)
+const refreshing = ref(false)
 const overviewErrorVisible = ref(true)
 
 const traffic = ref<DashboardUserTraffic | null>(null)
@@ -80,8 +82,8 @@ const trafficColumns: Column[] = [
   { key: 'expand', label: '', width: '40px' },
 ]
 
-function ratioPercent(part: number, total: number): number | undefined {
-  if (total <= 0) return undefined
+function ratioPercent(part: number, total: number): number {
+  if (total <= 0) return 0
   return Math.min(100, (part / total) * 100)
 }
 
@@ -90,12 +92,16 @@ const metrics = computed<MetricStripItem[]>(() => {
   const serversWarning = stats !== null && stats.servers_online < stats.servers_total
   return [
     {
-      key: 'users',
-      label: '用户总数',
-      value: stats?.users_total ?? '—',
-      hint: stats ? '在线 ' + stats.users_online : undefined,
-      icon: Users,
-      bar: { percent: stats ? ratioPercent(stats.users_online, stats.users_total) : undefined, tone: 'primary' },
+      key: 'servers',
+      label: '服务器在线',
+      value: stats ? stats.servers_online + ' / ' + stats.servers_total : '—',
+      hint: stats ? (serversWarning ? '有服务器需要关注' : '全部服务器正常') : '等待状态数据',
+      icon: Server,
+      tone: !stats ? 'default' : serversWarning ? 'warning' : 'success',
+      bar: {
+        percent: stats ? ratioPercent(stats.servers_online, stats.servers_total) : undefined,
+        tone: serversWarning ? 'warning' : 'success',
+      },
     },
     {
       key: 'traffic',
@@ -106,6 +112,14 @@ const metrics = computed<MetricStripItem[]>(() => {
       bar: { tone: 'purple' },
     },
     {
+      key: 'users',
+      label: '用户总数',
+      value: stats?.users_total ?? '—',
+      hint: stats ? '在线 ' + stats.users_online : undefined,
+      icon: Users,
+      bar: { percent: stats ? ratioPercent(stats.users_online, stats.users_total) : undefined, tone: 'primary' },
+    },
+    {
       key: 'devices',
       label: '在线设备',
       value: stats?.devices_current ?? '—',
@@ -114,21 +128,10 @@ const metrics = computed<MetricStripItem[]>(() => {
       bar: { tone: 'success' },
     },
     {
-      key: 'servers',
-      label: '服务器',
-      value: stats ? stats.servers_online + ' / ' + stats.servers_total : '—',
-      hint: '在线',
-      icon: Server,
-      tone: !stats ? 'default' : serversWarning ? 'warning' : 'success',
-      bar: {
-        percent: stats ? ratioPercent(stats.servers_online, stats.servers_total) : undefined,
-        tone: serversWarning ? 'warning' : 'success',
-      },
-    },
-    {
       key: 'nodes',
       label: '运行节点',
       value: activeNodeLoading.value ? '…' : (activeNodeTotal.value ?? '—'),
+      hint: '当前启用',
       icon: Waypoints,
       tone: activeNodeError.value ? 'warning' : 'default',
       bar: { tone: 'primary' },
@@ -315,6 +318,21 @@ function quotaText(item: DashboardUserTrafficItem): string {
   return formatBytes(item.total_bytes) + ' / ' + formatBytes(item.transfer_enable)
 }
 
+async function refreshDashboard() {
+  if (refreshing.value) return
+  refreshing.value = true
+  try {
+    await Promise.allSettled([
+      overview.refresh(),
+      loadTraffic(),
+      loadAttentionServers(),
+      loadActiveNodeTotal(),
+    ])
+  } finally {
+    refreshing.value = false
+  }
+}
+
 function handleUserCreated() {
   void overview.refresh().catch(() => undefined)
   void loadTraffic()
@@ -334,10 +352,22 @@ onUnmounted(() => {
 <template>
   <section class="page">
     <PageHeader
-      title="运营数据"
-      subtitle="快速筛选、对比并处理用户与资源状态"
+      title="监控大盘"
+      subtitle="实时查看服务器、节点、用户与流量状态"
     >
       <template #actions>
+        <button
+          type="button"
+          class="btn secondary"
+          :disabled="refreshing"
+          @click="refreshDashboard"
+        >
+          <RefreshCw
+            :size="15"
+            aria-hidden="true"
+          />
+          {{ refreshing ? '刷新中' : '刷新数据' }}
+        </button>
         <button
           type="button"
           class="btn"
@@ -633,8 +663,8 @@ onUnmounted(() => {
 .rank-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-  margin-bottom: 14px;
+  gap: 16px;
+  margin-bottom: 20px;
 }
 
 .rank-grid > .card + .card {
@@ -643,6 +673,8 @@ onUnmounted(() => {
 
 .rank-card .card-head {
   margin-bottom: var(--spacing-md);
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .rank-title {
@@ -905,7 +937,7 @@ onUnmounted(() => {
   text-align: center;
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 1280px) {
   .attention-panel {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));

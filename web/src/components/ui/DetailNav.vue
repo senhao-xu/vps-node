@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import type { LucideIcon } from 'lucide-vue-next'
 
 export type DetailNavItem = {
@@ -8,10 +9,21 @@ export type DetailNavItem = {
   icon: LucideIcon
 }
 
-defineProps<{
+const props = defineProps<{
   items: DetailNavItem[]
   ariaLabel?: string
 }>()
+
+const activeId = ref('')
+function syncHash() {
+  const hash = window.location.hash.slice(1)
+  activeId.value = props.items.some((item) => item.id === hash) ? hash : (props.items[0]?.id ?? '')
+}
+onMounted(() => {
+  syncHash()
+  window.addEventListener('hashchange', syncHash)
+})
+onBeforeUnmount(() => window.removeEventListener('hashchange', syncHash))
 </script>
 
 <template>
@@ -23,17 +35,17 @@ defineProps<{
       v-for="item in items"
       :key="item.id"
       class="detail-nav-item"
+      :class="{ active: activeId === item.id }"
+      :aria-current="activeId === item.id ? 'location' : undefined"
       :href="`#${item.id}`"
+      @click="activeId = item.id"
     >
       <component
         :is="item.icon"
         :size="16"
         aria-hidden="true"
       />
-      <span>
-        <strong>{{ item.label }}</strong>
-        <small v-if="item.hint">{{ item.hint }}</small>
-      </span>
+      <strong>{{ item.label }}</strong>
     </a>
   </nav>
 </template>
@@ -48,7 +60,7 @@ defineProps<{
   margin-bottom: 14px;
   overflow-x: auto;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--color-surface) 94%, transparent);
   box-shadow: var(--shadow-sm);
   scrollbar-width: thin;
@@ -57,11 +69,11 @@ defineProps<{
 
 .detail-nav-item {
   display: flex;
-  min-width: 150px;
+  min-width: max-content;
   flex: 1 0 auto;
   align-items: center;
   gap: 9px;
-  padding: 10px 14px;
+  padding: 12px 18px;
   border-left: 1px solid var(--color-border);
   color: var(--color-text-secondary);
   transition: background 0.15s ease, color 0.15s ease;
@@ -71,7 +83,8 @@ defineProps<{
   border-left: 0;
 }
 
-.detail-nav-item:hover {
+.detail-nav-item:hover,
+.detail-nav-item.active {
   background: var(--color-primary-soft);
   color: var(--color-primary);
 }
@@ -80,26 +93,15 @@ defineProps<{
   flex: none;
 }
 
-.detail-nav-item span {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-}
-
 .detail-nav-item strong {
-  color: var(--color-text);
   font-size: var(--font-size-sm);
   font-weight: 700;
   line-height: 1.35;
   white-space: nowrap;
 }
 
-.detail-nav-item small {
-  overflow: hidden;
-  font-size: var(--font-size-xs);
-  line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.detail-nav-item.active {
+  box-shadow: inset 0 -3px var(--color-primary);
 }
 
 @media (max-width: 700px) {
@@ -109,11 +111,7 @@ defineProps<{
   }
 
   .detail-nav-item {
-    min-width: 128px;
-  }
-
-  .detail-nav-item small {
-    display: none;
+    padding-inline: 14px;
   }
 }
 </style>

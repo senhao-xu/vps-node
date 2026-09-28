@@ -108,16 +108,29 @@ async function resetTraffic() {
       class="traffic-view"
     >
       <div class="traffic-summary">
-        <span class="traffic-used">{{ formatBytes(props.user.used_bytes) }}</span>
-        <span class="traffic-quota text-secondary">/ {{ unlimited ? '不限流量' : formatBytes(props.user.transfer_enable) }}</span>
+        <span class="traffic-caption">累计已用</span>
+        <div class="traffic-total">
+          <strong class="traffic-used">{{ formatBytes(props.user.used_bytes) }}</strong>
+          <span class="traffic-quota">{{ unlimited ? '不限流量额度' : `总额度 ${formatBytes(props.user.transfer_enable)}` }}</span>
+        </div>
       </div>
-      <ProgressBar :percent="props.user.used_percent" />
-      <div class="traffic-detail text-secondary">
-        <span>上传 {{ formatBytes(props.user.u) }}</span>
-        <span>下载 {{ formatBytes(props.user.d) }}</span>
-      </div>
-      <div class="traffic-detail text-secondary">
-        <span>剩余 {{ unlimited ? '不限' : formatBytes(props.user.remaining_bytes) }}</span>
+      <ProgressBar
+        v-if="!unlimited"
+        :percent="props.user.used_percent"
+      />
+      <div class="traffic-breakdown">
+        <div class="traffic-stat">
+          <span>上传</span>
+          <strong>{{ formatBytes(props.user.u) }}</strong>
+        </div>
+        <div class="traffic-stat">
+          <span>下载</span>
+          <strong>{{ formatBytes(props.user.d) }}</strong>
+        </div>
+        <div class="traffic-stat">
+          <span>剩余</span>
+          <strong>{{ unlimited ? '不限' : formatBytes(props.user.remaining_bytes) }}</strong>
+        </div>
       </div>
     </div>
 
@@ -182,33 +195,68 @@ async function resetTraffic() {
 .traffic-view {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-sm);
+  gap: 14px;
   margin-top: var(--spacing-md);
 }
 
 .traffic-summary {
   display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.traffic-caption {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.traffic-total {
+  display: flex;
   align-items: baseline;
-  gap: var(--spacing-xs);
+  gap: var(--spacing-sm);
   flex-wrap: wrap;
 }
 
 .traffic-used {
-  font-size: var(--font-size-lg);
-  font-weight: 600;
+  font-size: 26px;
+  font-weight: 750;
   line-height: 1.2;
 }
 
 .traffic-quota {
-  font-size: var(--font-size-md);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
 }
 
-.traffic-detail {
-  display: flex;
-  justify-content: space-between;
+.traffic-breakdown {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--spacing-sm);
-  flex-wrap: wrap;
-  font-size: var(--font-size-sm);
+}
+
+.traffic-stat {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted);
+}
+
+.traffic-stat span {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.traffic-stat strong {
+  overflow: hidden;
+  font-size: var(--font-size-md);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .quota-editor {
@@ -226,6 +274,14 @@ async function resetTraffic() {
 
   .card-head-actions .btn {
     flex: 1;
+  }
+
+  .traffic-breakdown {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .traffic-stat:last-child {
+    grid-column: 1 / -1;
   }
 }
 </style>

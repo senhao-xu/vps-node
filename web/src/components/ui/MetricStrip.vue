@@ -94,19 +94,22 @@ function barWidth(bar: MetricStripBar): string {
 <style scoped>
 .metric-strip {
   display: grid;
-  gap: 14px;
-  margin-bottom: 14px;
+  gap: 12px;
+  margin-bottom: 16px;
 }
 
-.metric-strip.count-1 { grid-template-columns: 1fr; }
-.metric-strip.count-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.metric-strip.count-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.metric-strip.count-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.metric-strip.count-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.metric-strip.count-1 { grid-template-columns: minmax(0, 1fr); max-width: 300px; }
+.metric-strip.count-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 612px; }
+.metric-strip.count-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); max-width: 936px; }
+.metric-strip.count-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); max-width: 1236px; }
+.metric-strip.count-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); max-width: 1548px; }
 
 .metric-item {
+  display: flex;
   min-width: 0;
-  padding: 15px 16px 14px;
+  min-height: 112px;
+  flex-direction: column;
+  padding: 14px 16px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
@@ -136,25 +139,28 @@ function barWidth(bar: MetricStripBar): string {
 
 .metric-value-row {
   display: flex;
-  align-items: baseline;
-  gap: 6px;
   min-width: 0;
-  min-height: 28px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
   margin-top: 8px;
 }
 
 .metric-value-row strong {
+  max-width: 100%;
   overflow: hidden;
   color: var(--color-text);
   font-size: 24px;
   font-variant-numeric: tabular-nums;
-  font-weight: 750;
-  line-height: 1.3;
+  font-weight: 760;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .metric-hint {
+  max-width: 100%;
   overflow: hidden;
   color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
@@ -169,12 +175,12 @@ function barWidth(bar: MetricStripBar): string {
 .metric-skeleton {
   display: block;
   width: 64%;
-  height: 20px;
+  height: 24px;
 }
 
 .metric-bar {
   height: 4px;
-  margin-top: 12px;
+  margin-top: auto;
   overflow: hidden;
   border-radius: var(--radius-full);
   background: var(--color-muted-soft);
@@ -193,27 +199,20 @@ function barWidth(bar: MetricStripBar): string {
 .metric-bar-fill.bar-danger { background: var(--color-danger); }
 .metric-bar-fill.bar-purple { background: var(--color-badge-purple); }
 
-@media (max-width: 900px) {
-  .metric-strip.count-4,
-  .metric-strip.count-5 {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
+@media (max-width: 1280px) {
+  .metric-strip.count-5 { grid-template-columns: repeat(3, minmax(0, 1fr)); max-width: 936px; }
+  .metric-strip.count-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 612px; }
 }
 
-@media (max-width: 600px) {
+@media (max-width: 800px) {
   .metric-strip.count-3,
-  .metric-strip.count-4,
-  .metric-strip.count-5 {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+  .metric-strip.count-5 { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 612px; }
 }
 
-@media (max-width: 375px) {
+@media (max-width: 560px) {
   .metric-strip.count-2,
   .metric-strip.count-3,
   .metric-strip.count-4,
-  .metric-strip.count-5 {
-    grid-template-columns: 1fr;
-  }
+  .metric-strip.count-5 { grid-template-columns: minmax(0, 1fr); max-width: 300px; }
 }
 </style>

@@ -98,7 +98,7 @@ func TestChainRevisionDualBump(t *testing.T) {
 	}
 
 	// Updating the exit node bumps the entry server too (its outbound changes).
-	if err := r.UpdateNodeAndBump(ctx, exitNode, serverB, "exit.example.com", "exit", "", false, 2001, `{"cipher":"2022-blake3-aes-128-gcm"}`, nil, 1, "[]", nil, nil, "", nil); err != nil {
+	if err := r.UpdateNodeAndBump(ctx, exitNode, serverB, "exit.example.com", "exit", "shadowsocks", "", false, 2001, `{"cipher":"2022-blake3-aes-128-gcm"}`, nil, 1, "[]", nil, nil, "", nil); err != nil {
 		t.Fatalf("update exit node: %v", err)
 	}
 	revA2, _ := r.GetServerRevision(ctx, serverA)
@@ -111,7 +111,7 @@ func TestChainRevisionDualBump(t *testing.T) {
 	revC0, _ := r.GetServerRevision(ctx, serverC)
 	exit2 := mustCreateNode(t, r, serverC, "exit2", 3001)
 	revBBefore, _ := r.GetServerRevision(ctx, serverB)
-	if err := r.UpdateNodeAndBump(ctx, entryNode, serverA, "entry.example.com", "entry", "", false, 1001, `{"cipher":"2022-blake3-aes-128-gcm"}`, nil, 1, "[]", &exit2, nil, "", nil); err != nil {
+	if err := r.UpdateNodeAndBump(ctx, entryNode, serverA, "entry.example.com", "entry", "shadowsocks", "", false, 1001, `{"cipher":"2022-blake3-aes-128-gcm"}`, nil, 1, "[]", &exit2, nil, "", nil); err != nil {
 		t.Fatalf("relink entry node: %v", err)
 	}
 	revC1, _ := r.GetServerRevision(ctx, serverC)
@@ -278,7 +278,7 @@ func TestChainCustomNodeColumns(t *testing.T) {
 	}
 
 	// Clearing the external target keeps the key empty and restores direct.
-	if err := r.UpdateNodeAndBump(ctx, id, server, "entry.example.com", "entry", "", false, 1001, `{"cipher":"2022-blake3-aes-128-gcm"}`, nil, 1, "[]", nil, nil, "", nil); err != nil {
+	if err := r.UpdateNodeAndBump(ctx, id, server, "entry.example.com", "entry", "shadowsocks", "", false, 1001, `{"cipher":"2022-blake3-aes-128-gcm"}`, nil, 1, "[]", nil, nil, "", nil); err != nil {
 		t.Fatalf("clear external chain: %v", err)
 	}
 	cleared, err := r.GetNode(ctx, id)
