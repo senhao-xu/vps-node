@@ -98,7 +98,7 @@ func TestChainRevisionDualBump(t *testing.T) {
 	}
 
 	// Updating the exit node bumps the entry server too (its outbound changes).
-	if err := r.UpdateNodeAndBump(ctx, exitNode, serverB, "exit.example.com", "exit", "", false, 2001, `{"cipher":"2022-blake3-aes-128-gcm"}`, nil, 1, "[]", nil, nil); err != nil {
+	if err := r.UpdateNodeAndBump(ctx, exitNode, serverB, "exit.example.com", "exit", "", false, 2001, `{"cipher":"2022-blake3-aes-128-gcm"}`, nil, 1, "[]", nil, nil, "", nil); err != nil {
 		t.Fatalf("update exit node: %v", err)
 	}
 	revA2, _ := r.GetServerRevision(ctx, serverA)
@@ -111,7 +111,7 @@ func TestChainRevisionDualBump(t *testing.T) {
 	revC0, _ := r.GetServerRevision(ctx, serverC)
 	exit2 := mustCreateNode(t, r, serverC, "exit2", 3001)
 	revBBefore, _ := r.GetServerRevision(ctx, serverB)
-	if err := r.UpdateNodeAndBump(ctx, entryNode, serverA, "entry.example.com", "entry", "", false, 1001, `{"cipher":"2022-blake3-aes-128-gcm"}`, nil, 1, "[]", &exit2, nil); err != nil {
+	if err := r.UpdateNodeAndBump(ctx, entryNode, serverA, "entry.example.com", "entry", "", false, 1001, `{"cipher":"2022-blake3-aes-128-gcm"}`, nil, 1, "[]", &exit2, nil, "", nil); err != nil {
 		t.Fatalf("relink entry node: %v", err)
 	}
 	revC1, _ := r.GetServerRevision(ctx, serverC)
@@ -224,5 +224,71 @@ func TestChainNodeColumns(t *testing.T) {
 	exitJoined := byID[exit]
 	if exitJoined.ChainNodeID != nil || exitJoined.ChainNodeName != "" {
 		t.Fatalf("unlinked node must have empty chain fields, got %+v", exitJoined)
+	}
+}
+
+func TestChainCustomNodeColumns(t *testing.T) {
+	r := newTestRepo(t)
+	ctx := context.Background()
+	server := mustCreateServer(t, r, "s1")
+	customNode := mustCreateCustomNode(t, r, "ext", repo.CustomNodeSourceLinks)
+
+	id, err := r.CreateNode(ctx, repo.NewNode{
+		ServerID: server, Address: "entry.example.com", Name: "entry", Protocol: repo.ProtocolShadowsocks, Port: 1001,
+		ProtocolSettings:  `{"cipher":"2022-blake3-aes-128-gcm"}`,
+		ChainCustomNodeID: &customNode, ChainCustomEntryKey: "key-1",
+	})
+	if err != nil {
+		t.Fatalf("create node: %v", err)
+	}
+
+	plain, err := r.GetNode(ctx, id)
+	if err != nil {
+		t.Fatalf("get node: %v", err)
+	}
+	if plain.ChainCustomNodeID == nil || *plain.ChainCustomNodeID != customNode || plain.ChainCustomEntryKey != "key-1" {
+		t.Fatalf("external chain columns must round-trip, got %+v", plain)
+	}
+	if plain.ChainNodeID != nil {
+		t.Fatalf("managed and external chain targets are mutually exclusive, got %+v", plain.ChainNodeID)
+	}
+
+	joined, err := r.ListNodesByServer(ctx, server)
+	if err != nil {
+		t.Fatalf("list nodes: %v", err)
+	}
+	if len(joined) != 1 || joined[0].ChainCustomNodeName != "ext" {
+		t.Fatalf("joined select must populate the external source name, got %+v", joined)
+	}
+
+	referencing, err := r.ListNodesByCustomChainTarget(ctx, customNode)
+	if err != nil {
+		t.Fatalf("list externally chained nodes: %v", err)
+	}
+	if len(referencing) != 1 || referencing[0].ID != id {
+		t.Fatalf("unexpected referencing nodes: %+v", referencing)
+	}
+
+	servers, err := r.ListServersChainingCustomNode(ctx, customNode)
+	if err != nil {
+		t.Fatalf("list servers chaining custom node: %v", err)
+	}
+	if len(servers) != 1 || servers[0] != server {
+		t.Fatalf("unexpected referencing servers: %v", servers)
+	}
+
+	// Clearing the external target keeps the key empty and restores direct.
+	if err := r.UpdateNodeAndBump(ctx, id, server, "entry.example.com", "entry", "", false, 1001, `{"cipher":"2022-blake3-aes-128-gcm"}`, nil, 1, "[]", nil, nil, "", nil); err != nil {
+		t.Fatalf("clear external chain: %v", err)
+	}
+	cleared, err := r.GetNode(ctx, id)
+	if err != nil {
+		t.Fatalf("get cleared node: %v", err)
+	}
+	if cleared.ChainCustomNodeID != nil || cleared.ChainCustomEntryKey != "" {
+		t.Fatalf("external chain must clear, got %+v", cleared)
+	}
+	if refs, _ := r.ListNodesByCustomChainTarget(ctx, customNode); len(refs) != 0 {
+		t.Fatalf("cleared node must not reference the source: %+v", refs)
 	}
 }

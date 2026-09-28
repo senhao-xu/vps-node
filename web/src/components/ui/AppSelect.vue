@@ -6,7 +6,7 @@ import { useClickOutside, useFloatingPanel } from './composables'
 const props = withDefaults(
   defineProps<{
     modelValue: T
-    options: Array<{ value: T; label: string; dot?: string }>
+    options: Array<{ value: T; label: string; dot?: string; disabled?: boolean }>
     disabled?: boolean
     label?: string
   }>(),
@@ -30,15 +30,43 @@ useClickOutside([triggerRef, panelRef], () => {
 
 const current = computed(() => props.options.find((option) => option.value === props.modelValue))
 
+function optionEnabled(index: number): boolean {
+  return props.options[index]?.disabled !== true
+}
+
+function firstEnabledIndex(): number {
+  return props.options.findIndex((_option, index) => optionEnabled(index))
+}
+
+/** Move the highlight by delta, wrapping and skipping disabled options. */
+function moveActive(delta: number) {
+  const total = props.options.length
+  if (total === 0) return
+  let index = activeIndex.value
+  if (index < 0) index = delta > 0 ? -1 : total
+  for (let step = 0; step < total; step++) {
+    index = (index + delta + total) % total
+    if (optionEnabled(index)) {
+      activeIndex.value = index
+      return
+    }
+  }
+}
+
+function setActive(index: number) {
+  if (optionEnabled(index)) activeIndex.value = index
+}
+
 function openPanel() {
   if (props.disabled) return
-  activeIndex.value = props.options.findIndex((option) => option.value === props.modelValue)
+  const currentIndex = props.options.findIndex((option) => option.value === props.modelValue)
+  activeIndex.value = optionEnabled(currentIndex) ? currentIndex : firstEnabledIndex()
   open.value = true
 }
 
 function selectOption(index: number) {
   const option = props.options[index]
-  if (!option) return
+  if (!option || option.disabled) return
   emit('update:modelValue', option.value)
   open.value = false
   triggerRef.value?.focus()
@@ -58,10 +86,10 @@ function onTriggerKeydown(event: KeyboardEvent) {
 function onPanelKeydown(event: KeyboardEvent) {
   if (event.key === 'ArrowDown') {
     event.preventDefault()
-    activeIndex.value = Math.min(props.options.length - 1, activeIndex.value + 1)
+    moveActive(1)
   } else if (event.key === 'ArrowUp') {
     event.preventDefault()
-    activeIndex.value = Math.max(0, activeIndex.value - 1)
+    moveActive(-1)
   } else if (event.key === 'Enter' || event.key === ' ') {
     event.preventDefault()
     selectOption(activeIndex.value)
@@ -133,8 +161,10 @@ watch(
         class="option"
         :class="{ active: index === activeIndex, selected: option.value === props.modelValue }"
         role="option"
+        :disabled="option.disabled"
+        :aria-disabled="option.disabled ? 'true' : undefined"
         :aria-selected="option.value === props.modelValue"
-        @mouseenter="activeIndex = index"
+        @mouseenter="setActive(index)"
         @click="selectOption(index)"
       >
         <span
@@ -230,6 +260,15 @@ watch(
 
 .option.selected {
   font-weight: 500;
+}
+
+.option:disabled {
+  opacity: 0.52;
+  cursor: not-allowed;
+}
+
+.option:disabled.active {
+  background: none;
 }
 
 .option-label {

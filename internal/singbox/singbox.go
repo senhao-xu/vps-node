@@ -174,6 +174,10 @@ type ChainExit struct {
 	EntryServerID int64
 	Exit          Node
 	DialAddress   string
+	// Outbound, when non-nil, is a pre-built external-route outbound (a custom
+	// node line). Render injects only the tag and the route rule; the managed
+	// Exit fields are ignored.
+	Outbound map[string]any
 }
 
 func Render(appKey []byte, nodes []Node, chains ...ChainExit) (map[string]any, error) {
@@ -194,9 +198,15 @@ func Render(appKey []byte, nodes []Node, chains ...ChainExit) (map[string]any, e
 		if !ok {
 			continue
 		}
-		outbound, err := renderChainOutbound(appKey, c)
-		if err != nil {
-			return nil, err
+		var outbound map[string]any
+		if c.Outbound != nil {
+			outbound = withChainOutboundTag(c.Outbound, chainOutboundTag(c.EntryNodeID))
+		} else {
+			var err error
+			outbound, err = renderChainOutbound(appKey, c)
+			if err != nil {
+				return nil, err
+			}
 		}
 		outbounds = append(outbounds, outbound)
 		rules = append(rules, map[string]any{
@@ -214,6 +224,17 @@ func Render(appKey []byte, nodes []Node, chains ...ChainExit) (map[string]any, e
 		"outbounds": outbounds,
 		"route":     route,
 	}, nil
+}
+
+// withChainOutboundTag copies the pre-built outbound so the caller's map is
+// left untouched, then binds the entry node's chain tag.
+func withChainOutboundTag(outbound map[string]any, tag string) map[string]any {
+	clone := make(map[string]any, len(outbound)+1)
+	for key, value := range outbound {
+		clone[key] = value
+	}
+	clone["tag"] = tag
+	return clone
 }
 
 func chainOutboundTag(entryNodeID int64) string {

@@ -110,7 +110,13 @@ type nodeDTO struct {
 	ServerStatus string       `json:"server_status,omitempty"`
 	ChainNodeID  *int64       `json:"chain_node_id"`
 	ChainNode    *chainRefDTO `json:"chain_node"`
-	CreatedAt    string       `json:"created_at"`
+	// ChainCustomNodeID/ChainCustomEntryKey select a single line inside a
+	// custom node source as the external chain exit; ChainCustomNodeName is a
+	// display-only join and empty when the caller has no source context.
+	ChainCustomNodeID   *int64 `json:"chain_custom_node_id"`
+	ChainCustomEntryKey string `json:"chain_custom_entry_key"`
+	ChainCustomNodeName string `json:"chain_custom_node_name"`
+	CreatedAt           string `json:"created_at"`
 }
 
 type nodeDetailDTO struct {
@@ -123,20 +129,23 @@ type nodeDetailDTO struct {
 
 func toNodeDTO(n repo.Node) nodeDTO {
 	dto := nodeDTO{
-		ID:          n.ID,
-		ServerID:    n.ServerID,
-		Address:     n.Address,
-		IPv6Enabled: n.IPv6Enabled,
-		IPv6Address: n.IPv6Address,
-		Name:        n.Name,
-		Protocol:    n.Protocol,
-		Port:        n.Port,
-		Rate:        n.Rate,
-		Tags:        nodeTags(n.Tags),
-		Status:      n.Status,
-		Server:      nodeRefDTO{ID: n.ServerID, Name: n.ServerName},
-		ChainNodeID: n.ChainNodeID,
-		CreatedAt:   rfc3339(n.CreatedAt),
+		ID:                  n.ID,
+		ServerID:            n.ServerID,
+		Address:             n.Address,
+		IPv6Enabled:         n.IPv6Enabled,
+		IPv6Address:         n.IPv6Address,
+		Name:                n.Name,
+		Protocol:            n.Protocol,
+		Port:                n.Port,
+		Rate:                n.Rate,
+		Tags:                nodeTags(n.Tags),
+		Status:              n.Status,
+		Server:              nodeRefDTO{ID: n.ServerID, Name: n.ServerName},
+		ChainNodeID:         n.ChainNodeID,
+		ChainCustomNodeID:   n.ChainCustomNodeID,
+		ChainCustomEntryKey: n.ChainCustomEntryKey,
+		ChainCustomNodeName: n.ChainCustomNodeName,
+		CreatedAt:           rfc3339(n.CreatedAt),
 	}
 	if n.ChainNodeID != nil && n.ChainNodeName != "" {
 		dto.ChainNode = &chainRefDTO{ID: *n.ChainNodeID, Name: n.ChainNodeName, ServerName: n.ChainServerName}

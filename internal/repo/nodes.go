@@ -28,13 +28,19 @@ type Node struct {
 	ServerStatus     string
 	ServerLastSeenAt *time.Time
 	ChainNodeID      *int64
-	// ChainNodeName / ChainServerName are populated by the WithServerName
-	// queries for display (chain exit "server/name"); plain selects leave
-	// them empty.
-	ChainNodeName   string
-	ChainServerName string
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	// ChainCustomNodeID / ChainCustomEntryKey select a single line inside a
+	// custom node source as the chain exit; mutually exclusive with
+	// ChainNodeID (enforced by the handler).
+	ChainCustomNodeID   *int64
+	ChainCustomEntryKey string
+	// ChainNodeName / ChainServerName / ChainCustomNodeName are populated by
+	// the WithServerName queries for display (chain exit "server/name" and the
+	// external source name); plain selects leave them empty.
+	ChainNodeName       string
+	ChainServerName     string
+	ChainCustomNodeName string
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
 }
 
 type NodeFilter struct {
@@ -47,19 +53,21 @@ type NodeFilter struct {
 }
 
 type NewNode struct {
-	ServerID         int64
-	Address          string
-	IPv6Enabled      bool
-	IPv6Address      string
-	Name             string
-	Protocol         string
-	Port             int
-	ProtocolSettings string
-	Rate             float64
-	Tags             string
-	SecretEnc        []byte
-	Status           string
-	ChainNodeID      *int64
+	ServerID            int64
+	Address             string
+	IPv6Enabled         bool
+	IPv6Address         string
+	Name                string
+	Protocol            string
+	Port                int
+	ProtocolSettings    string
+	Rate                float64
+	Tags                string
+	SecretEnc           []byte
+	Status              string
+	ChainNodeID         *int64
+	ChainCustomNodeID   *int64
+	ChainCustomEntryKey string
 }
 
 const (
@@ -73,12 +81,13 @@ const (
 	ProtocolSocks       = "socks"
 )
 
-const nodeSelect = `SELECT id, server_id, address, ipv6_enabled, ipv6_address, name, protocol, port, protocol_settings, rate, tags, secret_enc, status, chain_node_id, created_at, updated_at FROM nodes`
+const nodeSelect = `SELECT id, server_id, address, ipv6_enabled, ipv6_address, name, protocol, port, protocol_settings, rate, tags, secret_enc, status, chain_node_id, chain_custom_node_id, chain_custom_entry_key, created_at, updated_at FROM nodes`
 
-const nodeSelectWithServer = `SELECT n.id, n.server_id, n.address, n.ipv6_enabled, n.ipv6_address, n.name, n.protocol, n.port, n.protocol_settings, n.rate, n.tags, n.secret_enc, n.status, n.chain_node_id, n.created_at, n.updated_at, s.name, cn.name, cs.name, s.status, s.last_seen_at
+const nodeSelectWithServer = `SELECT n.id, n.server_id, n.address, n.ipv6_enabled, n.ipv6_address, n.name, n.protocol, n.port, n.protocol_settings, n.rate, n.tags, n.secret_enc, n.status, n.chain_node_id, n.chain_custom_node_id, n.chain_custom_entry_key, n.created_at, n.updated_at, s.name, cn.name, cs.name, ccn.name, s.status, s.last_seen_at
 	FROM nodes n JOIN servers s ON s.id = n.server_id
 	LEFT JOIN nodes cn ON cn.id = n.chain_node_id
-	LEFT JOIN servers cs ON cs.id = cn.server_id`
+	LEFT JOIN servers cs ON cs.id = cn.server_id
+	LEFT JOIN custom_nodes ccn ON ccn.id = n.chain_custom_node_id`
 
 func insertNodeExec(ctx context.Context, q execer, n NewNode) (int64, error) {
 	if n.Status == "" {
@@ -95,9 +104,9 @@ func insertNodeExec(ctx context.Context, q execer, n NewNode) (int64, error) {
 	}
 	now := nowUnix()
 	res, err := q.ExecContext(ctx,
-		`INSERT INTO nodes (server_id, address, ipv6_enabled, ipv6_address, name, protocol, port, protocol_settings, rate, tags, secret_enc, status, chain_node_id, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		n.ServerID, n.Address, ipv6EnabledInt(n.IPv6Enabled), n.IPv6Address, n.Name, n.Protocol, n.Port, n.ProtocolSettings, n.Rate, n.Tags, n.SecretEnc, n.Status, n.ChainNodeID, now, now)
+		`INSERT INTO nodes (server_id, address, ipv6_enabled, ipv6_address, name, protocol, port, protocol_settings, rate, tags, secret_enc, status, chain_node_id, chain_custom_node_id, chain_custom_entry_key, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		n.ServerID, n.Address, ipv6EnabledInt(n.IPv6Enabled), n.IPv6Address, n.Name, n.Protocol, n.Port, n.ProtocolSettings, n.Rate, n.Tags, n.SecretEnc, n.Status, n.ChainNodeID, n.ChainCustomNodeID, n.ChainCustomEntryKey, now, now)
 	if err != nil {
 		return 0, mapErr(err)
 	}
@@ -257,11 +266,42 @@ func (r *Repo) ListNodesByChainTarget(ctx context.Context, chainNodeID int64) ([
 	return collectNodes(rows)
 }
 
+// ListNodesByCustomChainTarget returns the nodes whose external chain exit is
+// customNodeID (its entry nodes), used for delete protection.
+func (r *Repo) ListNodesByCustomChainTarget(ctx context.Context, customNodeID int64) ([]Node, error) {
+	rows, err := r.DB.QueryContext(ctx, nodeSelect+` WHERE chain_custom_node_id = ? ORDER BY id`, customNodeID)
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	return collectNodes(rows)
+}
+
+// ListServersChainingCustomNode returns the distinct servers owning nodes
+// whose external chain exit is customNodeID. Their configs must refresh when
+// the source changes or is refreshed.
+func (r *Repo) ListServersChainingCustomNode(ctx context.Context, customNodeID int64) ([]int64, error) {
+	rows, err := r.DB.QueryContext(ctx,
+		`SELECT DISTINCT server_id FROM nodes WHERE chain_custom_node_id = ? ORDER BY server_id`, customNodeID)
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	defer rows.Close()
+	ids := []int64{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, mapErr(err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 // ListChainEntriesTargetingServer returns the entry nodes (any server) whose
 // chain exit is one of the given server's nodes.
 func (r *Repo) ListChainEntriesTargetingServer(ctx context.Context, serverID int64) ([]Node, error) {
 	rows, err := r.DB.QueryContext(ctx,
-		`SELECT e.id, e.server_id, e.address, e.ipv6_enabled, e.ipv6_address, e.name, e.protocol, e.port, e.protocol_settings, e.rate, e.tags, e.secret_enc, e.status, e.chain_node_id, e.created_at, e.updated_at
+		`SELECT e.id, e.server_id, e.address, e.ipv6_enabled, e.ipv6_address, e.name, e.protocol, e.port, e.protocol_settings, e.rate, e.tags, e.secret_enc, e.status, e.chain_node_id, e.chain_custom_node_id, e.chain_custom_entry_key, e.created_at, e.updated_at
 		 FROM nodes e JOIN nodes x ON x.id = e.chain_node_id
 		 WHERE x.server_id = ? ORDER BY e.id`, serverID)
 	if err != nil {
@@ -308,8 +348,8 @@ func scanNode(scan func(dest ...any) error) (Node, error) {
 	var secretEnc []byte
 	var createdAt, updatedAt int64
 	var ipv6Enabled int
-	var chainNodeID sql.NullInt64
-	err := scan(&n.ID, &n.ServerID, &n.Address, &ipv6Enabled, &n.IPv6Address, &n.Name, &n.Protocol, &n.Port, &n.ProtocolSettings, &n.Rate, &n.Tags, &secretEnc, &n.Status, &chainNodeID, &createdAt, &updatedAt)
+	var chainNodeID, chainCustomNodeID sql.NullInt64
+	err := scan(&n.ID, &n.ServerID, &n.Address, &ipv6Enabled, &n.IPv6Address, &n.Name, &n.Protocol, &n.Port, &n.ProtocolSettings, &n.Rate, &n.Tags, &secretEnc, &n.Status, &chainNodeID, &chainCustomNodeID, &n.ChainCustomEntryKey, &createdAt, &updatedAt)
 	if err != nil {
 		return Node{}, mapErr(err)
 	}
@@ -317,6 +357,9 @@ func scanNode(scan func(dest ...any) error) (Node, error) {
 	n.SecretEnc = secretEnc
 	if chainNodeID.Valid {
 		n.ChainNodeID = &chainNodeID.Int64
+	}
+	if chainCustomNodeID.Valid {
+		n.ChainCustomNodeID = &chainCustomNodeID.Int64
 	}
 	n.CreatedAt = toTime(createdAt)
 	n.UpdatedAt = toTime(updatedAt)
@@ -328,10 +371,10 @@ func scanNodeWithServerName(scan func(dest ...any) error) (Node, error) {
 	var secretEnc []byte
 	var createdAt, updatedAt int64
 	var ipv6Enabled int
-	var chainNodeID sql.NullInt64
-	var chainNodeName, chainServerName sql.NullString
+	var chainNodeID, chainCustomNodeID sql.NullInt64
+	var chainNodeName, chainServerName, chainCustomNodeName sql.NullString
 	var serverLastSeenAt sql.NullInt64
-	err := scan(&n.ID, &n.ServerID, &n.Address, &ipv6Enabled, &n.IPv6Address, &n.Name, &n.Protocol, &n.Port, &n.ProtocolSettings, &n.Rate, &n.Tags, &secretEnc, &n.Status, &chainNodeID, &createdAt, &updatedAt, &n.ServerName, &chainNodeName, &chainServerName, &n.ServerStatus, &serverLastSeenAt)
+	err := scan(&n.ID, &n.ServerID, &n.Address, &ipv6Enabled, &n.IPv6Address, &n.Name, &n.Protocol, &n.Port, &n.ProtocolSettings, &n.Rate, &n.Tags, &secretEnc, &n.Status, &chainNodeID, &chainCustomNodeID, &n.ChainCustomEntryKey, &createdAt, &updatedAt, &n.ServerName, &chainNodeName, &chainServerName, &chainCustomNodeName, &n.ServerStatus, &serverLastSeenAt)
 	if err != nil {
 		return Node{}, mapErr(err)
 	}
@@ -340,8 +383,12 @@ func scanNodeWithServerName(scan func(dest ...any) error) (Node, error) {
 	if chainNodeID.Valid {
 		n.ChainNodeID = &chainNodeID.Int64
 	}
+	if chainCustomNodeID.Valid {
+		n.ChainCustomNodeID = &chainCustomNodeID.Int64
+	}
 	n.ChainNodeName = chainNodeName.String
 	n.ChainServerName = chainServerName.String
+	n.ChainCustomNodeName = chainCustomNodeName.String
 	n.ServerLastSeenAt = toTimePtr(serverLastSeenAt)
 	n.CreatedAt = toTime(createdAt)
 	n.UpdatedAt = toTime(updatedAt)

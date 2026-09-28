@@ -465,6 +465,11 @@ onMounted(() => {
             :title="`流量经 ${row.chain_node.server_name}/${row.chain_node.name} 落地`"
           >→ {{ row.chain_node.server_name }}/{{ row.chain_node.name }}</span>
           <span
+            v-else-if="row.chain_custom_node_id !== null"
+            class="chip"
+            :title="`流量经自定义线路「${row.chain_custom_node_name || '未知来源'}」落地`"
+          >→ {{ row.chain_custom_node_name || '自定义线路' }}</span>
+          <span
             v-else
             class="text-secondary"
           >—</span>

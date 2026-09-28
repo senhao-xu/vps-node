@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/url"
 	"sort"
@@ -11,6 +12,7 @@ import (
 	"vps-node/internal/httpx"
 	"vps-node/internal/repo"
 	"vps-node/internal/secrets"
+	"vps-node/internal/singbox"
 	"vps-node/internal/subscription"
 )
 
@@ -67,6 +69,9 @@ type customNodeEntryDTO struct {
 	Type   string `json:"type"`
 	Server string `json:"server"`
 	Port   int    `json:"port"`
+	// ChainSupported reports whether this entry's type can be converted into a
+	// sing-box chain outbound; the node form greys out the rest.
+	ChainSupported bool `json:"chain_supported"`
 }
 
 // customNodeEntriesResponse is the parsed digest of a custom node's stored
@@ -82,9 +87,46 @@ type customNodeEntriesResponse struct {
 func toCustomNodeEntryDTOs(summaries []subscription.EntrySummary) []customNodeEntryDTO {
 	out := make([]customNodeEntryDTO, 0, len(summaries))
 	for _, s := range summaries {
-		out = append(out, customNodeEntryDTO{Key: s.Key, Name: s.Name, Type: s.Type, Server: s.Server, Port: s.Port})
+		out = append(out, customNodeEntryDTO{
+			Key: s.Key, Name: s.Name, Type: s.Type, Server: s.Server, Port: s.Port,
+			ChainSupported: singbox.OutboundSupported(s.Type),
+		})
 	}
 	return out
+}
+
+// customNodeSourceContent decodes the content already stored for a custom node
+// source without any network IO: links live in the encrypted column and
+// subscription sources are read from the fetch cache only (an empty cache
+// yields no content).
+func (h *Handler) customNodeSourceContent(cn repo.CustomNode) (links []string, proxies []map[string]any, err error) {
+	switch cn.SourceType {
+	case repo.CustomNodeSourceLinks:
+		plain, err := secrets.Decrypt(h.appKey, cn.ContentEnc)
+		if err != nil {
+			return nil, nil, err
+		}
+		return subscription.SplitLinkLines(string(plain)), nil, nil
+	case repo.CustomNodeSourceSubscription:
+		if cn.CachedContent == "" {
+			return nil, nil, nil
+		}
+		links, proxies = subscription.NormalizeFetchedContent(cn.CachedContent)
+		return links, proxies, nil
+	default:
+		return nil, nil, nil
+	}
+}
+
+// resolveCustomNodeEntries parses a source's stored content into entries with
+// their stable keys. It is the shared parse pass behind the entries digest and
+// the external chain outbound.
+func (h *Handler) resolveCustomNodeEntries(cn repo.CustomNode) ([]subscription.ResolvedEntry, error) {
+	links, proxies, err := h.customNodeSourceContent(cn)
+	if err != nil {
+		return nil, err
+	}
+	return subscription.ResolveEntries(h.appKey, links, proxies)
 }
 
 // customNodeEntries parses a custom node's own stored content into display
@@ -100,22 +142,9 @@ func (h *Handler) customNodeEntries(cn repo.CustomNode) (customNodeEntriesRespon
 	if hasCache && !cn.FetchedAt.IsZero() {
 		resp.FetchedAt = rfc3339Ptr(&cn.FetchedAt)
 	}
-	var links []string
-	var proxies []map[string]any
-	switch cn.SourceType {
-	case repo.CustomNodeSourceLinks:
-		plain, err := secrets.Decrypt(h.appKey, cn.ContentEnc)
-		if err != nil {
-			return customNodeEntriesResponse{}, err
-		}
-		links = subscription.SplitLinkLines(string(plain))
-	case repo.CustomNodeSourceSubscription:
-		if cn.CachedContent == "" {
-			return resp, nil
-		}
-		links, proxies = subscription.NormalizeFetchedContent(cn.CachedContent)
-	default:
-		return resp, nil
+	links, proxies, err := h.customNodeSourceContent(cn)
+	if err != nil {
+		return customNodeEntriesResponse{}, err
 	}
 	entries, skipped := subscription.SummarizeEntries(h.appKey, links, proxies)
 	resp.Entries = toCustomNodeEntryDTOs(entries)
@@ -171,6 +200,10 @@ func (h *Handler) handleCustomNodeRefresh(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if err := h.repo.UpdateCustomNodeCache(r.Context(), cn.ID, content, time.Now().Unix()); err != nil {
+		writeErr(w, err)
+		return
+	}
+	if err := h.bumpServersChainingCustomNode(r.Context(), cn.ID); err != nil {
 		writeErr(w, err)
 		return
 	}
@@ -403,6 +436,10 @@ func (h *Handler) handleCustomNodeUpdate(w http.ResponseWriter, r *http.Request)
 		writeErr(w, err)
 		return
 	}
+	if err := h.bumpServersChainingCustomNode(r.Context(), id); err != nil {
+		writeErr(w, err)
+		return
+	}
 	n, err := h.repo.GetCustomNode(r.Context(), id)
 	if err != nil {
 		writeErr(w, err)
@@ -418,11 +455,40 @@ func (h *Handler) handleCustomNodeDelete(w http.ResponseWriter, r *http.Request)
 		writeErr(w, err)
 		return
 	}
+	referencing, err := h.repo.ListNodesByCustomChainTarget(r.Context(), id)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	if len(referencing) > 0 {
+		names := make([]string, 0, len(referencing))
+		for _, ref := range referencing {
+			names = append(names, ref.Name)
+		}
+		writeErr(w, errConflict(fmt.Sprintf("custom node is the chain exit of %s; unlink those nodes first", strings.Join(names, ", "))))
+		return
+	}
 	if err := h.repo.DeleteCustomNode(r.Context(), id); err != nil {
 		writeErr(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// bumpServersChainingCustomNode refreshes every server whose entry nodes use
+// this source as their external chain exit, so their agent configs re-render
+// after the source content, status, or cache changes.
+func (h *Handler) bumpServersChainingCustomNode(ctx context.Context, customNodeID int64) error {
+	serverIDs, err := h.repo.ListServersChainingCustomNode(ctx, customNodeID)
+	if err != nil {
+		return err
+	}
+	for _, serverID := range serverIDs {
+		if _, err := h.repo.BumpServerRevision(ctx, serverID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // customNodeEntrySelectionDTO is one source's entry-key whitelist. It is

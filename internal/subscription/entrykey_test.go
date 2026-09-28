@@ -126,3 +126,35 @@ func TestSummarizeEntriesAttachesKeys(t *testing.T) {
 		t.Fatalf("skipped = %v", skipped)
 	}
 }
+
+func TestResolveEntriesKeepsProxyAndLink(t *testing.T) {
+	appKey := []byte("0123456789abcdef0123456789abcdef")
+	links := []string{
+		"ss://aes-128-gcm:secret@a.example.com:8388#A",
+		"not-a-link",
+	}
+	proxies := []map[string]any{
+		{"name": "P1", "type": "trojan", "server": "p1.example.com", "port": 443, "password": "pw"},
+		{"type": "ss", "server": "no-name.example.com", "port": 80},
+	}
+	entries, err := ResolveEntries(appKey, links, proxies)
+	if err != nil {
+		t.Fatalf("resolve entries: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("entries = %+v", entries)
+	}
+	if entries[0].Name != "A" || entries[0].Link != links[0] || entries[0].Proxy["type"] != "ss" {
+		t.Fatalf("link entry: %+v", entries[0])
+	}
+	if entries[1].Name != "P1" || entries[1].Link != "" || entries[1].Proxy["server"] != "p1.example.com" {
+		t.Fatalf("proxy entry: %+v", entries[1])
+	}
+	// Keys match what SummarizeEntries reports for the same entries.
+	summaries, _ := SummarizeEntries(appKey, links, proxies)
+	for i, entry := range entries {
+		if entry.Key != summaries[i].Key {
+			t.Fatalf("resolved key %d mismatch: %q != %q", i, entry.Key, summaries[i].Key)
+		}
+	}
+}

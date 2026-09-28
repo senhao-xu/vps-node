@@ -305,10 +305,10 @@ Generates or resets the server's Agent Key. Response `200`: `{ "agent_key": "<pl
 Query (all optional, combinable): `server_id` (exact match), `protocol` (`shadowsocks|vless|hysteria2|anytls|socks`), `status` (`active|disabled`), `q` (case-insensitive substring match on node name), plus `page` / `page_size`. Invalid enum values return `400 invalid_request`. Paginated node DTOs:
 
 ```json
-{ "id": 1, "server_id": 1, "address": "hk01.example.com", "ipv6_enabled": false, "ipv6_address": "", "name": "HK-SS", "protocol": "shadowsocks", "port": 8388, "rate": 1, "tags": [], "status": "active", "server": { "id": 1, "name": "HK-1" }, "chain_node_id": null, "chain_node": null, "created_at": "..." }
+{ "id": 1, "server_id": 1, "address": "hk01.example.com", "ipv6_enabled": false, "ipv6_address": "", "name": "HK-SS", "protocol": "shadowsocks", "port": 8388, "rate": 1, "tags": [], "status": "active", "server": { "id": 1, "name": "HK-1" }, "chain_node_id": null, "chain_node": null, "chain_custom_node_id": null, "chain_custom_entry_key": "", "chain_custom_node_name": "", "created_at": "..." }
 ```
 
-Every node DTO carries `server: { id, name }` referencing its owning server. `address` is the user-facing connection host used to render subscriptions. `rate` is the traffic multiplier (default `1`) and `tags` is a string array. `ipv6_enabled` (default `false`) advertises an extra IPv6 entry in subscriptions and `ipv6_address` is its connection host (an IPv6 literal or a domain resolving to AAAA); when empty or disabled the subscription renders only `address`. `chain_node_id` links the node to another managed node (any server) used as its chain exit; when set, the DTO also carries `chain_node: { id, name, server_name }` for display. Chained nodes are transparent to subscriptions (only the entry node is rendered).
+Every node DTO carries `server: { id, name }` referencing its owning server. `address` is the user-facing connection host used to render subscriptions. `rate` is the traffic multiplier (default `1`) and `tags` is a string array. `ipv6_enabled` (default `false`) advertises an extra IPv6 entry in subscriptions and `ipv6_address` is its connection host (an IPv6 literal or a domain resolving to AAAA); when empty or disabled the subscription renders only `address`. `chain_node_id` links the node to another managed node (any server) used as its chain exit; when set, the DTO also carries `chain_node: { id, name, server_name }` for display. `chain_custom_node_id` + `chain_custom_entry_key` select a single line inside a custom node source as the external chain exit; when set, the DTO also carries the display-only `chain_custom_node_name`. Chained nodes are transparent to subscriptions (only the entry node is rendered).
 
 Protocol secrets are never exposed.
 
@@ -323,6 +323,8 @@ Protocol secrets are never exposed.
 `settings` is the protocol settings object, validated against a per-protocol allowlist; unknown keys in a validated section return `422 validation`, and validated sections deep-merge leaf by leaf. The reserved free-form sections `tls_settings`, `network_settings`, `multiplex`, `utls` (vless) and `obfs_settings` (shadowsocks) accept arbitrary JSON objects: a supplied section replaces the stored one as a whole, is preserved verbatim, and is never rendered, so it is an extension placeholder rather than runtime configuration. Public values are stored in `nodes.protocol_settings`; private material is encrypted at rest by Panel and never echoed.
 
 `chain_node_id` is an optional id of another managed node used as this node's chain exit. The target must exist and be `active`, must not be the node itself, and must not close a chain loop (A→B→A at any depth) — violations return `422 validation`. Setting or clearing the link bumps the revisions of both the entry and the exit server. The exit node's inbound carries a derived pseudo user (`relay-<entry server id>`) whose traffic is never attributed to a panel user.
+
+`chain_custom_node_id` + `chain_custom_entry_key` select a **single line inside a custom node source** (external exit) instead of a managed node; the two targeting modes are mutually exclusive (`422 validation` when both are non-null). The source must exist and be `active` (`422` otherwise) and the key must be the 64-character lowercase hex entry `key` from `GET /api/custom-nodes/:id/nodes` (`422` otherwise). The entry-node agent dials the external server with the line's own credentials (no relay user is injected, no panel-side traffic/device/visit accounting for the exit hop); entries the renderer cannot resolve (missing/changed key, disabled source, no subscription cache, unsupported type) fall back to a direct outbound. Only the entry node's owning server revision is bumped (there is no managed exit server).
 
 - `shadowsocks`: required `cipher` (one of `2022-blake3-aes-128-gcm`, `2022-blake3-aes-256-gcm`, `2022-blake3-chacha20-poly1305`); optional `obfs`, `obfs_settings`, `plugin`, `plugin_opts`; optional secret `password` (server password, otherwise derived).
 - `vless`: required secret `private_key` (X25519, 32 decoded bytes) and `reality_settings.server_name`; `tls` (integer, must be `2`), `reality_settings.server_port` (1-65535, default `443`), `reality_settings.short_id` (even-length hex of at most 16 characters), `reality_settings.allow_insecure`, `flow` (empty or `xtls-rprx-vision`), `network` (empty or `tcp`), `tls_settings`, `network_settings`, `multiplex`, `utls` are optional. `reality_settings.public_key` is derived from `private_key`; a contradicting value returns `422 validation`.
@@ -352,7 +354,7 @@ Response `200`: node DTO plus `user_count`, `online_users`, `server: { id, name 
 
 ### PUT /api/nodes/:id
 
-Partial update of `address`, `ipv6_enabled`, `ipv6_address`, `name`, `port`, `rate`, `tags`, `settings`, `status`, `chain_node_id`. `chain_node_id` is tri-state: omitting the field keeps the current link, `null` unlinks, and a node id retargets the exit (same validation as create). Protocol settings are merged with stored settings section by section; omitted public fields and secrets remain unchanged, and `certificate`/`private_key` must be replaced as a pair. A supplied reserved free-form section (`tls_settings`/`network_settings`/`multiplex`/`utls`/`obfs_settings`) replaces its stored value as a whole. Response `200`: node DTO. Changes bump the owning server revision; chain changes additionally bump the old and new exit servers, and updating a node bumps every server whose nodes chain through it. Enabling a node whose port is already used by an active node on the same server returns `409 conflict`.
+Partial update of `address`, `ipv6_enabled`, `ipv6_address`, `name`, `port`, `rate`, `tags`, `settings`, `status`, `chain_node_id`, `chain_custom_node_id`, `chain_custom_entry_key`. `chain_node_id` and `chain_custom_node_id` are each tri-state: omitting the field keeps the current target, `null` clears it, and an id sets it (same validation as create). They are mutually exclusive — explicitly setting both to an id returns `422 validation`; setting either one to an id clears the other. `chain_custom_entry_key` accompanies a `chain_custom_node_id` (required valid 64-hex when a source is set, empty when no custom target) and is preserved when the field is omitted alongside an unchanged source. Protocol settings are merged with stored settings section by section; omitted public fields and secrets remain unchanged, and `certificate`/`private_key` must be replaced as a pair. A supplied reserved free-form section (`tls_settings`/`network_settings`/`multiplex`/`utls`/`obfs_settings`) replaces its stored value as a whole. Response `200`: node DTO. Changes bump the owning server revision; managed chain changes additionally bump the old and new exit servers, and updating a node bumps every server whose nodes chain through it. External exits only affect the entry node's own server. Enabling a node whose port is already used by an active node on the same server returns `409 conflict`.
 
 ### POST /api/nodes/:id/copy
 
@@ -364,8 +366,13 @@ Response `200`: `{}`. Removes `user_nodes` for this node; bumps server revision 
 
 ## Custom Nodes
 
-Admin-managed external nodes merged into subscription output. They are never rendered by
-agents, never carry traffic/device statistics, and cannot be used as a node's chain exit.
+Admin-managed external nodes merged into subscription output. They never carry
+traffic/device statistics. Individual lines may also be selected as a managed entry node's
+**external chain exit** (`chain_custom_node_id` on the node): the entry agent dials the external
+server directly with the line's own credentials, so no relay user is injected and the exit hop is
+outside panel accounting. Adding/updating/removing such a reference keeps the source's own content
+untouched; only the entry node's server revision reacts to node changes, while source
+`PUT`/`refresh` bumps every server whose entries reference it.
 
 ### GET /api/custom-nodes
 
@@ -392,11 +399,13 @@ upstream fetch (self-signed upstreams). Both are always empty/`false` for `links
 
 ### PUT /api/custom-nodes/:id
 
-Partial update of `name`, `content` (omit to keep; `source_type` is immutable), `status` and — for `subscription` sources — `user_agent` (empty string restores the default; omitting keeps the stored value) and `insecure_skip_verify` (omit to keep). Changing the content, the `user_agent` or `insecure_skip_verify` invalidates the fetch cache. Response `200`: the DTO plus optional `warnings`. Duplicate `name` → `409 conflict`.
+Partial update of `name`, `content` (omit to keep; `source_type` is immutable), `status` and — for `subscription` sources — `user_agent` (empty string restores the default; omitting keeps the stored value) and `insecure_skip_verify` (omit to keep). Changing the content, the `user_agent` or `insecure_skip_verify` invalidates the fetch cache. Response `200`: the DTO plus optional `warnings`. Duplicate `name` → `409 conflict`. The update bumps the revision of every server whose nodes reference this source as their external chain exit, so their agent configs re-render.
 
 ### DELETE /api/custom-nodes/:id
 
-Response `204`. Also removes every user authorization referencing it.
+Response `204`. Also removes every user authorization referencing it. If any node uses this
+source as its external chain exit (`chain_custom_node_id`), deletion returns `409 conflict` with a
+message naming the referencing entry nodes, which must be unlinked first.
 
 ### GET /api/custom-nodes/:id/nodes
 
@@ -405,10 +414,13 @@ IO: `subscription` sources are read from the fetch cache only, so a cache miss r
 list with `has_cache=false` rather than fetching upstream. Unknown id → `404 not_found`.
 
 ```json
-{ "source_type": "subscription", "has_cache": true, "fetched_at": "2026-09-28T10:00:00Z", "entries": [ { "key": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "name": "HK-1", "type": "vless", "server": "1.2.3.4", "port": 443 } ], "skipped": ["foo://unsupported"] }
+{ "source_type": "subscription", "has_cache": true, "fetched_at": "2026-09-28T10:00:00Z", "entries": [ { "key": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "name": "HK-1", "type": "vless", "server": "1.2.3.4", "port": 443, "chain_supported": true } ], "skipped": ["foo://unsupported"] }
 ```
 
-`type` is the Clash proxy type (`ss`/`vless`/`hysteria2`/`anytls`/`trojan`/`vmess`). Entries
+`type` is the Clash proxy type (`ss`/`vless`/`hysteria2`/`anytls`/`trojan`/`vmess`). `chain_supported`
+reports whether the type can be converted into a sing-box chain outbound (`ss`/`vless`/`trojan`/
+`vmess`/`hysteria2`/`anytls`/`socks5`); unsupported entries are still renderable in subscriptions
+but cannot be chosen as an external chain exit and are greyed out by the node form. Entries
 that cannot be parsed or lack `name`/`type`/`server`/`port` are listed in `skipped` (the raw
 link line, or the proxy name / `proxy #i`) without affecting the others. For `links` sources
 `has_cache` is always `false` and `fetched_at` is `null` (the links are parsed from
@@ -424,9 +436,10 @@ parameters (only `name` differs) share one `key`.
 
 Only valid for `subscription` sources: ignores the render-path 5-minute cache TTL, force-fetches
 the upstream URL, writes the cache + `fetched_at` and returns the same shape as
-`GET /api/custom-nodes/:id/nodes` with `has_cache=true`. `links` sources → `422 validation`.
-Unknown id → `404 not_found`. An upstream failure returns `500 internal` with a readable message
-and leaves the previous cache and `fetched_at` untouched.
+`GET /api/custom-nodes/:id/nodes` with `has_cache=true`. On success it bumps the revision of every
+server whose nodes reference this source as their external chain exit. `links` sources →
+`422 validation`. Unknown id → `404 not_found`. An upstream failure returns `500 internal` with a
+readable message and leaves the previous cache and `fetched_at` untouched (and bumps no revision).
 
 ### GET /api/users/:id/custom-nodes
 
@@ -649,6 +662,8 @@ Returns the server-scoped rendered configuration.
 `config.singbox` is the complete, rendered sing-box configuration for the server. `renderer_version` identifies the rendering contract (see `internal/singbox.ContractVersion`) so agents can detect renderer changes. `credential` contains protocol-derived secrets (already generated/decrypted by Panel). For `socks` nodes the credential is `{ "contract": "socks-v1", "username": "u-<user id>", "password": "<user uuid>" }`, matching the inbound user the agent must authenticate. `device_limit` and `speed_limit` are copied from the user row so the embedded runtime can enforce them. Only eligible users on the server's nodes are included; expired/disabled/over-transfer users are absent, which instructs the agent to remove them locally.
 
 Chained nodes (see `POST /api/nodes` `chain_node_id`) render one extra outbound per chained entry node (`tag: chain-<node id>`, a full protocol client of the exit node, credentials derived from the panel app key) plus a `route.rules` entry mapping the entry inbound tag to that outbound; `route.final` stays `direct`. Exit-side inbounds carry an additional pseudo user named `relay-<entry server id>` with the same derived credential; agents never map that name to a panel user, so relay traffic is neither attributed nor reported.
+
+External chain exits (`chain_custom_node_id` + `chain_custom_entry_key`) render the same `tag: chain-<node id>` outbound and `route.rules` entry, but the outbound is a protocol client built from the selected custom-node line's own credentials (`ss`/`vless`/`trojan`/`vmess`/`hysteria2`/`anytls`/`socks5`) — no relay user exists on the external server. Config building performs no network IO: `subscription` sources are read from the stored fetch cache, and any unresolvable entry (missing/changed key, disabled source, empty cache, unsupported type) simply renders no chain outbound for that node, leaving it direct. A node whose `chain_node_id` is set ignores `chain_custom_node_id` (they cannot both be set through the API).
 
 Agent applies the config by loading it into the embedded sing-box instance; it keeps the previous config and keeps polling with its applied `version` on failure, reporting the failure via heartbeat extension field `last_apply_error`.
 

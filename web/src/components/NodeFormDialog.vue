@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { createNode, generateRealityKeypair, getNode, listNodes, updateNode } from '@/api/nodes'
+import { getCustomNodeEntries, listCustomNodes } from '@/api/customNodes'
 import { listServers } from '@/api/servers'
 import { errorMessage } from '@/api/http'
 import type {
+  CustomNode,
+  CustomNodeEntries,
+  CustomNodeEntry,
   Hysteria2BandwidthInput,
   Hysteria2ObfsInput,
   NodeBrief,
@@ -17,7 +21,9 @@ import ErrorBanner from '@/components/ErrorBanner.vue'
 import ModalDialog from '@/components/ModalDialog.vue'
 import CopyText from '@/components/CopyText.vue'
 import AppSelect from '@/components/ui/AppSelect.vue'
+import EmptyState from '@/components/ui/EmptyState.vue'
 import LoadingSpinner from '@/components/ui/LoadingSpinner.vue'
+import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
 import { SHADOWSOCKS_METHODS, protocolLabel } from '@/utils/labels'
 
@@ -83,6 +89,25 @@ const chainNodeId = ref<number | null>(null)
 const chainCandidates = ref<NodeBrief[]>([])
 const loadingChainCandidates = ref(false)
 
+type ChainMode = 'direct' | 'managed' | 'custom'
+
+const chainMode = ref<ChainMode>('direct')
+const chainModeItems: Array<{ value: ChainMode; label: string }> = [
+  { value: 'direct', label: '直连' },
+  { value: 'managed', label: '托管节点' },
+  { value: 'custom', label: '自定义线路' },
+]
+
+const chainCustomNodeId = ref<number | null>(null)
+const chainCustomEntryKey = ref('')
+
+const customSources = ref<CustomNode[]>([])
+const loadingCustomSources = ref(false)
+const customSourcesLoaded = ref(false)
+
+const customEntriesResult = ref<CustomNodeEntries | null>(null)
+const loadingCustomEntries = ref(false)
+
 watch(
   () => props.open,
   (open) => {
@@ -118,8 +143,20 @@ watch(
     tlsPrivateKey.value = ''
     serverChoice.value = null
     chainNodeId.value = props.node?.chain_node_id ?? null
+    chainCustomNodeId.value = props.node?.chain_custom_node_id ?? null
+    chainCustomEntryKey.value = props.node?.chain_custom_entry_key ?? ''
+    if (chainCustomNodeId.value !== null) chainMode.value = 'custom'
+    else if (chainNodeId.value !== null) chainMode.value = 'managed'
+    else chainMode.value = 'direct'
+    customSources.value = []
+    customSourcesLoaded.value = false
+    customEntriesResult.value = null
     detailLoaded.value = false
     void loadChainCandidates()
+    if (chainMode.value === 'custom') {
+      void ensureCustomSources()
+      if (chainCustomNodeId.value !== null) void loadCustomEntries(chainCustomNodeId.value)
+    }
     if (isEdit.value && props.node) {
       void loadNodeDetail(props.node.id)
     } else if (!isEdit.value && props.serverId === undefined) {
@@ -139,6 +176,122 @@ async function loadChainCandidates() {
     loadingChainCandidates.value = false
   }
 }
+
+/** Load the active custom node sources available as external chain exits. */
+async function ensureCustomSources() {
+  if (customSourcesLoaded.value || loadingCustomSources.value) return
+  loadingCustomSources.value = true
+  try {
+    const result = await listCustomNodes()
+    customSources.value = result.items.filter((source) => source.status === 'active')
+    customSourcesLoaded.value = true
+  } catch (err) {
+    error.value = errorMessage(err)
+  } finally {
+    loadingCustomSources.value = false
+  }
+}
+
+/** Load a source's stored lines without any network IO (reads the local cache). */
+async function loadCustomEntries(customNodeId: number) {
+  loadingCustomEntries.value = true
+  customEntriesResult.value = null
+  try {
+    customEntriesResult.value = await getCustomNodeEntries(customNodeId)
+  } catch (err) {
+    error.value = errorMessage(err)
+  } finally {
+    loadingCustomEntries.value = false
+  }
+}
+
+function onChainModeChange(mode: ChainMode) {
+  chainMode.value = mode
+  if (mode === 'custom') void ensureCustomSources()
+}
+
+const customSourceSelectValue = computed<number>({
+  get: () => chainCustomNodeId.value ?? 0,
+  set: (value) => {
+    const next = value === 0 ? null : value
+    chainCustomNodeId.value = next
+    chainCustomEntryKey.value = ''
+    customEntriesResult.value = null
+    if (next !== null) void loadCustomEntries(next)
+  },
+})
+
+const customSourceOptions = computed<Array<{ value: number; label: string }>>(() => [
+  {
+    value: 0,
+    label: loadingCustomSources.value ? '加载来源列表…' : '请选择自定义来源',
+  },
+  ...customSources.value.map((source) => ({ value: source.id, label: source.name })),
+])
+
+const customEntries = computed<CustomNodeEntry[]>(
+  () => customEntriesResult.value?.entries ?? [],
+)
+
+function customEntryOption(entry: CustomNodeEntry): {
+  value: string
+  label: string
+  disabled?: boolean
+} {
+  const base = `${entry.name} · ${entry.type} :${entry.port}`
+  if (!entry.chain_supported) {
+    return { value: entry.key, label: `${base}（${entry.type} 不支持作为出口）`, disabled: true }
+  }
+  return { value: entry.key, label: base }
+}
+
+const customEntryOptions = computed<Array<{ value: string; label: string; disabled?: boolean }>>(
+  () => {
+    const options = customEntries.value.map(customEntryOption)
+    // Keep echoing a stored key that no longer resolves so the admin can see
+    // which line used to be selected (the renderer falls back to direct).
+    const stored = chainCustomEntryKey.value
+    if (stored && !customEntries.value.some((entry) => entry.key === stored)) {
+      return [{ value: stored, label: '已保存的线路（当前不可用，将回退直连）' }, ...options]
+    }
+    return options
+  },
+)
+
+const customEntrySelectValue = computed<string>({
+  get: () => chainCustomEntryKey.value,
+  set: (value) => {
+    chainCustomEntryKey.value = value
+  },
+})
+
+const storedEntryMissing = computed(
+  () =>
+    chainCustomEntryKey.value !== '' &&
+    customEntriesResult.value !== null &&
+    !customEntries.value.some((entry) => entry.key === chainCustomEntryKey.value),
+)
+
+const storedEntryUnsupported = computed(() => {
+  const matched = customEntries.value.find((entry) => entry.key === chainCustomEntryKey.value)
+  return matched !== undefined && !matched.chain_supported
+})
+
+const customEntriesEmptyTitle = computed(() => {
+  const result = customEntriesResult.value
+  if (result?.source_type === 'subscription' && !result.has_cache) {
+    return '未拉取，请先更新订阅'
+  }
+  return '该来源暂无可选线路'
+})
+
+const customEntriesEmptyHint = computed(() => {
+  const result = customEntriesResult.value
+  if (result?.source_type === 'subscription' && !result.has_cache) {
+    return '查看节点不会触发上游请求；请前往自定义节点页点击“更新订阅”生成缓存后再作为出口。'
+  }
+  return '该来源未解析出任何线路。'
+})
 
 async function loadNodeDetail(nodeId: number) {
   loadingDetail.value = true
@@ -425,6 +578,20 @@ const validationMessage = computed(() => {
   } else if (protocol.value === 'socks') {
     // SOCKS5 无协议设置，端口/地址等通用校验已在上方处理。
   }
+
+  if (chainMode.value === 'managed') {
+    if (chainNodeId.value === null) return '请选择出站节点'
+  } else if (chainMode.value === 'custom') {
+    if (chainCustomNodeId.value === null) return '请选择自定义线路来源'
+    if (
+      customSourcesLoaded.value &&
+      !customSources.value.some((source) => source.id === chainCustomNodeId.value)
+    ) {
+      return '所选自定义来源不可用，请重新选择'
+    }
+    if (!chainCustomEntryKey.value) return '请选择自定义线路'
+    if (storedEntryUnsupported.value) return '该线路类型不支持作为出口，请重新选择'
+  }
   return ''
 })
 
@@ -466,6 +633,31 @@ async function generateReality() {
   }
 }
 
+type ChainPayload = {
+  chain_node_id: number | null
+  chain_custom_node_id?: number | null
+  chain_custom_entry_key?: string
+}
+
+/**
+ * Map the selected mode to the mutually-exclusive chain fields. Managed exits
+ * send only `chain_node_id` (the backend clears any external target); custom
+ * exits clear the managed target and pin the entry key.
+ */
+function chainPayload(): ChainPayload {
+  if (chainMode.value === 'managed') {
+    return { chain_node_id: chainNodeId.value }
+  }
+  if (chainMode.value === 'custom') {
+    return {
+      chain_node_id: null,
+      chain_custom_node_id: chainCustomNodeId.value,
+      chain_custom_entry_key: chainCustomEntryKey.value,
+    }
+  }
+  return { chain_node_id: null, chain_custom_node_id: null }
+}
+
 async function submit() {
   if (loadingDetail.value) return
   const problem = validationMessage.value
@@ -487,7 +679,7 @@ async function submit() {
         tags: tagsPayload.value,
         settings: settingsPayload.value,
         status: status.value,
-        chain_node_id: chainNodeId.value,
+        ...chainPayload(),
       })
     } else {
       await createNode({
@@ -501,7 +693,7 @@ async function submit() {
         rate: rate.value ?? undefined,
         tags: tagsPayload.value,
         settings: settingsPayload.value,
-        chain_node_id: chainNodeId.value,
+        ...chainPayload(),
       })
     }
     emit('saved')
@@ -655,7 +847,22 @@ async function submit() {
           </p>
         </div>
         <div class="field">
-          <label id="node-chain-label">出站节点（可选）</label>
+          <label id="node-chain-mode-label">出口模式</label>
+          <SegmentedControl
+            :model-value="chainMode"
+            :items="chainModeItems"
+            aria-label="出口模式"
+            @update:model-value="onChainModeChange"
+          />
+          <p class="field-hint">
+            选择本节点流量的出口：直连、经托管节点转发，或使用自定义来源中的单条线路。
+          </p>
+        </div>
+        <div
+          v-if="chainMode === 'managed'"
+          class="field"
+        >
+          <label id="node-chain-label">出站节点</label>
           <AppSelect
             v-model="chainSelectValue"
             :options="chainOptions"
@@ -665,6 +872,63 @@ async function submit() {
           <p class="field-hint">
             选择后，连接本节点的流量会经该节点转发落地（链式代理）；订阅中仍只展示本节点。
           </p>
+        </div>
+        <div
+          v-else-if="chainMode === 'custom'"
+          class="field"
+        >
+          <label id="node-chain-source-label">自定义线路来源</label>
+          <AppSelect
+            v-model="customSourceSelectValue"
+            :options="customSourceOptions"
+            :disabled="loadingCustomSources"
+            label="自定义线路来源"
+          />
+          <p class="field-hint">
+            仅启用状态的自定义来源可选；订阅来源需先“更新订阅”产生缓存。
+          </p>
+          <div
+            v-if="chainCustomNodeId !== null"
+            class="field chain-entry-field"
+          >
+            <label id="node-chain-entry-label">线路</label>
+            <div
+              v-if="loadingCustomEntries"
+              class="detail-loading"
+            >
+              <LoadingSpinner size="sm" />
+              <span>正在加载线路…</span>
+            </div>
+            <AppSelect
+              v-else-if="customEntryOptions.length > 0"
+              v-model="customEntrySelectValue"
+              :options="customEntryOptions"
+              label="自定义线路"
+            />
+            <EmptyState
+              v-else
+              :title="customEntriesEmptyTitle"
+              :hint="customEntriesEmptyHint"
+            />
+            <p
+              v-if="storedEntryMissing"
+              class="field-hint field-warning"
+            >
+              已保存的线路在当前来源中不存在（上游可能已更改），保存后将回退直连。
+            </p>
+            <p
+              v-else-if="storedEntryUnsupported"
+              class="field-hint field-warning"
+            >
+              已保存的线路类型不支持作为出口，请重新选择其他线路。
+            </p>
+            <p
+              v-else
+              class="field-hint"
+            >
+              入口 Agent 使用该线路自带的凭据直连外部服务器；不支持的类型置灰不可选。
+            </p>
+          </div>
         </div>
       </section>
 
@@ -1175,12 +1439,19 @@ async function submit() {
   line-height: 1.5;
 }
 
-.hop-warning {
+.hop-warning,
+.field-warning {
   padding: var(--spacing-sm);
   border: 1px solid var(--color-warning-border);
   border-radius: var(--radius-md);
   background: var(--color-warning-soft);
   color: var(--color-warning);
+}
+
+.chain-entry-field {
+  margin-top: var(--spacing-sm);
+  padding-top: var(--spacing-sm);
+  border-top: 1px dashed var(--color-border);
 }
 
 .public-key :deep(.value) {

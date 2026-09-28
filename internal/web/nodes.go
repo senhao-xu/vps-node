@@ -84,7 +84,11 @@ type createNodeRequest struct {
 	Rate        *float64        `json:"rate"`
 	Tags        *[]string       `json:"tags"`
 	Settings    json.RawMessage `json:"settings"`
-	ChainNodeID *int64          `json:"chain_node_id"`
+	// ChainNodeID and ChainCustomNodeID select the managed or external chain
+	// exit; they are mutually exclusive.
+	ChainNodeID         *int64 `json:"chain_node_id"`
+	ChainCustomNodeID   *int64 `json:"chain_custom_node_id"`
+	ChainCustomEntryKey string `json:"chain_custom_entry_key"`
 }
 
 // validateChainTarget verifies a chain exit reference: it must exist, be
@@ -102,6 +106,27 @@ func (h *Handler) validateChainTarget(ctx context.Context, nodeID, chainNodeID i
 	}
 	if target.Status != repo.NodeStatusActive {
 		return errValidation("chain_node_id refers to a disabled node")
+	}
+	return nil
+}
+
+// validateCustomChainTarget verifies an external chain exit reference: the
+// source must exist and be active and the entry key must be a stable entry
+// digest. The entry itself is resolved at config-build time (and falls back to
+// direct when missing), so it is not looked up here.
+func (h *Handler) validateCustomChainTarget(ctx context.Context, customNodeID int64, entryKey string) error {
+	cn, err := h.repo.GetCustomNode(ctx, customNodeID)
+	if err != nil {
+		if err == repo.ErrNotFound {
+			return errValidation("chain_custom_node_id refers to a custom node that does not exist")
+		}
+		return err
+	}
+	if cn.Status != repo.CustomNodeStatusActive {
+		return errValidation("chain_custom_node_id refers to a disabled custom node")
+	}
+	if !isEntryKey(entryKey) {
+		return errValidation("chain_custom_entry_key must be a 64-character lowercase hexadecimal string")
 	}
 	return nil
 }
@@ -156,6 +181,10 @@ func (h *Handler) handleNodeCreate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
+	if req.ChainNodeID != nil && req.ChainCustomNodeID != nil {
+		writeErr(w, errValidation("chain_node_id and chain_custom_node_id are mutually exclusive"))
+		return
+	}
 	if req.ChainNodeID != nil {
 		if *req.ChainNodeID < 1 {
 			writeErr(w, errValidation("chain_node_id must be a node id"))
@@ -166,20 +195,34 @@ func (h *Handler) handleNodeCreate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	chainCustomEntryKey := ""
+	if req.ChainCustomNodeID != nil {
+		if *req.ChainCustomNodeID < 1 {
+			writeErr(w, errValidation("chain_custom_node_id must be a custom node id"))
+			return
+		}
+		if err := h.validateCustomChainTarget(r.Context(), *req.ChainCustomNodeID, req.ChainCustomEntryKey); err != nil {
+			writeErr(w, err)
+			return
+		}
+		chainCustomEntryKey = req.ChainCustomEntryKey
+	}
 
 	id, err := h.repo.CreateNodeAndBump(r.Context(), repo.NewNode{
-		ServerID:         req.ServerID,
-		Address:          req.Address,
-		IPv6Enabled:      req.IPv6Enabled,
-		IPv6Address:      req.IPv6Address,
-		Name:             req.Name,
-		Protocol:         req.Protocol,
-		Port:             req.Port,
-		ProtocolSettings: settingsJSON,
-		Rate:             rate,
-		Tags:             string(tagsJSON),
-		SecretEnc:        secretEnc,
-		ChainNodeID:      req.ChainNodeID,
+		ServerID:            req.ServerID,
+		Address:             req.Address,
+		IPv6Enabled:         req.IPv6Enabled,
+		IPv6Address:         req.IPv6Address,
+		Name:                req.Name,
+		Protocol:            req.Protocol,
+		Port:                req.Port,
+		ProtocolSettings:    settingsJSON,
+		Rate:                rate,
+		Tags:                string(tagsJSON),
+		SecretEnc:           secretEnc,
+		ChainNodeID:         req.ChainNodeID,
+		ChainCustomNodeID:   req.ChainCustomNodeID,
+		ChainCustomEntryKey: chainCustomEntryKey,
 	})
 	if err != nil {
 		if err == repo.ErrConflict {
@@ -312,14 +355,17 @@ type updateNodeRequest struct {
 	Tags        *[]string       `json:"tags"`
 	Settings    json.RawMessage `json:"settings"`
 	Status      *string         `json:"status"`
-	// ChainNodeID is tri-state: absent keeps the current link, JSON null
-	// unlinks, and a node id retargets the chain exit.
-	ChainNodeID json.RawMessage `json:"chain_node_id"`
+	// ChainNodeID and ChainCustomNodeID are tri-state: absent keeps the
+	// current target, JSON null unlinks, and an id retargets the chain exit.
+	// The two targets are mutually exclusive.
+	ChainNodeID         json.RawMessage `json:"chain_node_id"`
+	ChainCustomNodeID   json.RawMessage `json:"chain_custom_node_id"`
+	ChainCustomEntryKey string          `json:"chain_custom_entry_key"`
 }
 
-// resolveChainNodeID decodes the tri-state chain_node_id field; the second
-// return value reports whether the field was present in the request body.
-func resolveChainNodeID(raw json.RawMessage, current *int64) (*int64, error) {
+// resolveOptionalID decodes a tri-state id field: absent keeps the current
+// value, JSON null clears it, and a positive id replaces it.
+func resolveOptionalID(raw json.RawMessage, current *int64, field string) (*int64, error) {
 	if len(raw) == 0 {
 		return current, nil
 	}
@@ -328,7 +374,7 @@ func resolveChainNodeID(raw json.RawMessage, current *int64) (*int64, error) {
 	}
 	var id int64
 	if err := json.Unmarshal(raw, &id); err != nil || id < 1 {
-		return current, errValidation("chain_node_id must be a node id or null")
+		return current, errValidation(field + " must be a node id or null")
 	}
 	return &id, nil
 }
@@ -405,10 +451,44 @@ func (h *Handler) handleNodeUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	chainNodeID, err := resolveChainNodeID(req.ChainNodeID, current.ChainNodeID)
+	chainNodeID, err := resolveOptionalID(req.ChainNodeID, current.ChainNodeID, "chain_node_id")
 	if err != nil {
 		writeErr(w, err)
 		return
+	}
+	chainCustomNodeID, err := resolveOptionalID(req.ChainCustomNodeID, current.ChainCustomNodeID, "chain_custom_node_id")
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	// A request that explicitly targets one mode clears the other, which may
+	// still be retained from the current row. Explicitly targeting both is a
+	// conflict; when neither is explicit a (corrupt) dual target keeps the
+	// managed exit, matching the renderer's precedence.
+	managedExplicit := len(req.ChainNodeID) > 0 && chainNodeID != nil
+	customExplicit := len(req.ChainCustomNodeID) > 0 && chainCustomNodeID != nil
+	if managedExplicit && customExplicit {
+		writeErr(w, errValidation("chain_node_id and chain_custom_node_id are mutually exclusive"))
+		return
+	}
+	if chainNodeID != nil && chainCustomNodeID != nil {
+		if customExplicit {
+			chainNodeID = nil
+		} else {
+			chainCustomNodeID = nil
+		}
+	}
+	chainCustomEntryKey := ""
+	if chainCustomNodeID != nil {
+		if customExplicit {
+			chainCustomEntryKey = req.ChainCustomEntryKey
+		} else {
+			chainCustomEntryKey = current.ChainCustomEntryKey
+		}
+		if err := h.validateCustomChainTarget(r.Context(), *chainCustomNodeID, chainCustomEntryKey); err != nil {
+			writeErr(w, err)
+			return
+		}
 	}
 	if chainNodeID != nil {
 		if err := h.validateChainTarget(r.Context(), id, *chainNodeID); err != nil {
@@ -417,7 +497,7 @@ func (h *Handler) handleNodeUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := h.repo.UpdateNodeAndBump(r.Context(), id, current.ServerID, address, name, ipv6Address, ipv6Enabled, port, settingsJSON, secretEnc, rate, string(tagsJSON), chainNodeID, req.Status); err != nil {
+	if err := h.repo.UpdateNodeAndBump(r.Context(), id, current.ServerID, address, name, ipv6Address, ipv6Enabled, port, settingsJSON, secretEnc, rate, string(tagsJSON), chainNodeID, chainCustomNodeID, chainCustomEntryKey, req.Status); err != nil {
 		if err == repo.ErrConflict {
 			writeErr(w, errConflict("a node with this port is already enabled on this server"))
 			return
@@ -472,21 +552,22 @@ func (h *Handler) handleNodeDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 // populateChainRef fills the chain exit display names for handlers that read
-// nodes through the plain (non-joined) select.
+// nodes through the plain (non-joined) select. Both the managed exit's
+// server/name and the external source's name are best-effort.
 func (h *Handler) populateChainRef(ctx context.Context, n *repo.Node) {
-	if n.ChainNodeID == nil {
-		return
+	if n.ChainNodeID != nil {
+		if exit, err := h.repo.GetNode(ctx, *n.ChainNodeID); err == nil {
+			if server, err := h.repo.GetServer(ctx, exit.ServerID); err == nil {
+				n.ChainNodeName = exit.Name
+				n.ChainServerName = server.Name
+			}
+		}
 	}
-	exit, err := h.repo.GetNode(ctx, *n.ChainNodeID)
-	if err != nil {
-		return
+	if n.ChainCustomNodeID != nil {
+		if cn, err := h.repo.GetCustomNode(ctx, *n.ChainCustomNodeID); err == nil {
+			n.ChainCustomNodeName = cn.Name
+		}
 	}
-	server, err := h.repo.GetServer(ctx, exit.ServerID)
-	if err != nil {
-		return
-	}
-	n.ChainNodeName = exit.Name
-	n.ChainServerName = server.Name
 }
 
 // handleNodeCopy replicates a node verbatim (name, address, port, protocol

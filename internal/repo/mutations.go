@@ -369,11 +369,12 @@ func bumpServersExec(ctx context.Context, q execer, serverIDs ...int64) error {
 	return nil
 }
 
-func (r *Repo) UpdateNodeAndBump(ctx context.Context, nodeID, serverID int64, address, name, ipv6Address string, ipv6Enabled bool, port int, settings string, secretEnc []byte, rate float64, tags string, chainNodeID *int64, status *string) error {
+func (r *Repo) UpdateNodeAndBump(ctx context.Context, nodeID, serverID int64, address, name, ipv6Address string, ipv6Enabled bool, port int, settings string, secretEnc []byte, rate float64, tags string, chainNodeID *int64, chainCustomNodeID *int64, chainCustomEntryKey string, status *string) error {
 	return Tx(ctx, r.DB, func(tx *sql.Tx) error {
 		// Chain writes/rewires and exit-node changes affect both ends: bump
 		// the owning server, both chain-target servers, and every server
-		// whose nodes chain through this node.
+		// whose nodes chain through this node. An external custom exit has no
+		// owning server, so only the entry node's own server is affected.
 		affected := []int64{serverID}
 		oldExitServer, err := chainTargetServerIDExec(ctx, tx, nodeID)
 		if err != nil {
@@ -397,8 +398,8 @@ func (r *Repo) UpdateNodeAndBump(ctx context.Context, nodeID, serverID int64, ad
 
 		if status != nil {
 			res, err := tx.ExecContext(ctx,
-				`UPDATE nodes SET address = ?, ipv6_enabled = ?, ipv6_address = ?, name = ?, port = ?, protocol_settings = ?, secret_enc = ?, rate = ?, tags = ?, chain_node_id = ?, status = ?, updated_at = ? WHERE id = ?`,
-				address, ipv6EnabledInt(ipv6Enabled), ipv6Address, name, port, settings, secretEnc, rate, tags, chainNodeID, *status, nowUnix(), nodeID)
+				`UPDATE nodes SET address = ?, ipv6_enabled = ?, ipv6_address = ?, name = ?, port = ?, protocol_settings = ?, secret_enc = ?, rate = ?, tags = ?, chain_node_id = ?, chain_custom_node_id = ?, chain_custom_entry_key = ?, status = ?, updated_at = ? WHERE id = ?`,
+				address, ipv6EnabledInt(ipv6Enabled), ipv6Address, name, port, settings, secretEnc, rate, tags, chainNodeID, chainCustomNodeID, chainCustomEntryKey, *status, nowUnix(), nodeID)
 			if err != nil {
 				return mapErr(err)
 			}
@@ -407,8 +408,8 @@ func (r *Repo) UpdateNodeAndBump(ctx context.Context, nodeID, serverID int64, ad
 			}
 		} else {
 			res, err := tx.ExecContext(ctx,
-				`UPDATE nodes SET address = ?, ipv6_enabled = ?, ipv6_address = ?, name = ?, port = ?, protocol_settings = ?, secret_enc = ?, rate = ?, tags = ?, chain_node_id = ?, updated_at = ? WHERE id = ?`,
-				address, ipv6EnabledInt(ipv6Enabled), ipv6Address, name, port, settings, secretEnc, rate, tags, chainNodeID, nowUnix(), nodeID)
+				`UPDATE nodes SET address = ?, ipv6_enabled = ?, ipv6_address = ?, name = ?, port = ?, protocol_settings = ?, secret_enc = ?, rate = ?, tags = ?, chain_node_id = ?, chain_custom_node_id = ?, chain_custom_entry_key = ?, updated_at = ? WHERE id = ?`,
+				address, ipv6EnabledInt(ipv6Enabled), ipv6Address, name, port, settings, secretEnc, rate, tags, chainNodeID, chainCustomNodeID, chainCustomEntryKey, nowUnix(), nodeID)
 			if err != nil {
 				return mapErr(err)
 			}

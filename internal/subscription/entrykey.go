@@ -50,45 +50,93 @@ type EntrySummary struct {
 	Port   int
 }
 
-// SummarizeEntries behaves like Summarize and attaches the stable entry key to
-// every parsed entry. Entries that cannot be parsed or lack the required fields
-// are returned in skipped exactly as Summarize does (the raw link line, or the
-// proxy name / "proxy #i").
-func SummarizeEntries(appKey []byte, links []string, proxies []map[string]any) (entries []EntrySummary, skipped []string) {
-	entries = []EntrySummary{}
-	skipped = []string{}
+// ResolvedEntry is a parsed custom-node entry with its stable key and the raw
+// Clash proxy mapping. The proxy is what the chain renderer converts into a
+// sing-box outbound; Link is the original share link for link entries and empty
+// for upstream Clash proxies.
+type ResolvedEntry struct {
+	Key   string
+	Name  string
+	Proxy map[string]any
+	Link  string
+}
+
+// ResolveEntries parses share links and/or upstream Clash proxies and attaches
+// the stable entry key to every valid entry. Parse failures and entries missing
+// required fields are skipped, matching SummarizeEntries' filtering. The error
+// is non-nil only when an entry key cannot be computed.
+func ResolveEntries(appKey []byte, links []string, proxies []map[string]any) ([]ResolvedEntry, error) {
+	entries, _, err := resolveEntries(appKey, links, proxies)
+	return entries, err
+}
+
+// resolveEntries is the shared parse/key/validate pass behind SummarizeEntries
+// and ResolveEntries. It collects the skipped labels exactly as the previous
+// inline implementation did, so subscription digests stay byte-identical.
+func resolveEntries(appKey []byte, links []string, proxies []map[string]any) ([]ResolvedEntry, []string, error) {
+	entries := []ResolvedEntry{}
+	skipped := []string{}
+	var firstErr error
 	for _, line := range links {
 		proxy, err := ParseShareURI(line)
 		if err != nil {
 			skipped = append(skipped, line)
 			continue
 		}
-		if summary, err := summarizeEntry(appKey, proxy); err == nil {
-			entries = append(entries, summary)
-		} else {
-			skipped = append(skipped, line)
+		resolved, ok, err := resolveEntry(appKey, proxy, line)
+		if err != nil && firstErr == nil {
+			firstErr = err
 		}
+		if !ok {
+			skipped = append(skipped, line)
+			continue
+		}
+		entries = append(entries, resolved)
 	}
 	for i, proxy := range proxies {
-		if summary, err := summarizeEntry(appKey, proxy); err == nil {
-			entries = append(entries, summary)
-		} else {
-			skipped = append(skipped, proxyLabel(proxy, i))
+		resolved, ok, err := resolveEntry(appKey, proxy, "")
+		if err != nil && firstErr == nil {
+			firstErr = err
 		}
+		if !ok {
+			skipped = append(skipped, proxyLabel(proxy, i))
+			continue
+		}
+		entries = append(entries, resolved)
 	}
-	return entries, skipped
+	return entries, skipped, firstErr
 }
 
-func summarizeEntry(appKey []byte, proxy map[string]any) (EntrySummary, error) {
+// resolveEntry validates a parsed proxy and computes its stable key. ok is
+// false for entries missing required display fields (a skip, not an error);
+// err is non-nil only when the key itself cannot be computed.
+func resolveEntry(appKey []byte, proxy map[string]any, link string) (ResolvedEntry, bool, error) {
 	summary, err := summarizeProxy(proxy)
 	if err != nil {
-		return EntrySummary{}, err
+		return ResolvedEntry{}, false, nil
 	}
 	key, err := EntryKey(appKey, proxy)
 	if err != nil {
-		return EntrySummary{}, err
+		return ResolvedEntry{}, false, err
 	}
-	return EntrySummary{Key: key, Name: summary.Name, Type: summary.Type, Server: summary.Server, Port: summary.Port}, nil
+	return ResolvedEntry{Key: key, Name: summary.Name, Proxy: proxy, Link: link}, true, nil
+}
+
+// SummarizeEntries behaves like Summarize and attaches the stable entry key to
+// every parsed entry. Entries that cannot be parsed or lack the required fields
+// are returned in skipped exactly as Summarize does (the raw link line, or the
+// proxy name / "proxy #i").
+func SummarizeEntries(appKey []byte, links []string, proxies []map[string]any) (entries []EntrySummary, skipped []string) {
+	resolved, skipped, _ := resolveEntries(appKey, links, proxies)
+	entries = make([]EntrySummary, 0, len(resolved))
+	for _, r := range resolved {
+		summary, err := summarizeProxy(r.Proxy)
+		if err != nil {
+			continue
+		}
+		entries = append(entries, EntrySummary{Key: r.Key, Name: summary.Name, Type: summary.Type, Server: summary.Server, Port: summary.Port})
+	}
+	return entries, skipped
 }
 
 func withoutName(proxy map[string]any) map[string]any {

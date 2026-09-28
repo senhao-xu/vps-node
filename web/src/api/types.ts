@@ -73,6 +73,10 @@ export type NodeBrief = {
   server_status?: ServerStatus
   chain_node_id: number | null
   chain_node: ChainNodeRef | null
+  chain_custom_node_id: number | null
+  chain_custom_entry_key: string
+  /** Display-only join; empty when no external target or the source is unknown. */
+  chain_custom_node_name: string
 }
 
 export type NodeDetail = NodeBrief & {
@@ -328,6 +332,8 @@ export type CreateNodeInput = {
   tags?: string[]
   settings?: NodeSettingsInput
   chain_node_id?: number | null
+  chain_custom_node_id?: number | null
+  chain_custom_entry_key?: string
 }
 
 export type UpdateNodeInput = {
@@ -342,6 +348,9 @@ export type UpdateNodeInput = {
   status?: NodeStatus
   /** null unlinks the chain exit; omitting the field keeps the current link. */
   chain_node_id?: number | null
+  /** Tri-state external chain exit: omitted keeps, null clears, an id sets it. */
+  chain_custom_node_id?: number | null
+  chain_custom_entry_key?: string
 }
 
 export type CustomNodeSourceType = 'links' | 'subscription'
@@ -368,6 +377,8 @@ export type CustomNodeEntry = {
   type: string
   server: string
   port: number
+  /** False when the entry type has no sing-box outbound converter. */
+  chain_supported: boolean
 }
 
 export type CustomNodeEntries = {

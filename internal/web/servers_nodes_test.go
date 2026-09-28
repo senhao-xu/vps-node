@@ -1257,3 +1257,69 @@ func TestNodeIPv6Entry(t *testing.T) {
 		t.Fatalf("disabling must keep the stored address: %s", body)
 	}
 }
+
+func TestNodeDTOIncludesExternalChainFieldsOnEveryPath(t *testing.T) {
+	e := newTestEnv(t)
+	cookie := e.login(t)
+	ctx := context.Background()
+	serverID := e.seedServer(t, "external-paths")
+
+	sourceID := createLinksCustomNode(t, e, cookie, "paths-links", testExternalSSLink)
+	key := customNodeEntry(t, e, cookie, sourceID, "EXT-SS")["key"].(string)
+
+	resp, body := e.do(t, "POST", "/api/nodes", map[string]any{
+		"server_id": serverID, "address": "paths.example.com", "name": "paths-ext",
+		"protocol": "shadowsocks", "port": 8388,
+		"settings":               map[string]any{"cipher": "2022-blake3-aes-128-gcm"},
+		"chain_custom_node_id":   sourceID,
+		"chain_custom_entry_key": key,
+	}, cookie)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("create: %d %s", resp.StatusCode, body)
+	}
+	nodeID := int64(jsonMap(t, body)["id"].(float64))
+
+	assertExternal := func(label, body string, node map[string]any) {
+		t.Helper()
+		id, ok := node["chain_custom_node_id"].(float64)
+		if !ok || int64(id) != sourceID {
+			t.Fatalf("%s: chain_custom_node_id missing, got %s", label, body)
+		}
+		if node["chain_custom_entry_key"] != key {
+			t.Fatalf("%s: chain_custom_entry_key missing, got %s", label, body)
+		}
+		if node["chain_custom_node_name"] != "paths-links" {
+			t.Fatalf("%s: chain_custom_node_name missing, got %s", label, body)
+		}
+	}
+
+	assertExternal("create", body, jsonMap(t, body))
+
+	resp, body = e.do(t, "GET", "/api/nodes", nil, cookie)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("list: %d %s", resp.StatusCode, body)
+	}
+	assertExternal("list", body, jsonMap(t, body)["items"].([]any)[0].(map[string]any))
+
+	resp, body = e.do(t, "GET", fmt.Sprintf("/api/nodes/%d", nodeID), nil, cookie)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("detail: %d %s", resp.StatusCode, body)
+	}
+	assertExternal("detail", body, jsonMap(t, body))
+
+	resp, body = e.do(t, "GET", fmt.Sprintf("/api/servers/%d", serverID), nil, cookie)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("server detail: %d %s", resp.StatusCode, body)
+	}
+	assertExternal("server", body, jsonMap(t, body)["nodes"].([]any)[0].(map[string]any))
+
+	userID := e.seedUser(t, "ext-paths-user")
+	if err := e.repo.AuthorizeUserNode(ctx, userID, nodeID); err != nil {
+		t.Fatalf("authorize: %v", err)
+	}
+	resp, body = e.do(t, "GET", fmt.Sprintf("/api/users/%d/nodes", userID), nil, cookie)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("user nodes: %d %s", resp.StatusCode, body)
+	}
+	assertExternal("user nodes", body, jsonMap(t, body)["nodes"].([]any)[0].(map[string]any))
+}

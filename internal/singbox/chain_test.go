@@ -282,3 +282,38 @@ func TestRenderChainUnknownEntrySkipped(t *testing.T) {
 		t.Fatal("no route rule must be rendered for an unknown entry node")
 	}
 }
+
+func TestRenderChainUsesPrebuiltOutbound(t *testing.T) {
+	entry := singbox.Node{
+		ID: 1, Protocol: singbox.ProtocolShadowsocks, Port: 10001,
+		Settings: map[string]any{"cipher": singbox.SSMethod2022Aes128Gcm},
+	}
+	external := map[string]any{
+		"type": "trojan", "server": "ext.example.com", "server_port": 443, "password": "pw",
+	}
+	config, err := singbox.Render(testAppKey, []singbox.Node{entry}, singbox.ChainExit{
+		EntryNodeID: 1, EntryServerID: 3, Outbound: external,
+	})
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	outbounds := config["outbounds"].([]map[string]any)
+	if len(outbounds) != 2 {
+		t.Fatalf("expected direct + chain outbound, got %d", len(outbounds))
+	}
+	chain := outbounds[1]
+	if chain["type"] != "trojan" || chain["server"] != "ext.example.com" || chain["server_port"] != 443 ||
+		chain["password"] != "pw" || chain["tag"] != "chain-1" {
+		t.Fatalf("prebuilt outbound must be used verbatim with an injected tag, got %+v", chain)
+	}
+	if _, has := external["tag"]; has {
+		t.Fatalf("Render must not mutate the caller's outbound map: %+v", external)
+	}
+	rules := config["route"].(map[string]any)["rules"].([]map[string]any)
+	if len(rules) != 1 || rules[0]["outbound"] != "chain-1" {
+		t.Fatalf("unexpected route rules: %+v", rules)
+	}
+	if inboundTags := rules[0]["inbound"].([]string); len(inboundTags) != 1 || inboundTags[0] != "shadowsocks-1" {
+		t.Fatalf("unexpected route inbound: %+v", rules[0])
+	}
+}

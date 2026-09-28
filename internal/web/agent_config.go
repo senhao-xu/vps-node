@@ -189,44 +189,95 @@ func (h *Handler) buildAgentConfigPayload(ctx context.Context, server repo.Serve
 }
 
 // chainExits builds the entry-side chain outbounds for a server's active
-// nodes. A chained node whose exit is missing or disabled falls back to the
-// direct outbound (no route rule is rendered).
+// nodes. A chained node whose exit is missing, disabled, or (for an external
+// custom-node line) unresolvable falls back to the direct outbound: no route
+// rule is rendered. The external line is read from already-stored content, so
+// building the agent config never performs network IO.
 func (h *Handler) chainExits(ctx context.Context, server repo.Server, active []repo.Node) ([]singbox.ChainExit, error) {
-	targetIDs := []int64{}
+	managedTargets := []int64{}
+	customSourceIDs := []int64{}
+	seenCustom := map[int64]bool{}
 	for _, n := range active {
+		// A node must carry at most one target (the API enforces it); if one
+		// somehow carries both, the managed exit wins.
 		if n.ChainNodeID != nil {
-			targetIDs = append(targetIDs, *n.ChainNodeID)
-		}
-	}
-	if len(targetIDs) == 0 {
-		return nil, nil
-	}
-	exitNodes, err := h.repo.ListNodesByIDs(ctx, targetIDs)
-	if err != nil {
-		return nil, err
-	}
-	exits := make(map[int64]repo.Node, len(exitNodes))
-	for _, e := range exitNodes {
-		exits[e.ID] = e
-	}
-	chains := make([]singbox.ChainExit, 0, len(targetIDs))
-	for _, n := range active {
-		if n.ChainNodeID == nil {
+			managedTargets = append(managedTargets, *n.ChainNodeID)
 			continue
 		}
-		exit, ok := exits[*n.ChainNodeID]
-		if !ok || exit.Status != repo.NodeStatusActive {
-			continue
+		if n.ChainCustomNodeID != nil && !seenCustom[*n.ChainCustomNodeID] {
+			seenCustom[*n.ChainCustomNodeID] = true
+			customSourceIDs = append(customSourceIDs, *n.ChainCustomNodeID)
 		}
-		sbExit, err := h.singboxNode(exit, nil)
+	}
+
+	exits := map[int64]repo.Node{}
+	if len(managedTargets) > 0 {
+		exitNodes, err := h.repo.ListNodesByIDs(ctx, managedTargets)
 		if err != nil {
 			return nil, err
+		}
+		for _, e := range exitNodes {
+			exits[e.ID] = e
+		}
+	}
+
+	// Resolve each referenced source once: source id -> entry key -> proxy.
+	customProxies := map[int64]map[string]map[string]any{}
+	for _, sourceID := range customSourceIDs {
+		cn, err := h.repo.GetCustomNode(ctx, sourceID)
+		if err != nil || cn.Status != repo.CustomNodeStatusActive {
+			continue
+		}
+		resolved, err := h.resolveCustomNodeEntries(cn)
+		if err != nil {
+			h.logger.Error("resolve custom chain source failed", "custom_node_id", sourceID)
+			continue
+		}
+		byKey := make(map[string]map[string]any, len(resolved))
+		for _, entry := range resolved {
+			byKey[entry.Key] = entry.Proxy
+		}
+		customProxies[sourceID] = byKey
+	}
+
+	chains := make([]singbox.ChainExit, 0, len(active))
+	for _, n := range active {
+		if n.ChainNodeID != nil {
+			exit, ok := exits[*n.ChainNodeID]
+			if !ok || exit.Status != repo.NodeStatusActive {
+				continue
+			}
+			sbExit, err := h.singboxNode(exit, nil)
+			if err != nil {
+				return nil, err
+			}
+			chains = append(chains, singbox.ChainExit{
+				EntryNodeID:   n.ID,
+				EntryServerID: server.ID,
+				Exit:          sbExit,
+				DialAddress:   exit.Address,
+			})
+			continue
+		}
+		if n.ChainCustomNodeID == nil {
+			continue
+		}
+		byKey, ok := customProxies[*n.ChainCustomNodeID]
+		if !ok {
+			continue
+		}
+		proxy, ok := byKey[n.ChainCustomEntryKey]
+		if !ok {
+			continue
+		}
+		outbound, err := singbox.ProxyToOutbound(proxy)
+		if err != nil {
+			continue
 		}
 		chains = append(chains, singbox.ChainExit{
 			EntryNodeID:   n.ID,
 			EntryServerID: server.ID,
-			Exit:          sbExit,
-			DialAddress:   exit.Address,
+			Outbound:      outbound,
 		})
 	}
 	return chains, nil
