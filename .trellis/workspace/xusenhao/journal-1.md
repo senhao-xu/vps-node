@@ -291,3 +291,24 @@ Managed entry nodes can now use a single line from a custom-node/subscription so
 ### Status
 
 [OK] **Completed**
+
+
+## Session 9: Node protocol editing and admin UI
+
+**Date**: 2026-09-28
+**Task**: Node protocol editing and admin UI
+**Branch**: `main`
+
+### Summary
+
+Enabled protocol changes when editing nodes, kept protocol settings and secrets consistent, refreshed the admin UI, updated API docs, and verified Go and frontend checks.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2d7a2cd` | (see git log) |
+
+### Status
+
+[OK] **Completed**

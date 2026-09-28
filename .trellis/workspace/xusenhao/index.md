@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 8
+- **Total Sessions**: 9
 - **Last Active**: 2026-09-28
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~293 | Active |
+| `journal-1.md` | ~314 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 9 | 2026-09-28 | Node protocol editing and admin UI | `2d7a2cd` | `main` |
 | 8 | 2026-09-28 | 新增 HTTP 代理协议节点 | `3f4c8ac`, `a12e29f` | `main` |
 | 7 | 2026-09-28 | Custom-node entry as chain exit | `d02af93` | `main` |
 | 6 | 2026-09-28 | Custom node per-entry auth + SOCKS5 managed protocol | `95ed101`, `6e97ae1` | `main` |
