@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "新增 /api/custom-nodes/{id}/nodes 与 /refresh 端点的错误包络、校验矩阵、鉴权边界与 secrets 处理须一致。"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "确定 web handler/DTO 归属、internal/subscription 纯函数放置位置。"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "新增 api 方法、types 与组件的目录归属与单点类型约定。"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "查看节点弹窗复用 ModalDialog 等既有组件契约与 props/事件约定。"}

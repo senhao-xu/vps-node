@@ -6,6 +6,7 @@ import { errorMessage } from '@/api/http'
 import type { CustomNode, NodeStatus } from '@/api/types'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import CustomNodeFormDialog from '@/components/CustomNodeFormDialog.vue'
+import CustomNodeNodesDialog from '@/components/CustomNodeNodesDialog.vue'
 import DataTable, { type Column } from '@/components/DataTable.vue'
 import ErrorBanner from '@/components/ErrorBanner.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
@@ -29,6 +30,9 @@ const editTarget = ref<CustomNode | null>(null)
 const deleteTarget = ref<CustomNode | null>(null)
 const deleting = ref(false)
 const statusUpdatingId = ref<number | null>(null)
+
+const viewTarget = ref<CustomNode | null>(null)
+const viewRefreshOnOpen = ref(false)
 
 const columns: Column[] = [
   { key: 'name', label: '名称', width: '200px' },
@@ -59,15 +63,27 @@ const filteredItems = computed(() => {
   })
 })
 
+function openNodes(row: CustomNode, refresh: boolean) {
+  viewRefreshOnOpen.value = refresh
+  viewTarget.value = row
+}
+
 function rowActions(row: CustomNode): OverflowMenuItem[] {
-  return [
+  const actions: OverflowMenuItem[] = [
+    { label: '查看节点', onSelect: () => openNodes(row, false) },
+  ]
+  if (row.source_type === 'subscription') {
+    actions.push({ label: '更新订阅', onSelect: () => openNodes(row, true) })
+  }
+  actions.push(
     { label: '编辑', onSelect: () => (editTarget.value = row) },
     {
       label: row.status === 'active' ? '禁用' : '启用',
       onSelect: () => void toggleStatus(row),
     },
     { label: '删除', danger: true, onSelect: () => (deleteTarget.value = row) },
-  ]
+  )
+  return actions
 }
 
 async function load() {
@@ -245,6 +261,14 @@ onMounted(() => {
       :node="editTarget"
       @close="editTarget = null"
       @saved="load"
+    />
+
+    <CustomNodeNodesDialog
+      :open="viewTarget !== null"
+      :node="viewTarget"
+      :refresh-on-open="viewRefreshOnOpen"
+      @close="viewTarget = null"
+      @refreshed="load"
     />
 
     <ConfirmDialog

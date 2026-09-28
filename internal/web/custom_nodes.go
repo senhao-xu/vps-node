@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"vps-node/internal/httpx"
 	"vps-node/internal/repo"
@@ -53,6 +54,131 @@ func toCustomNodeDTOs(nodes []repo.CustomNode) []customNodeDTO {
 		out = append(out, toCustomNodeDTO(n))
 	}
 	return out
+}
+
+type customNodeEntryDTO struct {
+	Name   string `json:"name"`
+	Type   string `json:"type"`
+	Server string `json:"server"`
+	Port   int    `json:"port"`
+}
+
+// customNodeEntriesResponse is the parsed digest of a custom node's stored
+// content. It never carries secrets or the raw upstream payload.
+type customNodeEntriesResponse struct {
+	SourceType string               `json:"source_type"`
+	HasCache   bool                 `json:"has_cache"`
+	FetchedAt  *string              `json:"fetched_at"`
+	Entries    []customNodeEntryDTO `json:"entries"`
+	Skipped    []string             `json:"skipped,omitempty"`
+}
+
+func toCustomNodeEntryDTOs(summaries []subscription.NodeSummary) []customNodeEntryDTO {
+	out := make([]customNodeEntryDTO, 0, len(summaries))
+	for _, s := range summaries {
+		out = append(out, customNodeEntryDTO{Name: s.Name, Type: s.Type, Server: s.Server, Port: s.Port})
+	}
+	return out
+}
+
+// customNodeEntries parses a custom node's own stored content into display
+// entries. It performs no network IO: subscription sources are read from the
+// fetch cache only, and a cache miss yields an empty list.
+func (h *Handler) customNodeEntries(cn repo.CustomNode) (customNodeEntriesResponse, error) {
+	hasCache := cn.SourceType == repo.CustomNodeSourceSubscription && cn.CachedContent != ""
+	resp := customNodeEntriesResponse{
+		SourceType: cn.SourceType,
+		HasCache:   hasCache,
+		Entries:    []customNodeEntryDTO{},
+	}
+	if hasCache && !cn.FetchedAt.IsZero() {
+		resp.FetchedAt = rfc3339Ptr(&cn.FetchedAt)
+	}
+	var links []string
+	var proxies []map[string]any
+	switch cn.SourceType {
+	case repo.CustomNodeSourceLinks:
+		plain, err := secrets.Decrypt(h.appKey, cn.ContentEnc)
+		if err != nil {
+			return customNodeEntriesResponse{}, err
+		}
+		links = subscription.SplitLinkLines(string(plain))
+	case repo.CustomNodeSourceSubscription:
+		if cn.CachedContent == "" {
+			return resp, nil
+		}
+		links, proxies = subscription.NormalizeFetchedContent(cn.CachedContent)
+	default:
+		return resp, nil
+	}
+	summaries, skipped := subscription.Summarize(links, proxies)
+	resp.Entries = toCustomNodeEntryDTOs(summaries)
+	resp.Skipped = skipped
+	return resp, nil
+}
+
+func (h *Handler) handleCustomNodeNodesGet(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	cn, err := h.repo.GetCustomNode(r.Context(), id)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	resp, err := h.customNodeEntries(cn)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, resp)
+}
+
+// handleCustomNodeRefresh force-fetches a subscription source, ignoring the
+// render-path cache TTL. On upstream failure the previous cache and
+// fetched_at are left untouched so later renders keep serving stale data.
+func (h *Handler) handleCustomNodeRefresh(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	cn, err := h.repo.GetCustomNode(r.Context(), id)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	if cn.SourceType != repo.CustomNodeSourceSubscription {
+		writeErr(w, errValidation("refresh is only supported for subscription sources"))
+		return
+	}
+	upstream, err := secrets.Decrypt(h.appKey, cn.ContentEnc)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	content, err := subscription.FetchSubscription(r.Context(), strings.TrimSpace(string(upstream)))
+	if err != nil {
+		writeErr(w, errInternal("failed to fetch upstream subscription: "+err.Error()))
+		return
+	}
+	if err := h.repo.UpdateCustomNodeCache(r.Context(), cn.ID, content, time.Now().Unix()); err != nil {
+		writeErr(w, err)
+		return
+	}
+	updated, err := h.repo.GetCustomNode(r.Context(), cn.ID)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	resp, err := h.customNodeEntries(updated)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, resp)
 }
 
 func (h *Handler) handleCustomNodeList(w http.ResponseWriter, r *http.Request) {

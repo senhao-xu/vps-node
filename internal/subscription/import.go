@@ -407,6 +407,10 @@ func looseInt(v any) (int, error) {
 	switch n := v.(type) {
 	case nil:
 		return 0, nil
+	case int:
+		return n, nil
+	case int64:
+		return int(n), nil
 	case float64:
 		return int(n), nil
 	case string:

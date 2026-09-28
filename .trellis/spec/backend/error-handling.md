@@ -107,3 +107,54 @@ id, _ := repo.CreateServerWithAgentKey(ctx, name, active, hash, enc) // one tx
 - Auth: login success/failure/lockout, cookie flags, logout invalidation, reset agent key 401, cross-boundary 401.
 - Agent key lifecycle: server creation auto-issues a usable key (201 `agent_key` authenticates `/api/agent/heartbeat`; `GET` returns the same value; server revision not bumped) → generate → GET reveals plaintext → reset invalidates the old key (401) → GET with no `key_enc` (migrated agent) returns `409 conflict`. Repo-direct `CreateServer` (test helper `seedServer`) intentionally issues no key, preserving the pre-generation 409 path.
 - Envelope: every 4xx path asserts code + shape; agent payload tests assert unknown JSON fields stay ignored (`decodeJSON`, per the binding `api-contract.md`) and can never influence ownership or telemetry totals.
+
+---
+
+## Scenario: Custom node entries view & subscription refresh
+
+### 1. Scope / Trigger
+- Trigger: any change to `GET /api/custom-nodes/{id}/nodes` or `POST /api/custom-nodes/{id}/refresh`, or to `internal/subscription.Summarize` / `looseInt`.
+
+### 2. Signatures
+- `GET /api/custom-nodes/{id}/nodes` — read-only digest of a custom node's stored content.
+- `POST /api/custom-nodes/{id}/refresh` — force-fetch a `subscription` source.
+- `subscription.Summarize(links []string, proxies []map[string]any) ([]NodeSummary, []string)` (`internal/subscription/summary.go`).
+
+### 3. Contracts
+- Response `{source_type, has_cache, fetched_at, entries:[{name,type,server,port}], skipped?}`.
+- View performs **no network IO**: `subscription` reads `custom_nodes.cached_content` only; a cache miss returns `entries:[]`, `has_cache:false`. `links` parses `content_enc`, so `has_cache:false`, `fetched_at:null` always.
+- Refresh ignores the render-path 5-minute `CacheTTL`, calls `subscription.FetchSubscription`, writes the cache + `fetched_at`, then returns the same shape with `has_cache:true`.
+- `type` is the Clash proxy type (`ss`/`vless`/`hysteria2`/`anytls`/`trojan`/`vmess`); `skipped` carries the raw link line or `name`/`proxy #i` for unparseable/incomplete entries.
+
+### 4. Validation & Error Matrix
+| Condition | Result |
+|---|---|
+| Unknown id (view or refresh) | `404 not_found` |
+| Refresh a `links` source | `422 validation` |
+| Upstream fetch failure (non-2xx/timeout/too large) | `500 internal` + readable message; cache + `fetched_at` untouched |
+| No admin session | `401 unauthorized` |
+
+### 5. Good/Base/Bad Cases
+- Good: refresh a subscription, `fetched_at` advances, entries reflect the new upstream content.
+- Base: view a subscription that was never fetched → empty entries, no upstream request.
+- Bad: refresh clears the cache before the fetch succeeds, so a later render loses the stale fallback.
+
+### 6. Tests Required
+- View links parses from `content_enc`; view subscription-with-cache makes zero upstream hits; view without cache makes zero upstream hits.
+- Refresh success updates `fetched_at` + returns entries; refresh links → `422 validation`; upstream failure keeps the old cache and `fetched_at`; both routes `401` unauthenticated and `404` unknown id.
+
+### 7. Wrong vs Correct
+#### Wrong
+```go
+content, err := subscription.FetchSubscription(ctx, url)
+if err != nil { return err }                 // cache already cleared → stale fallback lost
+```
+#### Correct
+```go
+content, err := subscription.FetchSubscription(ctx, url)
+if err != nil { writeErr(w, errInternal("failed to fetch upstream subscription: "+err.Error())); return }
+_ = h.repo.UpdateCustomNodeCache(ctx, cn.ID, content, time.Now().Unix())
+```
+
+### Common Mistake: Clash port decoded as `int`
+`yaml.v3` decodes an integer `port:` as `int`, not `float64`; `looseInt` must therefore handle `int`/`int64` or valid Clash proxies get classified as `skipped`. Cover port as `int`/`int64`/`float64`/`string` in `summary_test.go`.

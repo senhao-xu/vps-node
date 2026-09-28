@@ -48,6 +48,10 @@ func errTooLarge(msg string) *apiError {
 	return &apiError{Status: http.StatusRequestEntityTooLarge, Code: "payload_too_large", Message: msg}
 }
 
+func errInternal(msg string) *apiError {
+	return &apiError{Status: http.StatusInternalServerError, Code: "internal", Message: msg}
+}
+
 func writeErr(w http.ResponseWriter, err error) {
 	var ae *apiError
 	if errors.As(err, &ae) {

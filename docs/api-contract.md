@@ -394,6 +394,30 @@ Partial update of `name`, `content` (omit to keep; `source_type` is immutable) a
 
 Response `204`. Also removes every user authorization referencing it.
 
+### GET /api/custom-nodes/:id/nodes
+
+Parses the custom node's own stored content into a display digest. It never performs network
+IO: `subscription` sources are read from the fetch cache only, so a cache miss returns an empty
+list with `has_cache=false` rather than fetching upstream. Unknown id → `404 not_found`.
+
+```json
+{ "source_type": "subscription", "has_cache": true, "fetched_at": "2026-09-28T10:00:00Z", "entries": [ { "name": "HK-1", "type": "vless", "server": "1.2.3.4", "port": 443 } ], "skipped": ["foo://unsupported"] }
+```
+
+`type` is the Clash proxy type (`ss`/`vless`/`hysteria2`/`anytls`/`trojan`/`vmess`). Entries
+that cannot be parsed or lack `name`/`type`/`server`/`port` are listed in `skipped` (the raw
+link line, or the proxy name / `proxy #i`) without affecting the others. For `links` sources
+`has_cache` is always `false` and `fetched_at` is `null` (the links are parsed from
+`content_enc`, no cache is involved).
+
+### POST /api/custom-nodes/:id/refresh
+
+Only valid for `subscription` sources: ignores the render-path 5-minute cache TTL, force-fetches
+the upstream URL, writes the cache + `fetched_at` and returns the same shape as
+`GET /api/custom-nodes/:id/nodes` with `has_cache=true`. `links` sources → `422 validation`.
+Unknown id → `404 not_found`. An upstream failure returns `500 internal` with a readable message
+and leaves the previous cache and `fetched_at` untouched.
+
 ### GET /api/users/:id/custom-nodes
 
 Response `200`:

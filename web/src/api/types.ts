@@ -359,6 +359,21 @@ export type CustomNode = {
 
 export type CustomNodeResult = CustomNode & { warnings?: string[] }
 
+export type CustomNodeEntry = {
+  name: string
+  type: string
+  server: string
+  port: number
+}
+
+export type CustomNodeEntries = {
+  source_type: CustomNodeSourceType
+  has_cache: boolean
+  fetched_at: string | null
+  entries: CustomNodeEntry[]
+  skipped?: string[]
+}
+
 export type CreateCustomNodeInput = {
   name: string
   source_type: CustomNodeSourceType

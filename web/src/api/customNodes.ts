@@ -2,6 +2,7 @@ import { request } from './http'
 import type {
   CreateCustomNodeInput,
   CustomNode,
+  CustomNodeEntries,
   CustomNodeResult,
   UpdateCustomNodeInput,
   UserCustomNodes,
@@ -27,6 +28,16 @@ export function updateCustomNode(
 
 export async function deleteCustomNode(customNodeId: number): Promise<void> {
   await request<unknown>(`/api/custom-nodes/${customNodeId}`, { method: 'DELETE' })
+}
+
+export function getCustomNodeEntries(customNodeId: number): Promise<CustomNodeEntries> {
+  return request<CustomNodeEntries>(`/api/custom-nodes/${customNodeId}/nodes`)
+}
+
+export function refreshCustomNode(customNodeId: number): Promise<CustomNodeEntries> {
+  return request<CustomNodeEntries>(`/api/custom-nodes/${customNodeId}/refresh`, {
+    method: 'POST',
+  })
 }
 
 export function getUserCustomNodes(userId: number): Promise<UserCustomNodes> {
