@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/node-protocol-settings.md", "reason": "新增托管协议必须注册 settings schema 并放开 nodes.protocol CHECK 的既有约定"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "nodes 全表重建迁移、FK-off 事务与迁移幂等测试约定"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "节点创建/更新的 422 validation 矩阵与协议枚举"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "web/src/api/types.ts 是契约唯一镜像，Protocol 联合需同步"}

@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端规范、禁止模式与 go vet/test/integration 校验要求"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "NodeFormDialog 等组件的表单/选择器/状态规范"}
+{"file": ".trellis/spec/backend/node-protocol-settings.md", "reason": "核对新协议 settings/渲染/链式行为是否与既有协议一致"}
+{"file": ".trellis/spec/guides/index.md", "reason": "跨层与复用检查清单、AI 评审假阳性核对"}
