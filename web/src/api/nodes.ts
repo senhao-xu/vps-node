@@ -3,6 +3,7 @@ import type {
   CreateNodeInput,
   NodeBrief,
   NodeDetail,
+  NodeShare,
   NodeStatus,
   Paged,
   Protocol,
@@ -54,4 +55,8 @@ export async function deleteNode(nodeId: number): Promise<void> {
 
 export function copyNode(nodeId: number): Promise<NodeBrief> {
   return request<NodeBrief>(`/api/nodes/${nodeId}/copy`, { method: 'POST' })
+}
+
+export function getNodeShare(nodeId: number, userId: number): Promise<NodeShare> {
+  return request<NodeShare>(`/api/nodes/${nodeId}/share`, { query: { user_id: userId } })
 }

@@ -360,6 +360,10 @@ Partial update of `address`, `ipv6_enabled`, `ipv6_address`, `name`, `port`, `ra
 
 Duplicates a node verbatim onto the same server: name, address, `ipv6_enabled`, `ipv6_address`, port, protocol, `protocol_settings` and encrypted secrets are copied as-is. The copy starts `disabled` so it may temporarily reuse the source port; enabling it later requires freeing the port (enforced by the partial unique index on `(server_id, port)` for active nodes). Response `201`: the new node DTO. Bumps the server revision.
 
+### GET /api/nodes/:id/share
+
+Read-only preview of one node's share link(s) for a chosen user. Query: `user_id` (required, an existing user id; missing or unknown → `422 validation`). Response `200`: `{ "node_id": 1, "user_id": 2, "authorized": true, "links": ["ss://...", "vless://..."] }`. `links` are built with the user's credentials exactly as the general subscription renderer does (per-user SS password derivation, user UUID for vless/hysteria2/anytls, `u-<id>` + UUID for socks), and include the IPv6 variant when the node advertises one. `authorized` reports whether the user is currently authorized on the node, so the UI can warn about a link that would not connect (the preview is still returned). A node missing required TLS settings (hysteria2/anytls) or using an unsupported protocol returns `422 validation`. This endpoint never echoes stored secret material beyond the derived credentials.
+
 ### DELETE /api/nodes/:id
 
 Response `200`: `{}`. Removes `user_nodes` for this node; bumps server revision so agents drop the service. A node that is referenced as another node's chain exit cannot be deleted: `DELETE` returns `409 conflict` with a message naming the referencing nodes, which must be unlinked first.

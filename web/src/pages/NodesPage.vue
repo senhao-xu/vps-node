@@ -10,6 +10,7 @@ import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import DataTable, { type Column } from '@/components/DataTable.vue'
 import ErrorBanner from '@/components/ErrorBanner.vue'
 import NodeFormDialog from '@/components/NodeFormDialog.vue'
+import NodeShareDialog from '@/components/NodeShareDialog.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import TablePaginator from '@/components/TablePaginator.vue'
 import FilterChip from '@/components/ui/FilterChip.vue'
@@ -46,6 +47,7 @@ const sortDir = ref<'asc' | 'desc'>('asc')
 const showCreate = ref(false)
 const editTarget = ref<NodeBrief | null>(null)
 const deleteTarget = ref<NodeBrief | null>(null)
+const shareTarget = ref<NodeBrief | null>(null)
 const deleting = ref(false)
 
 const columns: Column[] = [
@@ -134,6 +136,7 @@ function onSort(key: string) {
 function rowActions(row: NodeBrief): OverflowMenuItem[] {
   return [
     { label: '编辑', onSelect: () => (editTarget.value = row) },
+    { label: '分享 / 二维码', onSelect: () => (shareTarget.value = row) },
     { label: '复制', onSelect: () => void copyRow(row) },
     {
       label: row.status === 'active' ? '禁用' : '启用',
@@ -547,6 +550,12 @@ onMounted(() => {
       :node="editTarget"
       @close="editTarget = null"
       @saved="load"
+    />
+
+    <NodeShareDialog
+      :open="shareTarget !== null"
+      :node="shareTarget"
+      @close="shareTarget = null"
     />
 
     <ConfirmDialog

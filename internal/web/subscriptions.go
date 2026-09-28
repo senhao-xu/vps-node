@@ -157,31 +157,15 @@ func (h *Handler) handlePublicSubscription(w http.ResponseWriter, r *http.Reques
 	}
 	nodes := make([]subscription.Node, 0, len(repoNodes))
 	for _, n := range repoNodes {
-		settings, secret := map[string]any{}, map[string]any{}
-		if err := json.Unmarshal([]byte(n.ProtocolSettings), &settings); err != nil {
+		subNode, ok, err := h.renderableSubscriptionNode(n.Node)
+		if err != nil {
 			writeErr(w, err)
 			return
 		}
-		if len(n.SecretEnc) > 0 {
-			plain, err := secrets.Decrypt(h.appKey, n.SecretEnc)
-			if err != nil {
-				writeErr(w, err)
-				return
-			}
-			if err := json.Unmarshal(plain, &secret); err != nil {
-				writeErr(w, err)
-				return
-			}
-		}
-		tlsSettings, _ := settings["tls"].(map[string]any)
-		if (n.Protocol == repo.ProtocolHysteria2 || n.Protocol == repo.ProtocolAnyTLS) && (fmt.Sprint(tlsSettings["server_name"]) == "" || secret["certificate"] == nil || secret["private_key"] == nil) {
+		if !ok {
 			continue
 		}
-		ipv6Address := ""
-		if n.IPv6Enabled {
-			ipv6Address = n.IPv6Address
-		}
-		nodes = append(nodes, subscription.Node{ID: n.ID, Name: n.Name, Protocol: n.Protocol, Address: n.Address, IPv6Address: ipv6Address, Port: n.Port, Settings: settings, Secret: secret})
+		nodes = append(nodes, subNode)
 	}
 	flag := r.URL.Query().Get("flag")
 	if flag == "" {
@@ -235,6 +219,35 @@ func (h *Handler) handlePublicSubscription(w http.ResponseWriter, r *http.Reques
 	}
 	w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
 	_, _ = w.Write(body)
+}
+
+// renderableSubscriptionNode converts a stored node into the subscription
+// renderer's input, decrypting its secret material. ok is false when a TLS
+// protocol (hysteria2 / anytls) is missing its server name or a complete
+// certificate/private-key pair, matching the renderer's skip rule.
+func (h *Handler) renderableSubscriptionNode(n repo.Node) (subscription.Node, bool, error) {
+	settings, secret := map[string]any{}, map[string]any{}
+	if err := json.Unmarshal([]byte(n.ProtocolSettings), &settings); err != nil {
+		return subscription.Node{}, false, err
+	}
+	if len(n.SecretEnc) > 0 {
+		plain, err := secrets.Decrypt(h.appKey, n.SecretEnc)
+		if err != nil {
+			return subscription.Node{}, false, err
+		}
+		if err := json.Unmarshal(plain, &secret); err != nil {
+			return subscription.Node{}, false, err
+		}
+	}
+	tlsSettings, _ := settings["tls"].(map[string]any)
+	if (n.Protocol == repo.ProtocolHysteria2 || n.Protocol == repo.ProtocolAnyTLS) && (fmt.Sprint(tlsSettings["server_name"]) == "" || secret["certificate"] == nil || secret["private_key"] == nil) {
+		return subscription.Node{}, false, nil
+	}
+	ipv6Address := ""
+	if n.IPv6Enabled {
+		ipv6Address = n.IPv6Address
+	}
+	return subscription.Node{ID: n.ID, Name: n.Name, Protocol: n.Protocol, Address: n.Address, IPv6Address: ipv6Address, Port: n.Port, Settings: settings, Secret: secret}, true, nil
 }
 
 func subscriptionUserinfo(u repo.User) string {

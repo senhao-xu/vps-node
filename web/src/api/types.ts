@@ -86,6 +86,15 @@ export type NodeDetail = NodeBrief & {
   settings?: NodeSettings
 }
 
+export type NodeShare = {
+  node_id: number
+  user_id: number
+  /** Whether the chosen user is currently authorized on the node. */
+  authorized: boolean
+  /** Share link(s) built with the user's credentials (primary, plus IPv6 when enabled). */
+  links: string[]
+}
+
 export type UserNodes = {
   node_ids: number[]
   nodes: NodeBrief[]

@@ -207,6 +207,22 @@ func RenderGeneral(appKey []byte, user User, nodes []Node) (string, error) {
 	return base64.StdEncoding.EncodeToString([]byte(strings.Join(links, "\n"))), nil
 }
 
+// RenderNodeLinks renders one node's share link(s) for a user, expanding the
+// IPv6 variant when the node advertises one. Unlike the subscription renderers
+// it surfaces the render error instead of skipping, so the caller can report a
+// node that cannot be shared (unknown protocol or missing required settings).
+func RenderNodeLinks(appKey []byte, user User, node Node) ([]string, error) {
+	links := make([]string, 0, 2)
+	for _, n := range expandIPv6(node) {
+		link, err := renderURI(appKey, user, n)
+		if err != nil {
+			return nil, err
+		}
+		links = append(links, link)
+	}
+	return links, nil
+}
+
 // CustomSource is one administrator-maintained external node source merged
 // into subscription output after the managed nodes. Links are share URIs
 // (one per entry); Proxies are Clash proxy mappings lifted from an upstream

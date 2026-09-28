@@ -127,6 +127,17 @@ type nodeDetailDTO struct {
 	Settings    json.RawMessage `json:"settings"`
 }
 
+// nodeShareDTO is the per-node share preview for one user: the share link(s)
+// (primary plus the IPv6 variant when enabled) built with that user's
+// credentials. Authorized reports whether the user is currently authorized on
+// the node, so the UI can warn about a link that would not connect.
+type nodeShareDTO struct {
+	NodeID     int64    `json:"node_id"`
+	UserID     int64    `json:"user_id"`
+	Authorized bool     `json:"authorized"`
+	Links      []string `json:"links"`
+}
+
 func toNodeDTO(n repo.Node) nodeDTO {
 	dto := nodeDTO{
 		ID:                  n.ID,

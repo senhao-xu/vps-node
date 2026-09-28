@@ -12,11 +12,13 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"vps-node/internal/httpx"
 	"vps-node/internal/repo"
+	"vps-node/internal/subscription"
 )
 
 var validProtocols = map[string]bool{
@@ -619,4 +621,61 @@ func (h *Handler) handleNodeCopy(w http.ResponseWriter, r *http.Request) {
 	}
 	n.ServerName = server.Name
 	httpx.WriteJSON(w, http.StatusCreated, toNodeDTO(n))
+}
+
+// handleNodeShare renders one node's share link(s) for a chosen user, using
+// that user's credentials. It is a read-only admin preview: the user need not
+// be authorized on the node (Authorized reports that so the UI can warn).
+func (h *Handler) handleNodeShare(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	node, err := h.repo.GetNode(r.Context(), id)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	userID, err := strconv.ParseInt(r.URL.Query().Get("user_id"), 10, 64)
+	if err != nil || userID < 1 {
+		writeErr(w, errValidation("user_id is required"))
+		return
+	}
+	u, err := h.repo.GetUser(r.Context(), userID)
+	if err != nil {
+		if err == repo.ErrNotFound {
+			writeErr(w, errValidation("unknown user_id"))
+			return
+		}
+		writeErr(w, err)
+		return
+	}
+	subNode, ok, err := h.renderableSubscriptionNode(node)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	if !ok {
+		writeErr(w, errValidation("node is missing required TLS settings and cannot be shared"))
+		return
+	}
+	links, err := subscription.RenderNodeLinks(h.appKey, subscription.User{ID: u.ID, UUID: u.UUID}, subNode)
+	if err != nil {
+		writeErr(w, errValidation(err.Error()))
+		return
+	}
+	authorized := false
+	nodeIDs, err := h.repo.ListNodeIDsByUser(r.Context(), userID)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	for _, nodeID := range nodeIDs {
+		if nodeID == id {
+			authorized = true
+			break
+		}
+	}
+	httpx.WriteJSON(w, http.StatusOK, nodeShareDTO{NodeID: id, UserID: userID, Authorized: authorized, Links: links})
 }
