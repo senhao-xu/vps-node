@@ -75,7 +75,7 @@ function onKeydown(event: KeyboardEvent) {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 32px;
+  min-height: 36px;
   padding: 4px 12px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);

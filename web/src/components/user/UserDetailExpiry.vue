@@ -132,13 +132,13 @@ async function save() {
 .expiry-view {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--spacing-md);
   margin-top: var(--spacing-md);
 }
 
 .expiry-headline {
-  font-size: 26px;
-  font-weight: 750;
+  font-size: 24px;
+  font-weight: 700;
   line-height: 1.2;
 }
 
@@ -153,7 +153,8 @@ async function save() {
 .expiry-rows {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--spacing-sm);
+  gap: 0;
+  border-top: 1px solid var(--color-border);
 }
 
 .expiry-row {
@@ -161,10 +162,12 @@ async function save() {
   min-width: 0;
   flex-direction: column;
   gap: 3px;
-  padding: 10px 12px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-muted);
+  padding: var(--spacing-sm) var(--spacing-md) 0 0;
+}
+
+.expiry-row + .expiry-row {
+  padding-left: var(--spacing-md);
+  border-left: 1px solid var(--color-border);
 }
 
 .expiry-label {
@@ -189,6 +192,12 @@ async function save() {
 @media (max-width: 560px) {
   .expiry-rows {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .expiry-row + .expiry-row {
+    padding-left: 0;
+    border-top: 1px solid var(--color-border);
+    border-left: 0;
   }
 }
 </style>

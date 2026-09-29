@@ -275,7 +275,7 @@ onMounted(() => {
         @search="applyFilters"
       />
       <label class="range-field">
-        <span class="range-label">起</span>
+        <span class="range-label">开始时间</span>
         <input
           v-model="fromInput"
           type="datetime-local"
@@ -283,7 +283,7 @@ onMounted(() => {
         >
       </label>
       <label class="range-field">
-        <span class="range-label">止</span>
+        <span class="range-label">结束时间</span>
         <input
           v-model="toInput"
           type="datetime-local"
@@ -495,9 +495,14 @@ onMounted(() => {
     width: 100%;
   }
 
+  .range-field {
+    align-items: stretch;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+  }
+
   .range-field input {
-    flex: 1;
-    min-width: 0;
+    width: 100%;
   }
 
   .visits-panel-head {

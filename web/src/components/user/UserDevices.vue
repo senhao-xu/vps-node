@@ -86,6 +86,7 @@ onMounted(() => {
     </div>
     <EmptyState
       v-else-if="!error && items.length === 0"
+      class="devices-empty"
       :icon="MonitorSmartphone"
       title="暂无在线设备"
       hint="用户连接节点后，设备会显示在这里。"
@@ -129,6 +130,16 @@ onMounted(() => {
   font-size: var(--font-size-xs);
   font-weight: 600;
   vertical-align: middle;
+}
+
+.devices-empty {
+  display: flex;
+  min-height: 150px;
+  justify-content: center;
+  margin-top: var(--spacing-md);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
 }
 
 .devices-loading {

@@ -210,9 +210,23 @@ function barWidth(bar: MetricStripBar): string {
 }
 
 @media (max-width: 560px) {
+  .metric-strip.count-1 { max-width: none; }
   .metric-strip.count-2,
   .metric-strip.count-3,
   .metric-strip.count-4,
-  .metric-strip.count-5 { grid-template-columns: minmax(0, 1fr); max-width: 300px; }
+  .metric-strip.count-5 { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: none; }
+
+  .metric-strip.count-3 .metric-item:last-child,
+  .metric-strip.count-5 .metric-item:last-child { grid-column: 1 / -1; }
+}
+
+@media (max-width: 360px) {
+  .metric-strip.count-2,
+  .metric-strip.count-3,
+  .metric-strip.count-4,
+  .metric-strip.count-5 { grid-template-columns: minmax(0, 1fr); }
+
+  .metric-strip.count-3 .metric-item:last-child,
+  .metric-strip.count-5 .metric-item:last-child { grid-column: auto; }
 }
 </style>

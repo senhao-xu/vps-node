@@ -174,11 +174,22 @@ function changePageSize(size: number) {
   }
 
   .right {
+    flex-wrap: wrap;
     justify-content: space-between;
+    gap: var(--spacing-sm);
   }
 
-  .size {
-    display: none;
+  .size select {
+    min-height: 36px;
+  }
+
+  .pager {
+    margin-left: auto;
+  }
+
+  .page-btn {
+    min-width: 36px;
+    height: 36px;
   }
 }
 </style>

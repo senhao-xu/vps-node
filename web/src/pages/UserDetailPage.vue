@@ -407,7 +407,7 @@ onMounted(() => {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
   gap: 16px;
-  align-items: start;
+  align-items: stretch;
   margin-top: 14px;
 }
 
@@ -415,12 +415,12 @@ onMounted(() => {
   min-width: 0;
 }
 
-.two-col + :deep(.card) {
-  margin-top: 16px;
-}
-
 .detail-main :deep(.card) {
   margin-top: 0;
+}
+
+.detail-main .two-col + :deep(.card) {
+  margin-top: var(--spacing-md);
 }
 
 

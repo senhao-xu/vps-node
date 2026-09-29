@@ -195,7 +195,7 @@ async function resetTraffic() {
 .traffic-view {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--spacing-md);
   margin-top: var(--spacing-md);
 }
 
@@ -218,8 +218,8 @@ async function resetTraffic() {
 }
 
 .traffic-used {
-  font-size: 26px;
-  font-weight: 750;
+  font-size: 24px;
+  font-weight: 700;
   line-height: 1.2;
 }
 
@@ -231,7 +231,8 @@ async function resetTraffic() {
 .traffic-breakdown {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--spacing-sm);
+  gap: 0;
+  border-top: 1px solid var(--color-border);
 }
 
 .traffic-stat {
@@ -239,10 +240,17 @@ async function resetTraffic() {
   min-width: 0;
   flex-direction: column;
   gap: 3px;
-  padding: 10px 12px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-muted);
+  padding: var(--spacing-sm) var(--spacing-md) 0 0;
+  border-right: 1px solid var(--color-border);
+}
+
+.traffic-stat:last-child {
+  border-right: 0;
+  padding-left: var(--spacing-md);
+}
+
+.traffic-stat:nth-child(2) {
+  padding-left: var(--spacing-md);
 }
 
 .traffic-stat span {
@@ -277,11 +285,22 @@ async function resetTraffic() {
   }
 
   .traffic-breakdown {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .traffic-stat,
+  .traffic-stat:nth-child(2),
+  .traffic-stat:last-child {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--spacing-sm) 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--color-border);
   }
 
   .traffic-stat:last-child {
-    grid-column: 1 / -1;
+    border-bottom: 0;
   }
 }
 </style>

@@ -318,7 +318,10 @@ async function expireNow() {
         生成订阅链接
       </button>
     </div>
-    <div class="info-grid">
+    <div class="info-grid user-info-grid">
+      <h3 class="user-info-heading">
+        账户资料
+      </h3>
       <div class="info-item">
         <span class="info-label">用户 ID</span>
         <span>{{ props.user.id }}</span>
@@ -326,7 +329,7 @@ async function expireNow() {
       <div class="info-item">
         <span class="info-label">UUID</span>
         <CopyText
-          class="mono"
+          class="mono uuid-value"
           :text="props.user.uuid"
         />
       </div>
@@ -339,7 +342,7 @@ async function expireNow() {
           <span>{{ props.user.username }}</span>
           <button
             type="button"
-            class="btn link small"
+            class="btn secondary small"
             @click="editingUsername = true"
           >
             编辑
@@ -676,14 +679,56 @@ async function expireNow() {
   text-align: center;
 }
 
+.basic-card .user-info-grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0 var(--spacing-xl);
+  padding: var(--spacing-md) var(--spacing-lg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.user-info-heading {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 0 0 var(--spacing-xs);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.user-info-grid > .info-item:not(.actions-item) {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  min-width: 0;
+  min-height: 62px;
+  padding: var(--spacing-sm) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.user-info-grid > .info-item:not(.actions-item) > :last-child {
+  min-width: 0;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  text-align: right;
+}
+
+.user-info-grid .info-label {
+  flex: none;
+}
+
+.uuid-value {
+  max-width: 100%;
+}
+
 .basic-card .info-label {
   font-weight: 500;
 }
 
-@media (min-width: 701px) {
-  .basic-card .info-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: var(--spacing-lg) var(--spacing-xl);
+@media (min-width: 900px) {
+  .basic-card .user-info-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -694,7 +739,6 @@ async function expireNow() {
   justify-content: space-between;
   gap: var(--spacing-md);
   padding-top: var(--spacing-md);
-  border-top: 1px solid var(--color-border);
 }
 
 .actions-item .actions-row {

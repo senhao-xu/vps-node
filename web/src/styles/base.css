@@ -365,7 +365,7 @@ textarea:focus-visible {
 }
 
 .btn.small {
-  min-height: 32px;
+  min-height: 36px;
   padding: 3px 10px;
   font-size: var(--font-size-sm);
 }
@@ -599,8 +599,8 @@ select:disabled {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 26px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   border: none;
   border-radius: var(--radius-sm);
@@ -771,6 +771,10 @@ select:disabled {
 
   .form-row {
     flex-direction: column;
+  }
+
+  .detail-aside {
+    grid-row: auto;
   }
 
   .detail-aside-inner {

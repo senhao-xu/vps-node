@@ -153,15 +153,16 @@ async function save() {
 
 <style scoped>
 .limits-grid {
-  gap: var(--spacing-sm);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 var(--spacing-lg);
   margin-top: var(--spacing-md);
 }
 
 .limits-grid .info-item {
-  padding: 10px 12px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-muted);
+  min-height: 60px;
+  justify-content: center;
+  padding: var(--spacing-sm) 0;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .limits-grid .info-item strong {
@@ -185,6 +186,10 @@ async function save() {
 @media (max-width: 560px) {
   .limits-editor .btn {
     width: 100%;
+  }
+
+  .limits-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 </style>

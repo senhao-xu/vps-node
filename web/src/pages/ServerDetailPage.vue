@@ -28,7 +28,6 @@ import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import DataTable, { type Column } from '@/components/DataTable.vue'
 import ErrorBanner from '@/components/ErrorBanner.vue'
 import TablePaginator from '@/components/TablePaginator.vue'
-import MetricBar from '@/components/MetricBar.vue'
 import NodeFormDialog from '@/components/NodeFormDialog.vue'
 import ServerFormDialog from '@/components/ServerFormDialog.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
@@ -70,7 +69,6 @@ const installTabItems: { value: InstallTab; label: string }[] = [
 ]
 
 const detailNavItems: DetailNavItem[] = [
-  { id: 'health', label: '系统指标', hint: '资源压力与运行时间', icon: HeartPulse },
   { id: 'nodes', label: '节点拓扑', hint: '协议与服务端口', icon: Waypoints },
   { id: 'agent', label: 'Agent 管理', hint: '凭证与安装', icon: Radio },
   { id: 'activity', label: '访问活动', hint: '最近连接目标', icon: Activity },
@@ -451,41 +449,6 @@ onMounted(() => {
       />
       <div class="detail-workspace">
         <main class="detail-main">
-          <section
-            id="health"
-            class="detail-section"
-          >
-            <div class="section-heading">
-              <div class="section-heading-copy">
-                <h2>系统指标</h2>
-                <p>持续观察 CPU、内存、磁盘和运行时长。</p>
-              </div>
-            </div>
-            <div class="card">
-              <h2 class="card-title">
-                系统指标
-              </h2>
-              <div class="metrics">
-                <MetricBar
-                  label="CPU"
-                  :percent="server.cpu_percent"
-                />
-                <MetricBar
-                  label="内存"
-                  :percent="server.memory_percent"
-                />
-                <MetricBar
-                  label="磁盘"
-                  :percent="server.disk_percent"
-                />
-                <div class="uptime-row">
-                  <span class="text-secondary">运行时间</span>
-                  <span>{{ formatDuration(server.uptime_seconds) }}</span>
-                </div>
-              </div>
-            </div>
-          </section>
-
           <section
             id="nodes"
             class="detail-section"
@@ -1004,19 +967,6 @@ onMounted(() => {
   margin: var(--spacing-xs) 0 0;
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
-}
-
-.metrics {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
-  max-width: 640px;
-}
-
-.uptime-row {
-  display: flex;
-  justify-content: space-between;
-  font-size: var(--font-size-sm);
 }
 
 .node-head-actions {

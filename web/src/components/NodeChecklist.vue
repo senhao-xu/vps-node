@@ -114,7 +114,7 @@ function toggle(node: NodeBrief, checked: boolean) {
 
 .node-checklist.list .group {
   display: block;
-  padding: 0 var(--spacing-md) var(--spacing-xs);
+  padding: 0 var(--spacing-md);
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -124,14 +124,15 @@ function toggle(node: NodeBrief, checked: boolean) {
 
 .node-checklist.list .group-title {
   margin: 0;
-  padding: 12px 0 8px;
-  font-weight: 650;
+  padding: 10px 0;
+  color: var(--color-text-secondary);
+  font-weight: 600;
 }
 
 .node-checklist.list .node-item {
   width: 100%;
-  min-height: 46px;
-  padding: 10px 12px;
+  min-height: 48px;
+  padding: 10px 0;
   border: 0;
   border-top: 1px solid var(--color-border);
   border-radius: 0;
@@ -139,7 +140,8 @@ function toggle(node: NodeBrief, checked: boolean) {
 }
 
 .node-checklist.list .node-item.checked {
-  background: var(--color-primary-soft);
+  background: transparent;
+  color: var(--color-primary);
 }
 
 .group {

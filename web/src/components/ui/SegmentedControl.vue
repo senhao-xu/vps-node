@@ -45,7 +45,7 @@ function select(value: T) {
 }
 
 .segment {
-  min-height: 26px;
+  min-height: 34px;
   padding: 3px 10px;
   border: none;
   border-radius: var(--radius-xs);

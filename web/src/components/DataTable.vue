@@ -105,9 +105,13 @@ function display(value: unknown): string {
     tabindex="0"
     :aria-label="props.ariaLabel"
   >
+    <span
+      v-if="props.columns.length >= 4 && (props.rows.length > 0 || props.loading)"
+      class="table-scroll-hint"
+    >左右滑动查看完整表格</span>
     <table
       class="data-table"
-      :class="{ empty: !props.loading && props.rows.length === 0 }"
+      :class="{ empty: !props.loading && props.rows.length === 0, compact: props.columns.length <= 3 }"
     >
       <thead v-if="props.rows.length > 0 || props.loading">
         <tr>
@@ -284,8 +288,13 @@ function display(value: unknown): string {
   font-variant-numeric: tabular-nums;
 }
 
-.data-table.empty {
+.data-table.empty,
+.data-table.compact {
   min-width: 0;
+}
+
+.table-scroll-hint {
+  display: none;
 }
 
 .data-table th,
@@ -346,6 +355,7 @@ function display(value: unknown): string {
 
 .th-sort {
   display: inline-flex;
+  min-height: 42px;
   align-items: center;
   gap: var(--spacing-xs);
   padding: 0;
@@ -414,5 +424,14 @@ function display(value: unknown): string {
   border-top: 1px solid var(--color-border);
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
+}
+@media (max-width: 700px) {
+  .table-scroll-hint {
+    display: block;
+    width: max-content;
+    padding: 8px 14px;
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-xs);
+  }
 }
 </style>

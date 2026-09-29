@@ -434,4 +434,17 @@ onMounted(() => {
     flex: 1;
   }
 }
+
+@media (max-width: 700px) {
+  .settings-nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow: visible;
+  }
+
+  .settings-nav-item {
+    min-width: 0;
+    white-space: normal;
+  }
+}
 </style>

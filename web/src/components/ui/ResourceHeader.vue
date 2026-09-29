@@ -168,6 +168,7 @@ defineSlots<{
 
 .resource-copy p {
   margin: 5px 0 0;
+  overflow-wrap: anywhere;
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
 }

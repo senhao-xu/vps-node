@@ -668,10 +668,15 @@ onBeforeUnmount(() => {
   }
 
   .search-trigger {
-    min-width: 32px;
-    width: 32px;
+    min-width: 40px;
+    width: 40px;
     padding: 0;
     justify-content: center;
+  }
+
+  .toolbar-icon-button {
+    width: 40px;
+    height: 40px;
   }
 
   .theme-switch {
@@ -679,7 +684,7 @@ onBeforeUnmount(() => {
   }
 
   .theme-option {
-    width: 26px;
+    width: 32px;
   }
 }
 </style>

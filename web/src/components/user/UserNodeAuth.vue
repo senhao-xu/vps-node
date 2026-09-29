@@ -245,6 +245,9 @@ async function save() {
 
 <style scoped>
 .auth-count {
+  padding: 4px 9px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-muted);
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
   white-space: nowrap;
