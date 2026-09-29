@@ -100,6 +100,7 @@ type nodeDTO struct {
 	IPv6Address string     `json:"ipv6_address"`
 	Name        string     `json:"name"`
 	Protocol    string     `json:"protocol"`
+	SNI         string     `json:"sni"`
 	Port        int        `json:"port"`
 	Rate        float64    `json:"rate"`
 	Tags        []string   `json:"tags"`
@@ -147,6 +148,7 @@ func toNodeDTO(n repo.Node) nodeDTO {
 		IPv6Address:         n.IPv6Address,
 		Name:                n.Name,
 		Protocol:            n.Protocol,
+		SNI:                 n.SNI,
 		Port:                n.Port,
 		Rate:                n.Rate,
 		Tags:                nodeTags(n.Tags),
@@ -183,18 +185,37 @@ type agentInfoDTO struct {
 }
 
 type serverDTO struct {
-	ID            int64   `json:"id"`
-	Name          string  `json:"name"`
-	Status        string  `json:"status"`
-	CPUPercent    float64 `json:"cpu_percent"`
-	MemoryPercent float64 `json:"memory_percent"`
-	DiskPercent   float64 `json:"disk_percent"`
-	UptimeSeconds int64   `json:"uptime_seconds"`
-	AgentVersion  string  `json:"agent_version"`
-	LastSeenAt    *string `json:"last_seen_at"`
-	NodeCount     int64   `json:"node_count"`
-	OnlineUsers   int64   `json:"online_users"`
-	CreatedAt     string  `json:"created_at"`
+	ID                   int64   `json:"id"`
+	Name                 string  `json:"name"`
+	Notes                string  `json:"notes"`
+	PublicVisible        bool    `json:"public_visible"`
+	OfflineNotify        bool    `json:"offline_notify"`
+	IPv6                 string  `json:"ipv6"`
+	ObservedIP           string  `json:"observed_ip"`
+	TrafficAccounting    string  `json:"traffic_accounting"`
+	TrafficResetDay      int     `json:"traffic_reset_day"`
+	BillingCycle         string  `json:"billing_cycle"`
+	MonthlyUploadBytes   int64   `json:"monthly_upload_bytes"`
+	MonthlyDownloadBytes int64   `json:"monthly_download_bytes"`
+	MonthlyUsedBytes     int64   `json:"monthly_used_bytes"`
+	Status               string  `json:"status"`
+	CPUPercent           float64 `json:"cpu_percent"`
+	MemoryPercent        float64 `json:"memory_percent"`
+	DiskPercent          float64 `json:"disk_percent"`
+	UptimeSeconds        int64   `json:"uptime_seconds"`
+	AgentVersion         string  `json:"agent_version"`
+	LastSeenAt           *string `json:"last_seen_at"`
+	NodeCount            int64   `json:"node_count"`
+	OnlineUsers          int64   `json:"online_users"`
+	CreatedAt            string  `json:"created_at"`
+	IP                   string  `json:"ip"`
+	Region               string  `json:"region"`
+	PriceCents           int64   `json:"price_cents"`
+	PriceCurrency        string  `json:"price_currency"`
+	TrafficLimitBytes    int64   `json:"traffic_limit_bytes"`
+	TrafficUsedBytes     int64   `json:"traffic_used_bytes"`
+	ExpiresAt            *string `json:"expires_at"`
+	SortOrder            int64   `json:"sort_order"`
 }
 
 type serverCreateDTO struct {
@@ -211,18 +232,34 @@ type serverDetailDTO struct {
 
 func toServerDTO(s repo.Server, nodeCount, onlineUsers int64) serverDTO {
 	return serverDTO{
-		ID:            s.ID,
-		Name:          s.Name,
-		Status:        s.Status,
-		CPUPercent:    s.CPUPercent,
-		MemoryPercent: s.MemoryPercent,
-		DiskPercent:   s.DiskPercent,
-		UptimeSeconds: s.UptimeSeconds,
-		AgentVersion:  s.AgentVersion,
-		LastSeenAt:    rfc3339Ptr(s.LastSeenAt),
-		NodeCount:     nodeCount,
-		OnlineUsers:   onlineUsers,
-		CreatedAt:     rfc3339(s.CreatedAt),
+		ID:                s.ID,
+		Name:              s.Name,
+		Notes:             s.Notes,
+		PublicVisible:     s.PublicVisible,
+		OfflineNotify:     s.OfflineNotify,
+		IPv6:              s.IPv6,
+		ObservedIP:        s.ObservedIP,
+		TrafficAccounting: s.TrafficAccounting,
+		TrafficResetDay:   s.TrafficResetDay,
+		BillingCycle:      s.BillingCycle,
+		IP:                s.IP,
+		Region:            s.Region,
+		PriceCents:        s.PriceCents,
+		PriceCurrency:     s.PriceCurrency,
+		TrafficLimitBytes: s.TrafficLimitBytes,
+		TrafficUsedBytes:  s.TrafficUsedBytes,
+		ExpiresAt:         rfc3339Ptr(s.ExpiresAt),
+		SortOrder:         s.SortOrder,
+		Status:            s.Status,
+		CPUPercent:        s.CPUPercent,
+		MemoryPercent:     s.MemoryPercent,
+		DiskPercent:       s.DiskPercent,
+		UptimeSeconds:     s.UptimeSeconds,
+		AgentVersion:      s.AgentVersion,
+		LastSeenAt:        rfc3339Ptr(s.LastSeenAt),
+		NodeCount:         nodeCount,
+		OnlineUsers:       onlineUsers,
+		CreatedAt:         rfc3339(s.CreatedAt),
 	}
 }
 

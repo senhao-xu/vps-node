@@ -154,6 +154,7 @@ func (h *Handler) registerAdminRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/users/{id}/subscription/rotate", h.requireAdmin(h.handleSubscriptionRotate))
 
 	mux.HandleFunc("GET /api/servers", h.requireAdmin(h.handleServerList))
+	mux.HandleFunc("PUT /api/servers/order", h.requireAdmin(h.handleServerReorder))
 	mux.HandleFunc("POST /api/servers", h.requireAdmin(h.handleServerCreate))
 	mux.HandleFunc("GET /api/servers/{id}", h.requireAdmin(h.handleServerGet))
 	mux.HandleFunc("PUT /api/servers/{id}", h.requireAdmin(h.handleServerUpdate))

@@ -38,3 +38,7 @@ export function getAgentKey(serverId: number): Promise<AgentKeyResult> {
 export function generateAgentKey(serverId: number): Promise<AgentKeyResult> {
   return request<AgentKeyResult>(`/api/servers/${serverId}/agent-key`, { method: 'POST' })
 }
+
+export async function reorderServers(ids: number[]): Promise<void> {
+  await request<unknown>('/api/servers/order', { method: 'PUT', body: { ids } })
+}

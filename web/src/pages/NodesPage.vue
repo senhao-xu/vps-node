@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Plus, X } from 'lucide-vue-next'
+import { Copy, Pencil, Plus, QrCode, Trash2, X } from 'lucide-vue-next'
 import { deleteNode, copyNode, listNodes, updateNode } from '@/api/nodes'
 import { listServers } from '@/api/servers'
 import { errorMessage } from '@/api/http'
@@ -11,14 +11,11 @@ import DataTable, { type Column } from '@/components/DataTable.vue'
 import ErrorBanner from '@/components/ErrorBanner.vue'
 import NodeFormDialog from '@/components/NodeFormDialog.vue'
 import NodeShareDialog from '@/components/NodeShareDialog.vue'
-import StatusBadge from '@/components/StatusBadge.vue'
 import TablePaginator from '@/components/TablePaginator.vue'
 import FilterChip from '@/components/ui/FilterChip.vue'
-import OverflowMenu, { type OverflowMenuItem } from '@/components/ui/OverflowMenu.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import SearchInput from '@/components/ui/SearchInput.vue'
 import ToggleSwitch from '@/components/ui/ToggleSwitch.vue'
-import { formatDateTime } from '@/utils/format'
 import { protocolLabel, type Tone } from '@/utils/labels'
 
 const route = useRoute()
@@ -37,8 +34,6 @@ const serverFilter = ref('')
 const protocolFilter = ref<Protocol | ''>('')
 const statusFilter = ref<NodeStatus | ''>('')
 
-const selectedIds = ref<number[]>([])
-const batchBusy = ref(false)
 const statusUpdatingId = ref<number | null>(null)
 
 const sortKey = ref('')
@@ -51,13 +46,13 @@ const shareTarget = ref<NodeBrief | null>(null)
 const deleting = ref(false)
 
 const columns: Column[] = [
-  { key: 'name', label: '节点', width: '270px', sortable: true },
-  { key: 'server', label: '所属服务器', width: '170px' },
-  { key: 'protocol', label: '协议 / 倍率', width: '140px' },
-  { key: 'port', label: '端口', align: 'right', width: '80px', sortable: true },
-  { key: 'chain', label: '出口线路', width: '190px' },
-  { key: 'enabled', label: '启用', width: '68px' },
-  { key: 'actions', label: '', width: '48px', divider: true },
+  { key: 'name', label: '节点名称', width: '24%', sortable: true },
+  { key: 'server', label: '所属服务器', width: '22%' },
+  { key: 'protocol', label: '协议', width: '15%' },
+  { key: 'port', label: '端口', width: '9%', sortable: true },
+  { key: 'sni', label: '伪装目标 / SNI', width: '16%' },
+  { key: 'enabled', label: '状态', width: '8%' },
+  { key: 'actions', label: '操作', width: '130px', align: 'right' },
 ]
 
 const protocolOptions: Array<{ value: Protocol | ''; label: string }> = [
@@ -89,6 +84,18 @@ function nodeDotTone(node: NodeBrief): Tone {
     default:
       return 'success'
   }
+}
+
+function nodeProtocolLabel(protocol: Protocol): string {
+  if (protocol === 'vless') return 'VLESS + Reality'
+  if (protocol === 'hysteria2') return 'Hysteria 2'
+  return protocolLabel(protocol)
+}
+
+function addressFamily(address: string): string {
+  if (address.includes(':')) return 'IPv6'
+  if (/^[0-9]{1,3}(\.[0-9]{1,3}){3}$/.test(address)) return 'IPv4'
+  return ''
 }
 
 const serverChipLabel = computed(() => {
@@ -129,18 +136,6 @@ function onSort(key: string) {
   }
 }
 
-function rowActions(row: NodeBrief): OverflowMenuItem[] {
-  return [
-    { label: '编辑', onSelect: () => (editTarget.value = row) },
-    { label: '分享 / 二维码', onSelect: () => (shareTarget.value = row) },
-    { label: '复制', onSelect: () => void copyRow(row) },
-    {
-      label: row.status === 'active' ? '禁用' : '启用',
-      onSelect: () => void toggleStatus(row),
-    },
-    { label: '删除', danger: true, onSelect: () => (deleteTarget.value = row) },
-  ]
-}
 
 async function copyRow(node: NodeBrief) {
   error.value = ''
@@ -170,7 +165,6 @@ async function load() {
     })
     items.value = result.items
     total.value = result.total
-    selectedIds.value = []
     if (result.items.length === 0 && result.total > 0 && page.value > 1) {
       page.value = Math.ceil(result.total / pageSize.value)
       syncQuery()
@@ -228,18 +222,6 @@ async function toggleStatus(node: NodeBrief) {
   }
 }
 
-async function batchSetStatus(status: NodeStatus) {
-  if (selectedIds.value.length === 0 || batchBusy.value) return
-  batchBusy.value = true
-  error.value = ''
-  const results = await Promise.allSettled(
-    selectedIds.value.map((id) => updateNode(id, { status })),
-  )
-  const failed = results.filter((result) => result.status === 'rejected').length
-  if (failed > 0) error.value = `${failed} 个节点操作失败，请重试`
-  batchBusy.value = false
-  await load()
-}
 
 async function confirmDelete() {
   const target = deleteTarget.value
@@ -407,69 +389,59 @@ onMounted(() => {
         :rows="sortedItems"
         :row-key="(row) => row.id"
         :loading="loading"
-        selectable
-        :selected="selectedIds"
         :sort-key="sortKey"
         :sort-dir="sortDir"
         :total-count="total"
         aria-label="节点列表"
-        @update:selected="selectedIds = $event.map(Number)"
         @sort="onSort"
       >
         <template #cell-name="{ row }">
-          <div class="node-identity">
-            <span class="name-cell">
+          <strong
+            class="node-name"
+            :title="row.name"
+          >{{ row.name }}</strong>
+        </template>
+        <template #cell-server="{ row }">
+          <div class="server-cell">
+            <div class="server-line">
               <i
                 class="status-dot"
                 :class="nodeDotTone(row)"
               />
-              <strong>{{ row.name }}</strong>
-            </span>
+              <RouterLink
+                :to="`/servers/${row.server.id}`"
+                class="server-link"
+              >
+                {{ row.server.name }}
+              </RouterLink>
+              <span
+                v-if="addressFamily(row.address)"
+                class="address-family"
+              >{{ addressFamily(row.address) }}</span>
+            </div>
             <span
-              class="node-meta mono"
+              class="server-address mono"
               :title="row.address"
             >{{ row.address }}</span>
-            <span
-              v-if="row.tags.length"
-              class="node-meta"
-              :title="row.tags.join('、')"
-            >
-              {{ row.tags.join(' · ') }}
-            </span>
-          </div>
-        </template>
-        <template #cell-server="{ row }">
-          <div class="node-identity">
-            <RouterLink :to="`/servers/${row.server.id}`">
-              {{ row.server.name }}
-            </RouterLink>
-            <span class="node-meta">创建于 {{ formatDateTime(row.created_at) }}</span>
           </div>
         </template>
         <template #cell-protocol="{ row }">
-          <div class="node-identity">
-            <StatusBadge
-              :label="protocolLabel(row.protocol)"
-              tone="purple"
-            />
-            <span class="node-meta">倍率 {{ row.rate }}×</span>
+          <div class="protocol-cell">
+            <span class="protocol-badge">{{ nodeProtocolLabel(row.protocol) }}</span>
+            <span
+              v-if="row.rate !== 1"
+              class="rate-label"
+            >{{ row.rate }}×</span>
           </div>
         </template>
-        <template #cell-chain="{ row }">
+        <template #cell-port="{ row }">
+          <span class="mono">{{ row.port }}</span>
+        </template>
+        <template #cell-sni="{ row }">
           <span
-            v-if="row.chain_node"
-            class="chip"
-            :title="`流量经 ${row.chain_node.server_name}/${row.chain_node.name} 落地`"
-          >→ {{ row.chain_node.server_name }}/{{ row.chain_node.name }}</span>
-          <span
-            v-else-if="row.chain_custom_node_id !== null"
-            class="chip"
-            :title="`流量经自定义线路「${row.chain_custom_node_name || '未知来源'}」落地`"
-          >→ {{ row.chain_custom_node_name || '自定义线路' }}</span>
-          <span
-            v-else
-            class="text-secondary"
-          >直连</span>
+            class="sni-value mono"
+            :title="row.sni || undefined"
+          >{{ row.sni || '—' }}</span>
         </template>
         <template #cell-enabled="{ row }">
           <ToggleSwitch
@@ -480,45 +452,49 @@ onMounted(() => {
           />
         </template>
         <template #cell-actions="{ row }">
-          <OverflowMenu
-            :items="rowActions(row)"
-            :label="`节点 ${row.name} 的操作`"
-          />
+          <div class="row-actions">
+            <button
+              type="button"
+              class="icon-action"
+              :aria-label="`分享节点 ${row.name}`"
+              title="分享 / 二维码"
+              @click="shareTarget = row"
+            >
+              <QrCode :size="17" />
+            </button>
+            <button
+              type="button"
+              class="icon-action"
+              :aria-label="`复制节点 ${row.name}`"
+              title="复制"
+              @click="copyRow(row)"
+            >
+              <Copy :size="17" />
+            </button>
+            <button
+              type="button"
+              class="icon-action"
+              :aria-label="`编辑节点 ${row.name}`"
+              title="编辑"
+              @click="editTarget = row"
+            >
+              <Pencil :size="17" />
+            </button>
+            <button
+              type="button"
+              class="icon-action danger"
+              :aria-label="`删除节点 ${row.name}`"
+              title="删除"
+              @click="deleteTarget = row"
+            >
+              <Trash2 :size="17" />
+            </button>
+          </div>
         </template>
         <template #empty>
           没有符合条件的节点
         </template>
       </DataTable>
-
-      <div
-        v-if="selectedIds.length > 0"
-        class="batch-bar"
-      >
-        <button
-          type="button"
-          class="btn secondary small"
-          :disabled="batchBusy"
-          @click="batchSetStatus('active')"
-        >
-          批量启用
-        </button>
-        <button
-          type="button"
-          class="btn secondary small"
-          :disabled="batchBusy"
-          @click="batchSetStatus('disabled')"
-        >
-          批量禁用
-        </button>
-        <button
-          type="button"
-          class="btn link small"
-          :disabled="batchBusy"
-          @click="selectedIds = []"
-        >
-          清除选择
-        </button>
-      </div>
 
       <TablePaginator
         :page="page"
@@ -560,43 +536,23 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.node-identity {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
-}
-
-.name-cell {
-  display: inline-flex;
-  max-width: 100%;
-  align-items: center;
-  gap: var(--spacing-sm);
-}
-
-.name-cell strong {
-  overflow: hidden;
-  font-weight: 650;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.node-meta {
-  display: block;
-  max-width: 100%;
-  overflow: hidden;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-xs);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.batch-bar {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--spacing-sm);
-  padding-top: var(--spacing-md);
-}
+.table-card { min-width: 0; }
+.node-name { display: block; overflow: hidden; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.server-cell { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.server-line { display: flex; min-width: 0; align-items: center; gap: 8px; }
+.server-link { overflow: hidden; color: var(--color-text); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.address-family { flex: none; padding: 1px 7px; border: 1px solid var(--color-success); border-radius: var(--radius-full); color: var(--color-success); font-size: var(--font-size-xs); line-height: 1.35; }
+.server-address { overflow: hidden; padding-left: 16px; color: var(--color-text-secondary); text-overflow: ellipsis; white-space: nowrap; }
+.protocol-cell { display: flex; align-items: center; gap: 8px; }
+.protocol-badge { display: inline-flex; align-items: center; padding: 4px 13px; border-radius: var(--radius-full); background: var(--color-badge-purple-solid); color: #fff; font-size: var(--font-size-sm); font-weight: 650; line-height: 1; white-space: nowrap; }
+.rate-label { color: var(--color-text-secondary); font-size: var(--font-size-xs); white-space: nowrap; }
+.sni-value { display: block; overflow: hidden; color: var(--color-text-secondary); text-overflow: ellipsis; white-space: nowrap; }
+.row-actions { display: flex; justify-content: flex-end; gap: 2px; }
+.icon-action { display: inline-grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--color-text-secondary); cursor: pointer; }
+.icon-action:hover { background: var(--color-surface-muted); color: var(--color-text); }
+.icon-action.danger { color: var(--color-danger); }
+.icon-action:focus-visible { outline: 2px solid var(--color-focus-ring); }
+:deep(.data-table) { min-width: 980px; }
+:deep(.data-table th) { height: 40px; padding: 0 12px; color: var(--color-text); font-size: var(--font-size-sm); }
+:deep(.data-table td) { height: 62px; padding: 8px 12px; }
 </style>

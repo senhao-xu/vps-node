@@ -94,9 +94,20 @@ func TestNodeDetailEchoesPublicSettings(t *testing.T) {
 	if len(items) != 2 {
 		t.Fatalf("expected 2 nodes, got %d", len(items))
 	}
-	for _, item := range items {
-		if _, ok := item.(map[string]any)["settings"]; ok {
+	for _, raw := range items {
+		item := raw.(map[string]any)
+		if _, ok := item["settings"]; ok {
 			t.Fatalf("list items must not include settings: %s", body)
+		}
+		switch item["name"] {
+		case "vless-1":
+			if item["sni"] != "example.com" {
+				t.Fatalf("vless list SNI missing: %s", body)
+			}
+		case "ss-1":
+			if item["sni"] != "" {
+				t.Fatalf("shadowsocks list SNI must be empty: %s", body)
+			}
 		}
 	}
 }

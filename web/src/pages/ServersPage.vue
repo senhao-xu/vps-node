@@ -1,20 +1,20 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Activity, Plus, Server, ServerOff } from 'lucide-vue-next'
-import { deleteServer, listServers, updateServer } from '@/api/servers'
+import { Activity, CalendarClock, Download, GripVertical, Pencil, Plus, Server, ServerOff, Trash2 } from 'lucide-vue-next'
+import { deleteServer, listServers, reorderServers } from '@/api/servers'
 import { errorMessage } from '@/api/http'
-import type { Paged, Server as ServerItem, ServerStatus } from '@/api/types'
+import type { Paged, Server as ServerItem } from '@/api/types'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import DataTable, { type Column } from '@/components/DataTable.vue'
 import ErrorBanner from '@/components/ErrorBanner.vue'
+import ServerBillingDialog from '@/components/ServerBillingDialog.vue'
 import TablePaginator from '@/components/TablePaginator.vue'
 import ServerFormDialog from '@/components/ServerFormDialog.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
-import OverflowMenu, { type OverflowMenuItem } from '@/components/ui/OverflowMenu.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import MetricStrip, { type MetricStripItem } from '@/components/ui/MetricStrip.vue'
-import { formatDateTime, formatRelative } from '@/utils/format'
+import { formatBytes, formatDate } from '@/utils/format'
 import { serverStatusInfo } from '@/utils/labels'
 import { useOverviewStore } from '@/stores/overview'
 
@@ -30,16 +30,19 @@ const error = ref('')
 
 const showCreate = ref(false)
 const editTarget = ref<ServerItem | null>(null)
+const billingTarget = ref<ServerItem | null>(null)
 const deleteTarget = ref<ServerItem | null>(null)
 const deleting = ref(false)
-const statusUpdatingId = ref<number | null>(null)
+const ordering = ref(false)
 
 const columns: Column[] = [
-  { key: 'name', label: '服务器', width: '240px' },
-  { key: 'status', label: '状态', width: '110px' },
-  { key: 'agent', label: 'Agent', width: '200px' },
-  { key: 'usage', label: '资源', width: '150px' },
-  { key: 'actions', label: '', width: '48px', divider: true },
+  { key: 'name', label: '名称', width: '30%' },
+  { key: 'ip', label: 'IP', width: '15%' },
+  { key: 'status', label: '状态', width: '9%' },
+  { key: 'traffic', label: '流量', width: '16%' },
+  { key: 'price', label: '价格', width: '9%' },
+  { key: 'expiry', label: '到期', width: '11%' },
+  { key: 'actions', label: '操作', width: '10%', align: 'right' },
 ]
 
 const metrics = computed<MetricStripItem[]>(() => {
@@ -69,16 +72,53 @@ const metrics = computed<MetricStripItem[]>(() => {
   ]
 })
 
-function rowActions(row: ServerItem): OverflowMenuItem[] {
-  return [
-    { label: '详情', onSelect: () => void router.push(`/servers/${row.id}`) },
-    { label: '编辑', onSelect: () => (editTarget.value = row) },
-    {
-      label: row.status === 'disabled' ? '启用' : '禁用',
-      onSelect: () => void toggleStatus(row),
-    },
-    { label: '删除', danger: true, onSelect: () => (deleteTarget.value = row) },
-  ]
+function editServer(row: ServerItem) {
+  editTarget.value = row
+}
+
+function priceLabel(row: ServerItem): string {
+  if (row.price_cents === 0) return '—'
+  try { return new Intl.NumberFormat('en-US', { style: 'currency', currency: row.price_currency }).format(row.price_cents / 100) }
+  catch { return `${row.price_currency} ${(row.price_cents / 100).toFixed(2)}` }
+}
+
+function exportServer(row: ServerItem) {
+  const headers = ['名称', 'IP', '地区', '状态', '已用流量(字节)', '流量额度(字节)', '价格(分)', '货币', '计费周期', '到期']
+  const values = [row.name, row.ip, row.region, row.status, row.monthly_used_bytes, row.traffic_limit_bytes, row.price_cents, row.price_currency, row.billing_cycle, row.expires_at ?? '']
+  const csv = [headers, values].map((cells) => cells.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(',')).join('\r\n')
+  const url = globalThis.URL.createObjectURL(new globalThis.Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `server-${row.id}.csv`
+  link.click()
+  globalThis.URL.revokeObjectURL(url)
+}
+
+async function onRowDrop(from: ServerItem, to: ServerItem) {
+  if (ordering.value) return
+  ordering.value = true
+  error.value = ''
+  try {
+    const first = await listServers({ page: 1, pageSize: 100 })
+    const all = [...first.items]
+    for (let nextPage = 2; all.length < first.total; nextPage += 1) {
+      const next = await listServers({ page: nextPage, pageSize: 100 })
+      if (next.items.length === 0) throw new Error('服务器列表已变化，请刷新后重试')
+      all.push(...next.items)
+    }
+    const fromIndex = all.findIndex((row) => row.id === from.id)
+    const toIndex = all.findIndex((row) => row.id === to.id)
+    if (fromIndex < 0 || toIndex < 0) return
+    const [moved] = all.splice(fromIndex, 1)
+    if (!moved) return
+    all.splice(toIndex, 0, moved)
+    await reorderServers(all.map((row) => row.id))
+    await load()
+  } catch (err) {
+    error.value = errorMessage(err)
+  } finally {
+    ordering.value = false
+  }
 }
 
 async function load() {
@@ -114,19 +154,6 @@ function onServerCreated(id: number) {
   void router.push(`/servers/${id}`)
 }
 
-async function toggleStatus(server: ServerItem) {
-  const next: ServerStatus = server.status === 'disabled' ? 'active' : 'disabled'
-  statusUpdatingId.value = server.id
-  error.value = ''
-  try {
-    await updateServer(server.id, { status: next })
-    await reload()
-  } catch (err) {
-    error.value = errorMessage(err)
-  } finally {
-    statusUpdatingId.value = null
-  }
-}
 
 async function confirmDelete() {
   const target = deleteTarget.value
@@ -184,44 +211,84 @@ onMounted(() => {
         :row-key="(row) => row.id"
         :loading="loading"
         :total-count="total"
+        draggable
         aria-label="服务器列表"
+        @row-drop="onRowDrop"
       >
         <template #cell-name="{ row }">
           <div class="server-identity">
+            <GripVertical
+              :size="17"
+              class="drag-handle"
+              aria-hidden="true"
+            />
             <RouterLink
               :to="'/servers/' + row.id"
               class="server-name"
             >
               {{ row.name }}
             </RouterLink>
-            <span class="server-meta">#{{ row.id }}</span>
+            <span
+              v-if="row.region"
+              class="region-chip"
+            >{{ row.region }}</span>
           </div>
+        </template>
+        <template #cell-ip="{ row }">
+          <span class="mono">{{ row.ip || row.observed_ip || '—' }}</span>
         </template>
         <template #cell-status="{ row }">
           <StatusBadge v-bind="serverStatusInfo(row.status)" />
         </template>
-        <template #cell-agent="{ row }">
-          <div class="agent-cell">
-            <span>{{ row.agent_version || '未注册' }}</span>
-            <span
-              class="server-meta"
-              :title="row.last_seen_at ? formatDateTime(row.last_seen_at) : undefined"
-            >
-              {{ row.last_seen_at ? '心跳 ' + formatRelative(row.last_seen_at) : '暂无心跳' }}
-            </span>
-          </div>
+        <template #cell-traffic="{ row }">
+          <span class="mono">{{ formatBytes(row.monthly_used_bytes) }}</span>
+          <span class="server-meta"> / {{ row.traffic_limit_bytes ? formatBytes(row.traffic_limit_bytes) : '不限' }}</span>
         </template>
-        <template #cell-usage="{ row }">
-          <div class="usage-cell">
-            <span><strong>{{ row.node_count }}</strong> 个节点</span>
-            <span class="server-meta"><strong>{{ row.online_users }}</strong> 位用户在线</span>
-          </div>
+        <template #cell-price="{ row }">
+          <span class="mono">{{ priceLabel(row) }}</span>
+        </template>
+        <template #cell-expiry="{ row }">
+          <span class="mono">{{ row.expires_at ? formatDate(row.expires_at) : '—' }}</span>
         </template>
         <template #cell-actions="{ row }">
-          <OverflowMenu
-            :items="rowActions(row)"
-            :label="`服务器 ${row.name} 的操作`"
-          />
+          <div class="row-actions">
+            <button
+              type="button"
+              class="icon-action"
+              :aria-label="`导出 ${row.name}`"
+              title="导出服务器资料"
+              @click="exportServer(row)"
+            >
+              <Download :size="17" />
+            </button>
+            <button
+              type="button"
+              class="icon-action"
+              :aria-label="`编辑 ${row.name}`"
+              title="编辑"
+              @click="editServer(row)"
+            >
+              <Pencil :size="17" />
+            </button>
+            <button
+              type="button"
+              class="icon-action"
+              :aria-label="`设置 ${row.name} 的到期时间`"
+              title="设置到期时间"
+              @click="billingTarget = row"
+            >
+              <CalendarClock :size="17" />
+            </button>
+            <button
+              type="button"
+              class="icon-action danger"
+              :aria-label="`删除 ${row.name}`"
+              title="删除"
+              @click="deleteTarget = row"
+            >
+              <Trash2 :size="17" />
+            </button>
+          </div>
         </template>
         <template #empty>
           还没有服务器，点击右上角创建
@@ -248,6 +315,12 @@ onMounted(() => {
       @close="editTarget = null"
       @saved="reload"
     />
+    <ServerBillingDialog
+      :open="billingTarget !== null"
+      :server="billingTarget"
+      @close="billingTarget = null"
+      @saved="reload"
+    />
 
     <ConfirmDialog
       :open="deleteTarget !== null"
@@ -263,31 +336,20 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.table-card {
-  min-width: 0;
-}
-
-.server-identity,
-.agent-cell,
-.usage-cell {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.server-name {
-  overflow-wrap: anywhere;
-  font-weight: 700;
-}
-
-.server-meta {
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-xs);
-}
-
-.usage-cell strong {
-  color: var(--color-text);
-  font-variant-numeric: tabular-nums;
-}
+.table-card { min-width: 0; }
+.server-identity { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.drag-handle { flex: none; color: var(--color-text-secondary); cursor: grab; }
+.server-name { color: var(--color-text); font-weight: 650; overflow-wrap: anywhere; }
+.region-chip { flex: none; padding: 2px 8px; border: 1px solid var(--color-border); border-radius: var(--radius-full); color: var(--color-text-secondary); font-size: var(--font-size-xs); }
+.server-meta { color: var(--color-text-secondary); }
+.mono { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.row-actions { display: flex; justify-content: flex-end; gap: 2px; }
+.icon-action { display: inline-grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--color-text); cursor: pointer; }
+.icon-action:hover { background: var(--color-surface-muted); }
+.icon-action.danger { color: var(--color-danger); }
+.icon-action:focus-visible { outline: 2px solid var(--color-focus-ring); }
+:deep(.data-table) { min-width: 1000px; }
+:deep(.badge.success) { background: var(--color-primary); color: var(--color-on-primary); }
+:deep(.data-table th) { height: 38px; padding: 0 12px; font-size: var(--font-size-sm); color: var(--color-text); }
+:deep(.data-table td) { height: 52px; padding: 8px 12px; }
 </style>

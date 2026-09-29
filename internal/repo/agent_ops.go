@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func (r *Repo) RecordHeartbeat(ctx context.Context, agentID, serverID int64, version string, cpu, memory, disk float64, uptimeSeconds int64, seenAt time.Time) error {
+func (r *Repo) RecordHeartbeat(ctx context.Context, agentID, serverID int64, version string, cpu, memory, disk float64, uptimeSeconds int64, seenAt time.Time, observedIP string) error {
 	return Tx(ctx, r.DB, func(tx *sql.Tx) error {
 		now := nowUnix()
 		if _, err := tx.ExecContext(ctx,
@@ -15,9 +15,9 @@ func (r *Repo) RecordHeartbeat(ctx context.Context, agentID, serverID int64, ver
 			return mapErr(err)
 		}
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE servers SET cpu_percent = ?, memory_percent = ?, disk_percent = ?, uptime_seconds = ?, agent_version = ?, last_seen_at = ?, updated_at = ?
+			`UPDATE servers SET cpu_percent = ?, memory_percent = ?, disk_percent = ?, uptime_seconds = ?, agent_version = ?, last_seen_at = ?, observed_ip = ?, updated_at = ?
 			 WHERE id = ?`,
-			cpu, memory, disk, uptimeSeconds, version, seenAt.Unix(), now, serverID); err != nil {
+			cpu, memory, disk, uptimeSeconds, version, seenAt.Unix(), observedIP, now, serverID); err != nil {
 			return mapErr(err)
 		}
 		return nil

@@ -249,6 +249,25 @@ Response `200`: paginated list of:
 {
   "id": 1,
   "name": "HK-01",
+  "notes": "provider note",
+  "public_visible": true,
+  "offline_notify": false,
+  "ip": "103.21.244.18",
+  "ipv6": "2001:db8::1",
+  "observed_ip": "103.21.244.18",
+  "region": "HK",
+  "price_cents": 3500,
+  "price_currency": "USD",
+  "traffic_limit_bytes": 1073741824000,
+  "traffic_used_bytes": 50358493184,
+  "traffic_accounting": "max",
+  "traffic_reset_day": 1,
+  "monthly_upload_bytes": 123456,
+  "monthly_download_bytes": 654321,
+  "monthly_used_bytes": 654321,
+  "billing_cycle": "monthly",
+  "expires_at": "2026-12-31T23:59:59Z",
+  "sort_order": 1,
   "status": "active",
   "cpu_percent": 23.5,
   "memory_percent": 52.1,
@@ -265,10 +284,16 @@ Response `200`: paginated list of:
 ### POST /api/servers
 
 ```json
-{ "name": "HK-01" }
+{ "name": "HK-01", "ip": "103.21.244.18", "region": "HK", "price_cents": 3500, "price_currency": "USD", "traffic_limit_bytes": 1073741824000, "expires_at": "2026-12-31T23:59:59Z" }
 ```
 
+All inventory fields are optional. Empty IP, IPv6 and region mean unspecified; zero traffic limit means unlimited; empty expiry means no expiry. Price is stored in minor currency units. `billing_cycle` is one of `monthly`, `quarterly`, `semiannual`, `yearly`, or `one_time`. `traffic_accounting` is `max` or `sum`, and `traffic_reset_day` is `1..31` with short months clamped to their last day. `traffic_used_bytes` is a read-only lifetime counter. Monthly fields are computed from the active UTC billing window. Lists are ordered by `sort_order`, then id. `public_visible` and `offline_notify` persist preferences for future public-page and notification integrations.
+
 Response `201`: server DTO plus `agent_key`, the plaintext Agent Key issued automatically on creation. `status` starts as `active`. The key uses the same mechanism as `POST /api/servers/:id/agent-key` and can be read back via `GET /api/servers/:id/agent-key`. No server revision is bumped (identity is not runtime config).
+
+### PUT /api/servers/order
+
+Body: `{ "ids": [2, 1, 3] }`, containing every current server id exactly once in the desired order. Response `200`: `{}`. Invalid or duplicate ids return `422 validation`.
 
 ### GET /api/servers/:id
 
@@ -285,6 +310,8 @@ Paginated visited-sites records for all nodes of one server. Query: `user_id`, `
 ```
 
 Response `200`: server DTO. Setting `status: "disabled"` stops config sync for that server.
+
+`PUT /api/servers/:id` also accepts partial updates to `notes`, `public_visible`, `offline_notify`, `ip`, `ipv6`, `region`, `traffic_accounting`, `traffic_reset_day`, `price_cents`, `price_currency`, `billing_cycle`, `traffic_limit_bytes`, and `expires_at` (RFC3339; empty string clears it). Inventory changes are persisted with the server and returned in list/detail responses.
 
 ### DELETE /api/servers/:id
 
@@ -305,17 +332,17 @@ Generates or resets the server's Agent Key. Response `200`: `{ "agent_key": "<pl
 Query (all optional, combinable): `server_id` (exact match), `protocol` (`shadowsocks|vless|hysteria2|anytls|socks|http`), `status` (`active|disabled`), `q` (case-insensitive substring match on node name), plus `page` / `page_size`. Invalid enum values return `400 invalid_request`. Paginated node DTOs:
 
 ```json
-{ "id": 1, "server_id": 1, "address": "hk01.example.com", "ipv6_enabled": false, "ipv6_address": "", "name": "HK-SS", "protocol": "shadowsocks", "port": 8388, "rate": 1, "tags": [], "status": "active", "server": { "id": 1, "name": "HK-1" }, "chain_node_id": null, "chain_node": null, "chain_custom_node_id": null, "chain_custom_entry_key": "", "chain_custom_node_name": "", "created_at": "..." }
+{ "id": 1, "server_id": 1, "address": "hk01.example.com", "ipv6_enabled": false, "ipv6_address": "", "name": "HK-SS", "protocol": "shadowsocks", "sni": "", "port": 8388, "rate": 1, "tags": [], "status": "active", "server": { "id": 1, "name": "HK-1" }, "chain_node_id": null, "chain_node": null, "chain_custom_node_id": null, "chain_custom_entry_key": "", "chain_custom_node_name": "", "created_at": "..." }
 ```
 
-Every node DTO carries `server: { id, name }` referencing its owning server. `address` is the user-facing connection host used to render subscriptions. `rate` is the traffic multiplier (default `1`) and `tags` is a string array. `ipv6_enabled` (default `false`) advertises an extra IPv6 entry in subscriptions and `ipv6_address` is its connection host (an IPv6 literal or a domain resolving to AAAA); when empty or disabled the subscription renders only `address`. `chain_node_id` links the node to another managed node (any server) used as its chain exit; when set, the DTO also carries `chain_node: { id, name, server_name }` for display. `chain_custom_node_id` + `chain_custom_entry_key` select a single line inside a custom node source as the external chain exit; when set, the DTO also carries the display-only `chain_custom_node_name`. Chained nodes are transparent to subscriptions (only the entry node is rendered).
+Every node DTO carries `server: { id, name }` referencing its owning server. `address` is the user-facing connection host used to render subscriptions. `sni` is the safe display value extracted from `reality_settings.server_name` or `tls.server_name` without exposing protocol secrets. `rate` is the traffic multiplier (default `1`) and `tags` is a string array. `ipv6_enabled` (default `false`) advertises an extra IPv6 entry in subscriptions and `ipv6_address` is its connection host (an IPv6 literal or a domain resolving to AAAA); when empty or disabled the subscription renders only `address`. `chain_node_id` links the node to another managed node (any server) used as its chain exit; when set, the DTO also carries `chain_node: { id, name, server_name }` for display. `chain_custom_node_id` + `chain_custom_entry_key` select a single line inside a custom node source as the external chain exit; when set, the DTO also carries the display-only `chain_custom_node_name`. Chained nodes are transparent to subscriptions (only the entry node is rendered).
 
 Protocol secrets are never exposed.
 
 ### POST /api/nodes
 
 ```json
-{ "server_id": 1, "address": "hk01.example.com", "ipv6_enabled": true, "ipv6_address": "2001:db8::1", "name": "HK-SS", "protocol": "shadowsocks", "port": 8388, "rate": 1.5, "tags": ["hk"], "settings": { "cipher": "2022-blake3-aes-128-gcm" } }
+{ "server_id": 1, "address": "hk01.example.com", "ipv6_enabled": true, "ipv6_address": "2001:db8::1", "name": "HK-SS", "protocol": "shadowsocks", "sni": "", "port": 8388, "rate": 1.5, "tags": ["hk"], "settings": { "cipher": "2022-blake3-aes-128-gcm" } }
 ```
 
 `address` is required (1-255 characters). Node names are not unique per server (a copied node keeps its source name), but `port` must be unique among the server's `active` nodes; a duplicate active port returns `409 conflict`. `rate` is an optional positive traffic multiplier (default `1`); `tags` is an optional array of at most 20 non-empty strings of at most 32 characters. Invalid values return `422 validation`. `ipv6_enabled` is optional (default `false`); `ipv6_address` accepts a host of at most 255 characters (IPv6 literal or domain, mirroring `address`), and enabling it without an address returns `422 validation`.

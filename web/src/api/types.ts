@@ -63,6 +63,7 @@ export type NodeBrief = {
   ipv6_address: string
   name: string
   protocol: Protocol
+  sni: string
   port: number
   rate: number
   tags: string[]
@@ -144,9 +145,31 @@ export type TrafficSeries = {
   series: TrafficPoint[]
 }
 
+export type BillingCycle = 'monthly' | 'quarterly' | 'semiannual' | 'yearly' | 'one_time'
+export type TrafficAccounting = 'sum' | 'max'
+
 export type Server = {
   id: number
   name: string
+  notes: string
+  public_visible: boolean
+  offline_notify: boolean
+  ipv6: string
+  observed_ip: string
+  traffic_accounting: TrafficAccounting
+  traffic_reset_day: number
+  billing_cycle: BillingCycle
+  monthly_upload_bytes: number
+  monthly_download_bytes: number
+  monthly_used_bytes: number
+  ip: string
+  region: string
+  price_cents: number
+  price_currency: string
+  traffic_limit_bytes: number
+  traffic_used_bytes: number
+  expires_at: string | null
+  sort_order: number
   status: ServerStatus
   cpu_percent: number
   memory_percent: number
@@ -320,11 +343,27 @@ export type UpdateUserInput = {
   expires_at?: string | null
 }
 
-export type CreateServerInput = {
+export type ServerInventoryInput = {
+  notes?: string
+  public_visible?: boolean
+  offline_notify?: boolean
+  ipv6?: string
+  traffic_accounting?: TrafficAccounting
+  traffic_reset_day?: number
+  billing_cycle?: BillingCycle
+  ip?: string
+  region?: string
+  price_cents?: number
+  price_currency?: string
+  traffic_limit_bytes?: number
+  expires_at?: string | null
+}
+
+export type CreateServerInput = ServerInventoryInput & {
   name: string
 }
 
-export type UpdateServerInput = {
+export type UpdateServerInput = ServerInventoryInput & {
   name?: string
   status?: ServerStatus
 }

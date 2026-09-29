@@ -17,6 +17,7 @@ const props = withDefaults(
     rows: T[]
     rowKey: (row: T) => string | number
     loading?: boolean
+    draggable?: boolean
     selectable?: boolean
     selected?: Array<string | number>
     sortKey?: string
@@ -29,6 +30,7 @@ const props = withDefaults(
   {
     loading: false,
     selectable: false,
+    draggable: false,
     selected: () => [],
     sortKey: undefined,
     sortDir: undefined,
@@ -43,6 +45,7 @@ const emit = defineEmits<{
   (e: 'update:selected', keys: Array<string | number>): void
   (e: 'sort', key: string): void
   (e: 'row-click', row: T, index: number): void
+  (e: 'row-drop', from: T, to: T): void
 }>()
 
 defineSlots<{
@@ -51,6 +54,16 @@ defineSlots<{
   empty?: () => unknown
   'row-extra'?: (props: { row: T; index: number; colspan: number }) => unknown
 }>()
+
+let draggingRow: T | null = null
+function startDrag(row: T, event: { dataTransfer: { effectAllowed: string } | null }) {
+  draggingRow = row
+  if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
+}
+function dropRow(row: T) {
+  if (draggingRow && props.rowKey(draggingRow) !== props.rowKey(row)) emit('row-drop', draggingRow, row)
+  draggingRow = null
+}
 
 const columnSpan = computed(() => props.columns.length + (props.selectable ? 1 : 0))
 
@@ -211,6 +224,11 @@ function display(value: unknown): string {
           >
             <tr
               :class="{ selected: props.selectable && selectedSet.has(props.rowKey(row)) }"
+              :draggable="props.draggable"
+              @dragstart="props.draggable && startDrag(row, $event)"
+              @dragover="props.draggable && $event.preventDefault()"
+              @drop="props.draggable && dropRow(row)"
+              @dragend="draggingRow = null"
               @click="emit('row-click', row, index)"
             >
               <td

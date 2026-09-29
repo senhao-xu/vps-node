@@ -7,17 +7,35 @@ import (
 )
 
 type Server struct {
-	ID            int64
-	Name          string
-	Status        string
-	CPUPercent    float64
-	MemoryPercent float64
-	DiskPercent   float64
-	UptimeSeconds int64
-	AgentVersion  string
-	LastSeenAt    *time.Time
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID                          int64
+	Name                        string
+	Notes                       string
+	PublicVisible               bool
+	OfflineNotify               bool
+	IPv6                        string
+	ObservedIP                  string
+	TrafficAccounting           string
+	TrafficResetDay             int
+	TrafficCorrectionBytes      int64
+	TrafficCorrectionCycleStart int64
+	BillingCycle                string
+	IP                          string
+	Region                      string
+	PriceCents                  int64
+	PriceCurrency               string
+	TrafficLimitBytes           int64
+	TrafficUsedBytes            int64
+	ExpiresAt                   *time.Time
+	SortOrder                   int64
+	Status                      string
+	CPUPercent                  float64
+	MemoryPercent               float64
+	DiskPercent                 float64
+	UptimeSeconds               int64
+	AgentVersion                string
+	LastSeenAt                  *time.Time
+	CreatedAt                   time.Time
+	UpdatedAt                   time.Time
 }
 
 const (
@@ -26,7 +44,7 @@ const (
 	ServerStatusOffline  = "offline"
 )
 
-const serverSelect = `SELECT id, name, status, cpu_percent, memory_percent, disk_percent, uptime_seconds,
+const serverSelect = `SELECT id, name, notes, public_visible, offline_notify, ipv6, observed_ip, traffic_accounting, traffic_reset_day, traffic_correction_bytes, traffic_correction_cycle_start, billing_cycle, ip, region, price_cents, price_currency, traffic_limit_bytes, traffic_used_bytes, expires_at, sort_order, status, cpu_percent, memory_percent, disk_percent, uptime_seconds,
 		     agent_version, last_seen_at, created_at, updated_at
 		     FROM servers`
 
@@ -49,16 +67,20 @@ func (r *Repo) CreateServer(ctx context.Context, name, status string) (int64, er
 	return res.LastInsertId()
 }
 
-func (r *Repo) CreateServerWithAgentKey(ctx context.Context, name, status, keyHash string, keyEnc []byte) (int64, error) {
+func (r *Repo) CreateServerWithAgentKey(ctx context.Context, name, status, keyHash string, keyEnc []byte, inventory ServerInventory) (int64, error) {
 	if status == "" {
 		status = ServerStatusActive
 	}
 	now := nowUnix()
+	var expiresAt any
+	if inventory.ExpiresAt != nil {
+		expiresAt = inventory.ExpiresAt.Unix()
+	}
 	var id int64
 	err := Tx(ctx, r.DB, func(tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx,
-			`INSERT INTO servers (name, status, created_at, updated_at) VALUES (?, ?, ?, ?)`,
-			name, status, now, now)
+			`INSERT INTO servers (name, status, notes, public_visible, offline_notify, ipv6, traffic_accounting, traffic_reset_day, billing_cycle, ip, region, price_cents, price_currency, traffic_limit_bytes, expires_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			name, status, inventory.Notes, inventory.PublicVisible, inventory.OfflineNotify, inventory.IPv6, inventory.TrafficAccounting, inventory.TrafficResetDay, inventory.BillingCycle, inventory.IP, inventory.Region, inventory.PriceCents, inventory.PriceCurrency, inventory.TrafficLimitBytes, expiresAt, now, now)
 		if err != nil {
 			return mapErr(err)
 		}
@@ -82,7 +104,7 @@ func (r *Repo) GetServer(ctx context.Context, id int64) (Server, error) {
 }
 
 func (r *Repo) ListServers(ctx context.Context) ([]Server, error) {
-	rows, err := r.DB.QueryContext(ctx, serverSelect+` ORDER BY id`)
+	rows, err := r.DB.QueryContext(ctx, serverSelect+` ORDER BY sort_order, id`)
 	if err != nil {
 		return nil, mapErr(err)
 	}
@@ -95,7 +117,7 @@ func (r *Repo) ListServersPage(ctx context.Context, page, size int) ([]Server, i
 		return nil, 0, mapErr(err)
 	}
 	page, size = normalizePage(page, size)
-	rows, err := r.DB.QueryContext(ctx, serverSelect+` ORDER BY id LIMIT ? OFFSET ?`, size, (page-1)*size)
+	rows, err := r.DB.QueryContext(ctx, serverSelect+` ORDER BY sort_order, id LIMIT ? OFFSET ?`, size, (page-1)*size)
 	if err != nil {
 		return nil, 0, mapErr(err)
 	}
@@ -146,15 +168,55 @@ func (r *Repo) DeleteServer(ctx context.Context, id int64) error {
 
 func scanServer(scan func(dest ...any) error) (Server, error) {
 	var s Server
-	var lastSeenAt sql.NullInt64
+	var lastSeenAt, expiresAt sql.NullInt64
 	var createdAt, updatedAt int64
-	err := scan(&s.ID, &s.Name, &s.Status, &s.CPUPercent, &s.MemoryPercent, &s.DiskPercent,
+	var publicVisible, offlineNotify int
+	err := scan(&s.ID, &s.Name, &s.Notes, &publicVisible, &offlineNotify, &s.IPv6, &s.ObservedIP, &s.TrafficAccounting, &s.TrafficResetDay, &s.TrafficCorrectionBytes, &s.TrafficCorrectionCycleStart, &s.BillingCycle, &s.IP, &s.Region, &s.PriceCents, &s.PriceCurrency, &s.TrafficLimitBytes, &s.TrafficUsedBytes, &expiresAt, &s.SortOrder, &s.Status, &s.CPUPercent, &s.MemoryPercent, &s.DiskPercent,
 		&s.UptimeSeconds, &s.AgentVersion, &lastSeenAt, &createdAt, &updatedAt)
 	if err != nil {
 		return Server{}, mapErr(err)
 	}
+	s.PublicVisible = publicVisible != 0
+	s.OfflineNotify = offlineNotify != 0
 	s.LastSeenAt = toTimePtr(lastSeenAt)
+	s.ExpiresAt = toTimePtr(expiresAt)
 	s.CreatedAt = toTime(createdAt)
 	s.UpdatedAt = toTime(updatedAt)
 	return s, nil
+}
+
+// ServerInventory contains optional billing and display information for a server.
+type ServerInventory struct {
+	Notes             string
+	PublicVisible     bool
+	OfflineNotify     bool
+	IPv6              string
+	TrafficAccounting string
+	TrafficResetDay   int
+	BillingCycle      string
+	IP                string
+	Region            string
+	PriceCents        int64
+	PriceCurrency     string
+	TrafficLimitBytes int64
+	ExpiresAt         *time.Time
+}
+
+func (r *Repo) ReorderServers(ctx context.Context, ids []int64) error {
+	return Tx(ctx, r.DB, func(tx *sql.Tx) error {
+		for i, id := range ids {
+			res, err := tx.ExecContext(ctx, `UPDATE servers SET sort_order = ?, updated_at = ? WHERE id = ?`, i+1, nowUnix(), id)
+			if err != nil {
+				return mapErr(err)
+			}
+			n, err := res.RowsAffected()
+			if err != nil {
+				return err
+			}
+			if n != 1 {
+				return ErrNotFound
+			}
+		}
+		return nil
+	})
 }

@@ -444,12 +444,16 @@ func (r *Repo) DeleteNodeAndBump(ctx context.Context, nodeID, serverID int64) er
 	})
 }
 
-func (r *Repo) UpdateServerAndBump(ctx context.Context, id int64, name, status string) (Server, error) {
+func (r *Repo) UpdateServerAndBump(ctx context.Context, id int64, name, status string, inventory ServerInventory) (Server, error) {
 	var s Server
+	var expiresAt any
+	if inventory.ExpiresAt != nil {
+		expiresAt = inventory.ExpiresAt.Unix()
+	}
 	err := Tx(ctx, r.DB, func(tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx,
-			`UPDATE servers SET name = ?, status = ?, updated_at = ? WHERE id = ?`,
-			name, status, nowUnix(), id)
+			`UPDATE servers SET name = ?, status = ?, notes = ?, public_visible = ?, offline_notify = ?, ipv6 = ?, traffic_accounting = ?, traffic_reset_day = ?, billing_cycle = ?, ip = ?, region = ?, price_cents = ?, price_currency = ?, traffic_limit_bytes = ?, expires_at = ?, updated_at = ? WHERE id = ?`,
+			name, status, inventory.Notes, inventory.PublicVisible, inventory.OfflineNotify, inventory.IPv6, inventory.TrafficAccounting, inventory.TrafficResetDay, inventory.BillingCycle, inventory.IP, inventory.Region, inventory.PriceCents, inventory.PriceCurrency, inventory.TrafficLimitBytes, expiresAt, nowUnix(), id)
 		if err != nil {
 			return mapErr(err)
 		}

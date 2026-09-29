@@ -18,6 +18,7 @@ type Node struct {
 	Protocol         string
 	Port             int
 	ProtocolSettings string
+	SNI              string
 	Rate             float64
 	Tags             string
 	SecretEnc        []byte
@@ -82,9 +83,9 @@ const (
 	ProtocolHTTP        = "http"
 )
 
-const nodeSelect = `SELECT id, server_id, address, ipv6_enabled, ipv6_address, name, protocol, port, protocol_settings, rate, tags, secret_enc, status, chain_node_id, chain_custom_node_id, chain_custom_entry_key, created_at, updated_at FROM nodes`
+const nodeSelect = `SELECT id, server_id, address, ipv6_enabled, ipv6_address, name, protocol, port, protocol_settings, CASE WHEN json_valid(protocol_settings) AND protocol = 'vless' THEN COALESCE(json_extract(protocol_settings, '$.reality_settings.server_name'), '') WHEN json_valid(protocol_settings) THEN COALESCE(json_extract(protocol_settings, '$.tls.server_name'), '') ELSE '' END, rate, tags, secret_enc, status, chain_node_id, chain_custom_node_id, chain_custom_entry_key, created_at, updated_at FROM nodes`
 
-const nodeSelectWithServer = `SELECT n.id, n.server_id, n.address, n.ipv6_enabled, n.ipv6_address, n.name, n.protocol, n.port, n.protocol_settings, n.rate, n.tags, n.secret_enc, n.status, n.chain_node_id, n.chain_custom_node_id, n.chain_custom_entry_key, n.created_at, n.updated_at, s.name, cn.name, cs.name, ccn.name, s.status, s.last_seen_at
+const nodeSelectWithServer = `SELECT n.id, n.server_id, n.address, n.ipv6_enabled, n.ipv6_address, n.name, n.protocol, n.port, n.protocol_settings, CASE WHEN json_valid(n.protocol_settings) AND n.protocol = 'vless' THEN COALESCE(json_extract(n.protocol_settings, '$.reality_settings.server_name'), '') WHEN json_valid(n.protocol_settings) THEN COALESCE(json_extract(n.protocol_settings, '$.tls.server_name'), '') ELSE '' END, n.rate, n.tags, n.secret_enc, n.status, n.chain_node_id, n.chain_custom_node_id, n.chain_custom_entry_key, n.created_at, n.updated_at, s.name, cn.name, cs.name, ccn.name, s.status, s.last_seen_at
 	FROM nodes n JOIN servers s ON s.id = n.server_id
 	LEFT JOIN nodes cn ON cn.id = n.chain_node_id
 	LEFT JOIN servers cs ON cs.id = cn.server_id
@@ -302,7 +303,15 @@ func (r *Repo) ListServersChainingCustomNode(ctx context.Context, customNodeID i
 // chain exit is one of the given server's nodes.
 func (r *Repo) ListChainEntriesTargetingServer(ctx context.Context, serverID int64) ([]Node, error) {
 	rows, err := r.DB.QueryContext(ctx,
-		`SELECT e.id, e.server_id, e.address, e.ipv6_enabled, e.ipv6_address, e.name, e.protocol, e.port, e.protocol_settings, e.rate, e.tags, e.secret_enc, e.status, e.chain_node_id, e.chain_custom_node_id, e.chain_custom_entry_key, e.created_at, e.updated_at
+		`SELECT e.id, e.server_id, e.address, e.ipv6_enabled, e.ipv6_address, e.name, e.protocol, e.port, e.protocol_settings,
+		 CASE
+		  WHEN json_valid(e.protocol_settings) AND e.protocol = 'vless'
+		   THEN COALESCE(json_extract(e.protocol_settings, '$.reality_settings.server_name'), '')
+		  WHEN json_valid(e.protocol_settings)
+		   THEN COALESCE(json_extract(e.protocol_settings, '$.tls.server_name'), '')
+		  ELSE ''
+		 END,
+		 e.rate, e.tags, e.secret_enc, e.status, e.chain_node_id, e.chain_custom_node_id, e.chain_custom_entry_key, e.created_at, e.updated_at
 		 FROM nodes e JOIN nodes x ON x.id = e.chain_node_id
 		 WHERE x.server_id = ? ORDER BY e.id`, serverID)
 	if err != nil {
@@ -350,7 +359,7 @@ func scanNode(scan func(dest ...any) error) (Node, error) {
 	var createdAt, updatedAt int64
 	var ipv6Enabled int
 	var chainNodeID, chainCustomNodeID sql.NullInt64
-	err := scan(&n.ID, &n.ServerID, &n.Address, &ipv6Enabled, &n.IPv6Address, &n.Name, &n.Protocol, &n.Port, &n.ProtocolSettings, &n.Rate, &n.Tags, &secretEnc, &n.Status, &chainNodeID, &chainCustomNodeID, &n.ChainCustomEntryKey, &createdAt, &updatedAt)
+	err := scan(&n.ID, &n.ServerID, &n.Address, &ipv6Enabled, &n.IPv6Address, &n.Name, &n.Protocol, &n.Port, &n.ProtocolSettings, &n.SNI, &n.Rate, &n.Tags, &secretEnc, &n.Status, &chainNodeID, &chainCustomNodeID, &n.ChainCustomEntryKey, &createdAt, &updatedAt)
 	if err != nil {
 		return Node{}, mapErr(err)
 	}
@@ -375,7 +384,7 @@ func scanNodeWithServerName(scan func(dest ...any) error) (Node, error) {
 	var chainNodeID, chainCustomNodeID sql.NullInt64
 	var chainNodeName, chainServerName, chainCustomNodeName sql.NullString
 	var serverLastSeenAt sql.NullInt64
-	err := scan(&n.ID, &n.ServerID, &n.Address, &ipv6Enabled, &n.IPv6Address, &n.Name, &n.Protocol, &n.Port, &n.ProtocolSettings, &n.Rate, &n.Tags, &secretEnc, &n.Status, &chainNodeID, &chainCustomNodeID, &n.ChainCustomEntryKey, &createdAt, &updatedAt, &n.ServerName, &chainNodeName, &chainServerName, &chainCustomNodeName, &n.ServerStatus, &serverLastSeenAt)
+	err := scan(&n.ID, &n.ServerID, &n.Address, &ipv6Enabled, &n.IPv6Address, &n.Name, &n.Protocol, &n.Port, &n.ProtocolSettings, &n.SNI, &n.Rate, &n.Tags, &secretEnc, &n.Status, &chainNodeID, &chainCustomNodeID, &n.ChainCustomEntryKey, &createdAt, &updatedAt, &n.ServerName, &chainNodeName, &chainServerName, &chainCustomNodeName, &n.ServerStatus, &serverLastSeenAt)
 	if err != nil {
 		return Node{}, mapErr(err)
 	}
