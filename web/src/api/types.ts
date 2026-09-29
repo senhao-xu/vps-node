@@ -51,6 +51,12 @@ export type NodeRef = {
   name: string
 }
 
+export type ServerRef = NodeRef & {
+  ip: string
+  ipv6: string
+  observed_ip: string
+}
+
 export type ChainNodeRef = NodeRef & {
   server_name: string
 }
@@ -69,7 +75,7 @@ export type NodeBrief = {
   tags: string[]
   status: NodeStatus
   created_at: string
-  server: NodeRef
+  server: ServerRef
   /** Effective server status; only present on the node list response. */
   server_status?: ServerStatus
   chain_node_id: number | null
@@ -83,7 +89,7 @@ export type NodeBrief = {
 export type NodeDetail = NodeBrief & {
   user_count: number
   online_users: number
-  server: NodeRef
+  server: ServerRef
   settings?: NodeSettings
 }
 

@@ -82,8 +82,11 @@ func toUserDetailDTO(u repo.User, nodeCount int64) userDetailDTO {
 }
 
 type nodeRefDTO struct {
-	ID   int64  `json:"id"`
-	Name string `json:"name"`
+	ID         int64  `json:"id"`
+	Name       string `json:"name"`
+	IP         string `json:"ip"`
+	IPv6       string `json:"ipv6"`
+	ObservedIP string `json:"observed_ip"`
 }
 
 type chainRefDTO struct {
@@ -153,7 +156,7 @@ func toNodeDTO(n repo.Node) nodeDTO {
 		Rate:                n.Rate,
 		Tags:                nodeTags(n.Tags),
 		Status:              n.Status,
-		Server:              nodeRefDTO{ID: n.ServerID, Name: n.ServerName},
+		Server:              nodeRefDTO{ID: n.ServerID, Name: n.ServerName, IP: n.ServerIP, IPv6: n.ServerIPv6, ObservedIP: n.ServerObservedIP},
 		ChainNodeID:         n.ChainNodeID,
 		ChainCustomNodeID:   n.ChainCustomNodeID,
 		ChainCustomEntryKey: n.ChainCustomEntryKey,

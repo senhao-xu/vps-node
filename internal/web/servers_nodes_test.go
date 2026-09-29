@@ -1323,3 +1323,36 @@ func TestNodeDTOIncludesExternalChainFieldsOnEveryPath(t *testing.T) {
 	}
 	assertExternal("user nodes", body, jsonMap(t, body)["nodes"].([]any)[0].(map[string]any))
 }
+
+func TestNodeListServerAddressFamilies(t *testing.T) {
+	e := newTestEnv(t)
+	cookie := e.login(t)
+	serverID := e.seedServer(t, "dual-stack")
+
+	resp, body := e.do(t, "PUT", fmt.Sprintf("/api/servers/%d", serverID), map[string]any{
+		"ip": "203.0.113.8", "ipv6": "2001:db8::8",
+	}, cookie)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("update server addresses: %d %s", resp.StatusCode, body)
+	}
+	_, err := e.repo.CreateNode(context.Background(), repo.NewNode{
+		ServerID: serverID, Address: "node.example.com", Name: "domain-node",
+		Protocol: repo.ProtocolShadowsocks, Port: 8388,
+	})
+	if err != nil {
+		t.Fatalf("create node: %v", err)
+	}
+
+	resp, body = e.do(t, "GET", "/api/nodes", nil, cookie)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("list nodes: %d %s", resp.StatusCode, body)
+	}
+	node := jsonMap(t, body)["items"].([]any)[0].(map[string]any)
+	if node["address"] != "node.example.com" {
+		t.Fatalf("node address changed: %s", body)
+	}
+	server := node["server"].(map[string]any)
+	if server["ip"] != "203.0.113.8" || server["ipv6"] != "2001:db8::8" || server["observed_ip"] != "" {
+		t.Fatalf("node server address families missing: %s", body)
+	}
+}

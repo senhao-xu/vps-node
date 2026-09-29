@@ -345,7 +345,7 @@ func (h *Handler) handleNodeGet(w http.ResponseWriter, r *http.Request) {
 		nodeDTO:     toNodeDTO(n),
 		UserCount:   userCount,
 		OnlineUsers: onlineUsers[id],
-		Server:      nodeRefDTO{ID: server.ID, Name: server.Name},
+		Server:      nodeRefDTO{ID: server.ID, Name: server.Name, IP: server.IP, IPv6: server.IPv6, ObservedIP: server.ObservedIP},
 		Settings:    settings,
 	})
 }

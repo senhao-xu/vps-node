@@ -98,6 +98,15 @@ function addressFamily(address: string): string {
   return ''
 }
 
+function serverAddressFamilies(node: NodeBrief): string[] {
+  const addresses = [node.server.ip, node.server.ipv6, node.server.observed_ip]
+  const primaryFamily = addressFamily(node.address)
+  const families: string[] = []
+  if (addresses.some((address) => address !== '' && !address.includes(':')) || primaryFamily === 'IPv4') families.push('IPv4')
+  if (addresses.some((address) => address.includes(':')) || primaryFamily === 'IPv6' || (node.ipv6_enabled && node.ipv6_address)) families.push('IPv6')
+  return families
+}
+
 const serverChipLabel = computed(() => {
   if (!serverFilter.value) return '全部服务器'
   const hit = servers.value.find((server) => String(server.id) === serverFilter.value)
@@ -415,9 +424,10 @@ onMounted(() => {
                 {{ row.server.name }}
               </RouterLink>
               <span
-                v-if="addressFamily(row.address)"
+                v-for="family in serverAddressFamilies(row)"
+                :key="family"
                 class="address-family"
-              >{{ addressFamily(row.address) }}</span>
+              >{{ family }}</span>
             </div>
             <span
               class="server-address mono"
