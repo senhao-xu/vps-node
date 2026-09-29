@@ -70,7 +70,7 @@ async function save() {
 </script>
 
 <template>
-  <div class="card compact">
+  <div>
     <div class="card-head">
       <h2 class="card-title">
         连接概况

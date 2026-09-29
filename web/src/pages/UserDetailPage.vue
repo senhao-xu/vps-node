@@ -237,7 +237,7 @@ onMounted(() => {
               :user="user"
               @updated="onUserUpdated"
             />
-            <div class="two-col">
+            <div class="card compact merged-card">
               <UserDetailTraffic
                 :user="user"
                 @updated="onUserUpdated"
@@ -259,7 +259,7 @@ onMounted(() => {
                 <p>限制并发设备和带宽，控制该用户可以连接的节点范围。</p>
               </div>
             </div>
-            <div class="two-col">
+            <div class="card compact merged-card">
               <UserDetailLimits
                 :user="user"
                 @updated="onUserUpdated"
@@ -403,23 +403,21 @@ onMounted(() => {
   padding: 72px 0;
 }
 
-.two-col {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
-  gap: 16px;
-  align-items: stretch;
-  margin-top: 14px;
-}
-
-.two-col > * {
-  min-width: 0;
-}
-
 .detail-main :deep(.card) {
   margin-top: 0;
 }
 
-.detail-main .two-col + :deep(.card) {
+.detail-main .merged-card {
+  margin-top: 14px;
+}
+
+.merged-card > * + * {
+  margin-top: var(--spacing-lg);
+  padding-top: var(--spacing-lg);
+  border-top: 1px solid var(--color-border);
+}
+
+.detail-main .merged-card + :deep(.card) {
   margin-top: var(--spacing-md);
 }
 

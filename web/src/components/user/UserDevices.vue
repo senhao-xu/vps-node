@@ -58,7 +58,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="card">
+  <div>
     <div class="card-head">
       <h2 class="card-title">
         在线设备 <span class="device-count">{{ items.length }}</span>
