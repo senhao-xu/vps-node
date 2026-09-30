@@ -32,28 +32,35 @@ const loadingShare = ref(false)
 const shareError = ref('')
 const qrUrls = ref<string[]>([])
 const copiedLink = ref('')
+let shareRequest = 0
+let usersRequest = 0
 
 const selectedUser = computed(
   () => users.value.find((user) => user.id === selectedUserId.value) ?? null,
 )
 
 watch(
-  () => props.open,
-  (open) => {
-    if (!open) return
+  () => [props.open, props.node?.id] as const,
+  ([open]) => {
+    shareRequest++
+    usersRequest++
     query.value = ''
     users.value = []
     userError.value = ''
+    loadingUsers.value = false
     selectedUserId.value = null
     share.value = null
+    loadingShare.value = false
     shareError.value = ''
     qrUrls.value = []
     copiedLink.value = ''
-    void loadUsers()
+    if (open) void loadUsers()
   },
+  { flush: 'sync' },
 )
 
 async function loadUsers() {
+  const request = ++usersRequest
   loadingUsers.value = true
   userError.value = ''
   try {
@@ -62,11 +69,12 @@ async function loadUsers() {
       page: 1,
       pageSize: 50,
     })
+    if (request !== usersRequest || !props.open) return
     users.value = result.items
   } catch (err) {
-    userError.value = errorMessage(err)
+    if (request === usersRequest && props.open) userError.value = errorMessage(err)
   } finally {
-    loadingUsers.value = false
+    if (request === usersRequest) loadingUsers.value = false
   }
 }
 
@@ -79,22 +87,27 @@ async function selectUser(user: User) {
 async function loadShare() {
   const node = props.node
   const userId = selectedUserId.value
-  if (!node || userId === null) return
+  if (!props.open || !node || userId === null) return
+  const request = ++shareRequest
+  const current = () => request === shareRequest && props.open &&
+    props.node?.id === node.id && selectedUserId.value === userId
   loadingShare.value = true
   shareError.value = ''
   share.value = null
   qrUrls.value = []
   try {
     const result = await getNodeShare(node.id, userId)
+    if (!current()) return
     const urls = await Promise.all(
       result.links.map((link) => toDataURL(link, { margin: 1, width: 240 }).catch(() => '')),
     )
+    if (!current()) return
     share.value = result
     qrUrls.value = urls
   } catch (err) {
-    shareError.value = errorMessage(err)
+    if (current()) shareError.value = errorMessage(err)
   } finally {
-    loadingShare.value = false
+    if (current()) loadingShare.value = false
   }
 }
 

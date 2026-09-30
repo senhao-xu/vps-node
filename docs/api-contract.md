@@ -9,7 +9,7 @@ Single source of truth for Panel Admin API, Panel Agent API, and the Vue fronten
 - All timestamps are RFC3339 UTC strings, e.g. `2026-09-20T10:00:00Z`.
 - All byte counters are non-negative integers (bytes).
 - Unknown fields are ignored; unknown enum values are rejected with `invalid_request`.
-- IDs are 64-bit integers serialized as JSON numbers.
+- IDs are 64-bit integers serialized as JSON numbers. User, server and node IDs are never reused after deletion; upgrades seed their sequences above both live IDs and retained historical IDs.
 
 ## Auth Scopes
 
@@ -287,7 +287,7 @@ Response `200`: paginated list of:
 { "name": "HK-01", "ip": "103.21.244.18", "region": "HK", "price_cents": 3500, "price_currency": "USD", "traffic_limit_bytes": 1073741824000, "expires_at": "2026-12-31T23:59:59Z" }
 ```
 
-All inventory fields are optional. Empty IP, IPv6 and region mean unspecified; zero traffic limit means unlimited; empty expiry means no expiry. Price is stored in minor currency units. `billing_cycle` is one of `monthly`, `quarterly`, `semiannual`, `yearly`, or `one_time`. `traffic_accounting` is `max` or `sum`, and `traffic_reset_day` is `1..31` with short months clamped to their last day. `traffic_used_bytes` is a read-only lifetime counter. Monthly fields are computed from the active UTC billing window. Lists are ordered by `sort_order`, then id. `public_visible` and `offline_notify` persist preferences for future public-page and notification integrations.
+All inventory fields are optional. Empty IP, IPv6 and region mean unspecified; zero traffic limit means unlimited; empty expiry means no expiry. Price is stored in minor currency units. `billing_cycle` is one of `monthly`, `quarterly`, `semiannual`, `yearly`, or `one_time`. `traffic_accounting` is `max` or `sum`, and `traffic_reset_day` is `1..31` with short months clamped to their last day. `traffic_used_bytes` is a read-only lifetime counter. Monthly fields are computed from durable daily totals in the active UTC billing window. Detailed traffic retention and row caps do not reduce these totals. Upgrade backfills available history; traffic already purged before the upgrade cannot be recovered. Lists are ordered by `sort_order`, then id. `public_visible` and `offline_notify` persist preferences for future public-page and notification integrations.
 
 Response `201`: server DTO plus `agent_key`, the plaintext Agent Key issued automatically on creation. `status` starts as `active`. The key uses the same mechanism as `POST /api/servers/:id/agent-key` and can be read back via `GET /api/servers/:id/agent-key`. No server revision is bumped (identity is not runtime config).
 
@@ -315,7 +315,7 @@ Response `200`: server DTO. Setting `status: "disabled"` stops config sync for t
 
 ### DELETE /api/servers/:id
 
-Response `200`: `{}`. Panel marks the server deleted, removes agent, nodes, `user_nodes` referencing its nodes and its online devices; traffic records are retained until retention cleanup. Nodes on other servers chaining into this server's nodes are unlinked (`chain_node_id` cleared) and their servers' revisions are bumped.
+Response `200`: `{}`. Panel marks the server deleted, removes agent, nodes, `user_nodes` referencing its nodes and its online devices; affected users’ online counts are refreshed in the same transaction. Traffic records are retained until retention cleanup. Nodes on other servers chaining into this server's nodes are unlinked (`chain_node_id` cleared) and their servers' revisions are bumped.
 
 ### GET /api/servers/:id/agent-key
 
@@ -353,14 +353,16 @@ Protocol secrets are never exposed.
 
 `chain_custom_node_id` + `chain_custom_entry_key` select a **single line inside a custom node source** (external exit) instead of a managed node; the two targeting modes are mutually exclusive (`422 validation` when both are non-null). The source must exist and be `active` (`422` otherwise) and the key must be the 64-character lowercase hex entry `key` from `GET /api/custom-nodes/:id/nodes` (`422` otherwise). The entry-node agent dials the external server with the line's own credentials (no relay user is injected, no panel-side traffic/device/visit accounting for the exit hop); entries the renderer cannot resolve (missing/changed key, disabled source, no subscription cache, unsupported type) fall back to a direct outbound. Only the entry node's owning server revision is bumped (there is no managed exit server).
 
-- `shadowsocks`: required `cipher` (one of `2022-blake3-aes-128-gcm`, `2022-blake3-aes-256-gcm`, `2022-blake3-chacha20-poly1305`); optional `obfs`, `obfs_settings`, `plugin`, `plugin_opts`; optional secret `password` (server password, otherwise derived).
+- `shadowsocks`: required `cipher` (one of `2022-blake3-aes-128-gcm`, `2022-blake3-aes-256-gcm`); optional `obfs`, `obfs_settings`, `plugin`, `plugin_opts`; optional secret `password` (server password, otherwise derived).
 - `vless`: required secret `private_key` (X25519, 32 decoded bytes) and `reality_settings.server_name`; `tls` (integer, must be `2`), `reality_settings.server_port` (1-65535, default `443`), `reality_settings.short_id` (even-length hex of at most 16 characters), `reality_settings.allow_insecure`, `flow` (empty or `xtls-rprx-vision`), `network` (empty or `tcp`), `tls_settings`, `network_settings`, `multiplex`, `utls` are optional. `reality_settings.public_key` is derived from `private_key`; a contradicting value returns `422 validation`.
-- `hysteria2`: required secret `certificate`/`private_key` (matching PEM pair covering `tls.server_name`) and `tls.server_name`; optional secret `password`, `version` (integer, must be `2`), `bandwidth{up,down}` (non-negative integers), `obfs{open,type,password}` (`type` empty or `salamander`, `password` at most 64 characters), `tls.allow_insecure`, and `hop_interval` (`start-end`, ports within 1-65535; subscription-only, never rendered into the inbound).
+- `hysteria2`: required secret `certificate`/`private_key` (matching PEM pair covering `tls.server_name`) and `tls.server_name`; optional secret `password`, `version` (integer, must be `2`), `bandwidth{up,down}` (non-negative integers), `obfs{open,type,password}` (`type` empty or `salamander`, `password` at most 64 characters), `tls.allow_insecure`, and `hop_interval` (`start-end`, ports within 1-65535; subscription-only, never rendered into the inbound; send an empty string to clear a saved range).
 - `anytls`: required secret `certificate`/`private_key` (matching PEM pair covering `tls.server_name`) and `tls.server_name`; optional secret `password`, `tls.allow_insecure`, and `padding_scheme` (string or array of strings).
 - `socks`: no protocol settings — `settings` must be `{}` (or omitted) and any supplied key returns `422 validation`. Each authorized user authenticates on the inbound with `username = u-<user id>` and `password = <user uuid>`; the sing-box inbound type is `socks` and the shared link scheme/Clash type are `socks` / `socks5`.
 - `http`: optional TLS — a plaintext HTTP proxy accepts `{}` (or omitted); supplying TLS requires `tls.server_name` together with the secret `certificate`/`private_key` (matching PEM pair covering `tls.server_name`, validated exactly like hysteria2/anytls), plus optional `tls.allow_insecure` (client-side only). Supplying only a server name, only part of the pair, or a mismatched pair returns `422 validation`. Each authorized user authenticates with `username = u-<user id>` and `password = <user uuid>`; the sing-box inbound / Clash proxy type are both `http`, and the sing-box outbound type for chain exits is `http`. Once TLS is enabled it cannot be reverted to plaintext through the UI (blank secret fields keep the stored value).
 
 Response `201`: node DTO.
+
+Managed SS2022 ChaCha is rejected because the embedded runtime does not support its multi-user mode. Existing managed ChaCha nodes require an explicit cipher correction; secrets are never silently changed. External/custom-node ChaCha conversion remains supported.
 
 ### POST /api/nodes/reality-keypair
 
@@ -640,6 +642,12 @@ stay unique.
 
 ---
 
+## GET /install-agent.sh
+
+Public static shell-script endpoint, embedded in both panel build variants; content type is `text/x-shellscript; charset=utf-8`. It contains no credentials. The generated install command downloads it successfully before execution and passes `PANEL_URL`, `SERVER_ID` and `AGENT_KEY` to the installer shell. Fresh installations require these values. Existing configurations are preserved during upgrades. Default binaries come from the project’s GitHub Release assets; custom mirrors can override `PANEL_DOWNLOAD_BASE`.
+
+---
+
 # Agent API
 
 All Agent endpoints require `Authorization: Bearer <agent_key>`. The agent's `server_id` is **always derived from the key server-side**; request bodies never carry a trusted `server_id`. The agent is stateless: no bootstrap/register endpoint exists, and all resume state is returned by the panel.
@@ -666,7 +674,7 @@ Panel stores `last_seen_at`, metrics and version, and marks the server online. A
 
 ## GET /api/agent/config?version=<applied-revision>
 
-Returns the server-scoped rendered configuration.
+Returns the server-scoped rendered configuration. Before comparing revisions, the panel reconciles natural expiry using a persistent per-server watermark; expired users remain absent without changing their stored status. Crossing a user’s quota bumps every authorized server revision in the traffic transaction. This upgrade also bumps existing server revisions once so running agents fetch the corrected configuration.
 
 - If `version` equals the current server revision: `200` with `{ "status": "current", "revision": 1024 }` and no config payload.
 - Otherwise: `200` with:
@@ -675,7 +683,7 @@ Returns the server-scoped rendered configuration.
 {
   "status": "updated",
   "revision": 1024,
-  "renderer_version": "singbox-render-v2",
+  "renderer_version": "singbox-render-v3",
   "config": { "singbox": { } },
   "users": [
     {
@@ -696,11 +704,13 @@ Returns the server-scoped rendered configuration.
 
 `config.singbox` is the complete, rendered sing-box configuration for the server. `renderer_version` identifies the rendering contract (see `internal/singbox.ContractVersion`) so agents can detect renderer changes. `credential` contains protocol-derived secrets (already generated/decrypted by Panel). For `socks` nodes the credential is `{ "contract": "socks-v1", "username": "u-<user id>", "password": "<user uuid>" }` and for `http` nodes `{ "contract": "http-v1", "username": "u-<user id>", "password": "<user uuid>" }`, matching the inbound user the agent must authenticate. `device_limit` and `speed_limit` are copied from the user row so the embedded runtime can enforce them. Only eligible users on the server's nodes are included; expired/disabled/over-transfer users are absent, which instructs the agent to remove them locally.
 
+HTTP/SOCKS nodes with no eligible users and no relay credentials omit their inbound and corresponding chain route/outbound, preventing anonymous access. Relay-only entry points still require relay authentication.
+
 Chained nodes (see `POST /api/nodes` `chain_node_id`) render one extra outbound per chained entry node (`tag: chain-<node id>`, a full protocol client of the exit node, credentials derived from the panel app key) plus a `route.rules` entry mapping the entry inbound tag to that outbound; `route.final` stays `direct`. Exit-side inbounds carry an additional pseudo user named `relay-<entry server id>` with the same derived credential; agents never map that name to a panel user, so relay traffic is neither attributed nor reported.
 
 External chain exits (`chain_custom_node_id` + `chain_custom_entry_key`) render the same `tag: chain-<node id>` outbound and `route.rules` entry, but the outbound is a protocol client built from the selected custom-node line's own credentials (`ss`/`vless`/`trojan`/`vmess`/`hysteria2`/`anytls`/`socks5`/`http`) — no relay user exists on the external server. Config building performs no network IO: `subscription` sources are read from the stored fetch cache, and any unresolvable entry (missing/changed key, disabled source, empty cache, unsupported type) simply renders no chain outbound for that node, leaving it direct. A node whose `chain_node_id` is set ignores `chain_custom_node_id` (they cannot both be set through the API).
 
-Agent applies the config by loading it into the embedded sing-box instance; it keeps the previous config and keeps polling with its applied `version` on failure, reporting the failure via heartbeat extension field `last_apply_error`.
+Agent applies the config by loading it into the embedded sing-box instance. On a failed replacement start it rebuilds the last successful service with its immutable config and credentials, preserving traffic and visit counters. Existing connections can be interrupted during restoration; restoration failures are reported alongside the apply error. It keeps polling with its applied `version` on failure, reporting via heartbeat extension field `last_apply_error`.
 
 ## POST /api/agent/traffic
 

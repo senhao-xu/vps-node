@@ -33,8 +33,8 @@ func TestMigrateIdempotent(t *testing.T) {
 	if err := d.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations`).Scan(&count); err != nil {
 		t.Fatalf("count migrations: %v", err)
 	}
-	if count != 15 {
-		t.Fatalf("expected 15 applied migrations, got %d", count)
+	if count != 17 {
+		t.Fatalf("expected 17 applied migrations, got %d", count)
 	}
 
 	for _, table := range []string{
@@ -43,7 +43,7 @@ func TestMigrateIdempotent(t *testing.T) {
 		"traffic_batches", "device_batches", "settings", "admin_sessions",
 		"user_subscriptions", "visit_records", "visit_daily_domains",
 		"visit_batches", "custom_nodes", "user_custom_nodes",
-		"user_custom_node_entries",
+		"user_custom_node_entries", "server_traffic_daily",
 	} {
 		var name string
 		err := d.QueryRowContext(ctx,

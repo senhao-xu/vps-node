@@ -30,7 +30,8 @@ func (h *Handler) handleAgentConfig(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, errForbidden("config sync is disabled for this server"))
 		return
 	}
-	revision, err := h.repo.GetServerRevision(r.Context(), serverID)
+	now := h.repo.CurrentTime()
+	revision, err := h.repo.ReconcileServerExpiry(r.Context(), serverID, now)
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -43,7 +44,7 @@ func (h *Handler) handleAgentConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	payload, err := h.buildAgentConfigPayload(r.Context(), server)
+	payload, err := h.buildAgentConfigPayload(r.Context(), server, now)
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -94,7 +95,7 @@ type agentConfigPayload struct {
 	Users  []agentUserDTO
 }
 
-func (h *Handler) buildAgentConfigPayload(ctx context.Context, server repo.Server) (agentConfigPayload, error) {
+func (h *Handler) buildAgentConfigPayload(ctx context.Context, server repo.Server, now time.Time) (agentConfigPayload, error) {
 	nodes, err := h.repo.ListNodesByServer(ctx, server.ID)
 	if err != nil {
 		return agentConfigPayload{}, err
@@ -109,7 +110,7 @@ func (h *Handler) buildAgentConfigPayload(ctx context.Context, server repo.Serve
 		nodeByID[n.ID] = n
 	}
 
-	users, err := h.repo.ListEligibleUsersByServer(ctx, server.ID, time.Now())
+	users, err := h.repo.ListEligibleUsersByServer(ctx, server.ID, now)
 	if err != nil {
 		return agentConfigPayload{}, err
 	}

@@ -2,7 +2,7 @@ BINARY_PANEL ?= panel
 BINARY_AGENT ?= panel-agent
 GO ?= go
 VERSION ?= $(shell date -u +%Y%m%d)
-DOWNLOAD_BASE ?= https://example.com/downloads/vps-node
+DOWNLOAD_BASE ?= https://github.com/senhao-xu/vps-node/releases/latest/download
 PANEL_IMAGE ?= vps-node-panel:latest
 AGENT_IMAGE ?= vps-node-agent:latest
 AGENT_TAGS ?= with_quic,with_utls
@@ -40,9 +40,9 @@ test-integration:
 	$(GO) test ./... -tags integration,$(AGENT_TAGS)
 
 release-agent:
-	for arch in amd64 arm64 386; do \
+	set -e; for arch in amd64 arm64 386; do \
 		mkdir -p dist/panel-agent-linux-$$arch; \
-		$(GO) build -tags $(AGENT_TAGS) -trimpath -ldflags "-s -w" \
+		CGO_ENABLED=0 GOOS=linux GOARCH=$$arch $(GO) build -tags $(AGENT_TAGS) -trimpath -ldflags "-s -w" \
 			-o dist/panel-agent-linux-$$arch/panel-agent ./cmd/agent; \
 		cp deploy/panel-agent.service deploy/install-agent.sh dist/panel-agent-linux-$$arch/; \
 		tar -czf dist/panel-agent-$(VERSION)-linux-$$arch.tar.gz -C dist/panel-agent-linux-$$arch \

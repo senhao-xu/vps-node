@@ -20,6 +20,7 @@ COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY cmd ./cmd
 COPY internal ./internal
+COPY deploy/assets.go deploy/install-agent.sh ./deploy/
 COPY --from=ui /src/web/dist internal/webui/dist
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
@@ -31,6 +32,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go build -trimpath -ldflags "-s -w" -o /out/panel-healthcheck ./cmd/panel-healthcheck
 
 FROM scratch
+COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=build /out/panel /panel
 COPY --from=build /out/panel-healthcheck /panel-healthcheck
 ENV PANEL_DB_PATH=/data/panel.db \

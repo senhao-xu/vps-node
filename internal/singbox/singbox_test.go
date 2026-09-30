@@ -91,7 +91,7 @@ func TestRenderShadowsocksDerivedServerPassword(t *testing.T) {
 		ID:       12,
 		Protocol: singbox.ProtocolShadowsocks,
 		Port:     8389,
-		Settings: map[string]any{"cipher": singbox.SSMethod2022Chacha20},
+		Settings: map[string]any{"cipher": singbox.SSMethod2022Aes256Gcm},
 		Users:    []singbox.User{{ID: 1, UUID: "uuid-1"}},
 	}
 	config, err := singbox.Render(testAppKey, []singbox.Node{node})
@@ -99,7 +99,7 @@ func TestRenderShadowsocksDerivedServerPassword(t *testing.T) {
 		t.Fatalf("render: %v", err)
 	}
 	inbound := config["inbounds"].([]map[string]any)[0]
-	want, _ := singbox.DeriveSSServerPassword(testAppKey, 12, singbox.SSMethod2022Chacha20)
+	want, _ := singbox.DeriveSSServerPassword(testAppKey, 12, singbox.SSMethod2022Aes256Gcm)
 	if inbound["password"] != want {
 		t.Fatalf("expected derived server password %s, got %v", want, inbound["password"])
 	}

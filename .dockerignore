@@ -12,7 +12,6 @@ internal/webui/dist
 deploy/*.yaml
 deploy/*.yml
 deploy/*.service
-deploy/install-agent.sh
 *.md
 *.log
 .env

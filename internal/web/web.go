@@ -92,6 +92,7 @@ func New(o Options) (http.Handler, error) {
 
 	mux := http.NewServeMux()
 	mux.Handle("GET /healthz", httpx.Healthz())
+	mux.HandleFunc("GET /install-agent.sh", handleAgentInstaller)
 	mux.HandleFunc("GET /", h.handlePublicSubscriptionDispatcher)
 	h.registerAdminRoutes(mux)
 	h.registerAgentRoutes(mux)

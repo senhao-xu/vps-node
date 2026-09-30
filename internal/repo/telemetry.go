@@ -43,6 +43,7 @@ func (r *Repo) IngestTrafficBatch(ctx context.Context, agentID, seq int64, recor
 		count     int64
 		duplicate bool
 	)
+	now := r.CurrentTime()
 	err := Tx(ctx, r.DB, func(tx *sql.Tx) error {
 		err := tx.QueryRowContext(ctx,
 			`SELECT records FROM traffic_batches WHERE agent_id = ? AND seq = ?`, agentID, seq).Scan(&count)
@@ -76,11 +77,36 @@ func (r *Repo) IngestTrafficBatch(ctx context.Context, agentID, seq int64, recor
 			delta.D += d
 			userDeltas[rec.UserID] = delta
 		}
+		affectedServers := []int64{}
 		for userID, delta := range userDeltas {
+			var eligible bool
+			if err := tx.QueryRowContext(ctx, `SELECT status = 'active'
+				AND (expires_at IS NULL OR expires_at > ?)
+				AND transfer_enable > 0 AND u + d < transfer_enable FROM users WHERE id = ?`, now.Unix(), userID).Scan(&eligible); err != nil {
+				return mapErr(err)
+			}
 			if _, err := tx.ExecContext(ctx,
 				`UPDATE users SET u = u + ?, d = d + ?, updated_at = ? WHERE id = ?`,
-				delta.U, delta.D, nowUnix(), userID); err != nil {
+				delta.U, delta.D, now.Unix(), userID); err != nil {
 				return mapErr(err)
+			}
+			if eligible {
+				var depleted bool
+				if err := tx.QueryRowContext(ctx, `SELECT u + d >= transfer_enable FROM users WHERE id = ?`, userID).Scan(&depleted); err != nil {
+					return mapErr(err)
+				}
+				if depleted {
+					serverIDs, err := listServerIDsByUserExec(ctx, tx, userID)
+					if err != nil {
+						return err
+					}
+					affectedServers = unionInt64(affectedServers, serverIDs)
+				}
+			}
+		}
+		for _, serverID := range affectedServers {
+			if err := bumpRevisionExec(ctx, tx, serverID); err != nil {
+				return err
 			}
 		}
 		if _, err := tx.ExecContext(ctx,

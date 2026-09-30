@@ -41,7 +41,7 @@ function selectable(node: NodeBrief): boolean {
 }
 
 function toggle(node: NodeBrief, checked: boolean) {
-  if (!selectable(node)) return
+  if (checked && !selectable(node)) return
   const next = checked
     ? [...props.modelValue, node.id]
     : props.modelValue.filter((id) => id !== node.id)
@@ -73,12 +73,12 @@ function toggle(node: NodeBrief, checked: boolean) {
         v-for="node in group.nodes"
         :key="node.id"
         class="node-item"
-        :class="{ disabled: !selectable(node), checked: isSelected(node) }"
+        :class="{ disabled: !selectable(node) && !isSelected(node), checked: isSelected(node) }"
       >
         <input
           type="checkbox"
           :checked="isSelected(node)"
-          :disabled="!selectable(node)"
+          :disabled="!selectable(node) && !isSelected(node)"
           @change="toggle(node, ($event.target as HTMLInputElement).checked)"
         >
         <span class="name">{{ node.name }}</span>

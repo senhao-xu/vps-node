@@ -44,6 +44,11 @@ func startEchoServer(t *testing.T) int {
 
 func httpProxyEcho(t *testing.T, proxyPort, echoPort int, payload []byte) {
 	t.Helper()
+	httpProxyEchoWithAuth(t, proxyPort, echoPort, "u-1", "p1", payload)
+}
+
+func httpProxyEchoWithAuth(t *testing.T, proxyPort, echoPort int, username, password string, payload []byte) {
+	t.Helper()
 	conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", proxyPort), 3*time.Second)
 	if err != nil {
 		t.Fatalf("dial proxy: %v", err)
@@ -51,7 +56,7 @@ func httpProxyEcho(t *testing.T, proxyPort, echoPort int, payload []byte) {
 	defer conn.Close()
 	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
 
-	auth := base64.StdEncoding.EncodeToString([]byte("u-1:p1"))
+	auth := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
 	request := fmt.Sprintf("CONNECT 127.0.0.1:%d HTTP/1.1\r\nHost: 127.0.0.1:%d\r\nProxy-Authorization: Basic %s\r\n\r\n",
 		echoPort, echoPort, auth)
 	if _, err := conn.Write([]byte(request)); err != nil {

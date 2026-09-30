@@ -95,6 +95,9 @@ func TestHTTPAgentConfigAndCredential(t *testing.T) {
 	if err := e.repo.AuthorizeUserNode(ctx, userID, plainID); err != nil {
 		t.Fatalf("authorize: %v", err)
 	}
+	if err := e.repo.AuthorizeUserNode(ctx, userID, tlsID); err != nil {
+		t.Fatalf("authorize TLS: %v", err)
+	}
 	token := e.agentKey(t, cookie, serverID)
 	resp, body := e.doAgent(t, "GET", "/api/agent/config?version=0", nil, token)
 	if resp.StatusCode != http.StatusOK {

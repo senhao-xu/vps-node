@@ -55,6 +55,11 @@ func TestWrapWithEmbedServesSubAndSPAFallback(t *testing.T) {
 	apiCalled := ""
 	api := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		apiCalled = r.URL.Path
+		if r.Method == http.MethodGet && r.URL.Path == "/install-agent.sh" {
+			w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")
+			_, _ = w.Write([]byte("#!/bin/sh\nexit 0\n"))
+			return
+		}
 		if r.Method == http.MethodGet && r.URL.Path == "/s/token" {
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			_, _ = w.Write([]byte("subscription-body"))
@@ -69,6 +74,12 @@ func TestWrapWithEmbedServesSubAndSPAFallback(t *testing.T) {
 	handler := wrapFS(sub, []byte("<html>spa-index</html>"), api)
 
 	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/install-agent.sh", nil))
+	if rec.Code != http.StatusOK || rec.Body.String() != "#!/bin/sh\nexit 0\n" {
+		t.Fatalf("installer must pass through SPA: %d %s", rec.Code, rec.Body.String())
+	}
+
+	rec = httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/s/token", nil))
 	if rec.Code != http.StatusOK || rec.Body.String() != "subscription-body" {
 		t.Fatalf("subscription route must hit api, got %d %s", rec.Code, rec.Body.String())

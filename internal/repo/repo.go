@@ -15,11 +15,19 @@ var (
 )
 
 type Repo struct {
-	DB *sql.DB
+	DB  *sql.DB
+	Now func() time.Time
 }
 
 func New(sqlDB *sql.DB) *Repo {
 	return &Repo{DB: sqlDB}
+}
+
+func (r *Repo) CurrentTime() time.Time {
+	if r.Now != nil {
+		return r.Now()
+	}
+	return time.Now()
 }
 
 func Tx(ctx context.Context, sqlDB *sql.DB, fn func(tx *sql.Tx) error) error {

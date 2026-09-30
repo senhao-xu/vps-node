@@ -520,6 +520,7 @@ func renderProxy(appKey []byte, user User, n Node) (map[string]any, error) {
 	p := map[string]any{"name": n.Name, "server": n.Address, "port": n.Port, "type": n.Protocol}
 	switch n.Protocol {
 	case singbox.ProtocolShadowsocks:
+		p["type"] = "ss"
 		cipher := singbox.SettingString(n.Settings, "cipher")
 		password, err := ssClientPassword(appKey, n, user.UUID, cipher)
 		if err != nil {

@@ -105,6 +105,9 @@ func TestRenderShadowsocks2022UsesCombinedClientPassword(t *testing.T) {
 	want := serverKey + ":" + userKey
 
 	credential, proxy := renderSS(t, appKey, node)
+	if proxy["type"] != "ss" {
+		t.Fatalf("Clash Shadowsocks type = %v, want ss", proxy["type"])
+	}
 	if credential != cipher+":"+want {
 		t.Fatalf("ss URI credential = %q, want %q", credential, cipher+":"+want)
 	}
@@ -127,6 +130,9 @@ func TestRenderShadowsocks2022UsesCustomServerPassword(t *testing.T) {
 	want := "custom-server-key:" + userKey
 
 	credential, proxy := renderSS(t, appKey, node)
+	if proxy["type"] != "ss" {
+		t.Fatalf("Clash Shadowsocks type = %v, want ss", proxy["type"])
+	}
 	if credential != cipher+":"+want {
 		t.Fatalf("ss URI credential = %q, want %q", credential, cipher+":"+want)
 	}

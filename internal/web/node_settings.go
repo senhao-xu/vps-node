@@ -16,13 +16,8 @@ import (
 
 	"vps-node/internal/repo"
 	"vps-node/internal/secrets"
+	"vps-node/internal/singbox"
 )
-
-var shadowsocksCiphers = map[string]bool{
-	"2022-blake3-aes-128-gcm":       true,
-	"2022-blake3-aes-256-gcm":       true,
-	"2022-blake3-chacha20-poly1305": true,
-}
 
 type settingField struct {
 	secret   bool
@@ -242,8 +237,8 @@ func validateProtocolSettings(protocol string, plain, secretFields map[string]an
 	switch protocol {
 	case repo.ProtocolShadowsocks:
 		cipher, _ := plain["cipher"].(string)
-		if !shadowsocksCiphers[cipher] {
-			return errValidation("settings.cipher is required and must be a supported shadowsocks cipher")
+		if !singbox.SSMethodSupported(cipher) {
+			return errValidation("settings.cipher is required and must be a supported managed shadowsocks cipher (2022-blake3-aes-128-gcm or 2022-blake3-aes-256-gcm)")
 		}
 	case repo.ProtocolVLESS:
 		privateKey, _ := secretFields["private_key"].(string)
@@ -321,8 +316,8 @@ func nestingString(m map[string]any, path ...string) (string, bool) {
 
 func cipherField(value any) (any, error) {
 	s, ok := value.(string)
-	if !ok || !shadowsocksCiphers[s] {
-		return nil, errValidation("settings.cipher must be a supported shadowsocks cipher")
+	if !ok || !singbox.SSMethodSupported(s) {
+		return nil, errValidation("settings.cipher must be a supported managed shadowsocks cipher (2022-blake3-aes-128-gcm or 2022-blake3-aes-256-gcm)")
 	}
 	return s, nil
 }

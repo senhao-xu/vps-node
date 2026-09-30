@@ -492,7 +492,7 @@ const settingsPayload = computed<NodeSettingsInput | undefined>(() => {
     if (hy2ObfsPassword.value) obfs.password = hy2ObfsPassword.value
     payload.obfs = obfs
 
-    if (hy2HopInterval.value.trim()) payload.hop_interval = hy2HopInterval.value.trim()
+    payload.hop_interval = hy2HopInterval.value.trim()
     if (tlsCertificate.value) payload.certificate = tlsCertificate.value
     if (tlsPrivateKey.value) payload.private_key = tlsPrivateKey.value
   } else if (protocol.value === 'anytls') {

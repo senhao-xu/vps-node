@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-const ContractVersion = "singbox-render-v2"
+const ContractVersion = "singbox-render-v3"
 
 const ssCredDomain = "ss-cred-v1"
 
@@ -49,8 +49,7 @@ var ssKeyLens = map[string]int{
 var ErrUnrenderable = errors.New("node configuration cannot be rendered")
 
 func SSMethodSupported(method string) bool {
-	_, ok := ssKeyLens[method]
-	return ok
+	return method == SSMethod2022Aes128Gcm || method == SSMethod2022Aes256Gcm
 }
 
 func IsSS2022(method string) bool {
@@ -185,6 +184,9 @@ func Render(appKey []byte, nodes []Node, chains ...ChainExit) (map[string]any, e
 	inbounds := make([]map[string]any, 0, len(nodes))
 	nodeByID := make(map[int64]Node, len(nodes))
 	for _, n := range nodes {
+		if (n.Protocol == ProtocolHTTP || n.Protocol == ProtocolSocks) && len(n.Users) == 0 && len(n.Relays) == 0 {
+			continue
+		}
 		inbound, err := renderInbound(appKey, n)
 		if err != nil {
 			return nil, err

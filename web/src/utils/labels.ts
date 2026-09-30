@@ -88,5 +88,4 @@ export function customNodeSourceLabel(sourceType: CustomNodeSourceType): string 
 export const SHADOWSOCKS_METHODS = [
   '2022-blake3-aes-128-gcm',
   '2022-blake3-aes-256-gcm',
-  '2022-blake3-chacha20-poly1305',
 ] as const

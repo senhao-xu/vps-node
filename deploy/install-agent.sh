@@ -2,8 +2,6 @@
 # vps-node panel-agent installer.
 #
 # Usage:
-#   PANEL_DOWNLOAD_BASE=https://example.com/downloads/vps-node \
-#   PANEL_VERSION=20260920 \
 #   PANEL_URL=https://panel.example.com \
 #   SERVER_ID=1 \
 #   AGENT_KEY=... \
@@ -14,8 +12,13 @@
 # The tarball must contain: panel-agent, panel-agent.service, install-agent.sh
 set -eu
 
-PANEL_DOWNLOAD_BASE="${PANEL_DOWNLOAD_BASE:-https://example.com/downloads/vps-node}"
 PANEL_VERSION="${PANEL_VERSION:-latest}"
+if [ "$PANEL_VERSION" = latest ]; then
+    DEFAULT_DOWNLOAD_BASE=https://github.com/senhao-xu/vps-node/releases/latest/download
+else
+    DEFAULT_DOWNLOAD_BASE="https://github.com/senhao-xu/vps-node/releases/download/v$PANEL_VERSION"
+fi
+PANEL_DOWNLOAD_BASE="${PANEL_DOWNLOAD_BASE:-$DEFAULT_DOWNLOAD_BASE}"
 PANEL_URL="${PANEL_URL:-}"
 SERVER_ID="${SERVER_ID:-}"
 AGENT_KEY="${AGENT_KEY:-}"
@@ -34,6 +37,16 @@ esac
 if [ "$(id -u)" -ne 0 ]; then
     echo "must run as root" >&2
     exit 1
+fi
+
+if [ ! -f "$ETC_DIR/agent.yaml" ]; then
+    if [ -z "$PANEL_URL" ] || [ -z "$AGENT_KEY" ] || [ -z "$SERVER_ID" ]; then
+        echo "PANEL_URL, SERVER_ID and AGENT_KEY are required for a fresh installation" >&2
+        exit 1
+    fi
+    case "$SERVER_ID" in
+        *[!0-9]*|0) echo "SERVER_ID must be a positive integer" >&2; exit 1 ;;
+    esac
 fi
 
 TARBALL="panel-agent-$PANEL_VERSION-linux-$ARCH.tar.gz"
@@ -60,10 +73,12 @@ mkdir -p "$ETC_DIR"
 
 if [ ! -f "$ETC_DIR/agent.yaml" ]; then
     echo "writing $ETC_DIR/agent.yaml"
+    YAML_PANEL_URL=$(printf '%s' "$PANEL_URL" | sed "s/'/''/g")
+    YAML_AGENT_KEY=$(printf '%s' "$AGENT_KEY" | sed "s/'/''/g")
     cat > "$ETC_DIR/agent.yaml" <<EOF
-panel_url: ${PANEL_URL:-https://panel.example.com}
-agent_key: ${AGENT_KEY:-paste-agent-key-from-server-detail}
-server_id: ${SERVER_ID:-1}
+panel_url: '$YAML_PANEL_URL'
+agent_key: '$YAML_AGENT_KEY'
+server_id: $SERVER_ID
 log_level: info
 heartbeat_interval: 30
 sync_interval: 30
@@ -71,10 +86,11 @@ traffic_interval: 60
 collection:
   traffic: true
 EOF
-    chmod 0600 "$ETC_DIR/agent.yaml"
 else
     echo "$ETC_DIR/agent.yaml already exists; keeping it"
 fi
+chmod 0600 "$ETC_DIR/agent.yaml"
+chown panel-agent:panel-agent "$ETC_DIR/agent.yaml"
 
 if command -v systemctl >/dev/null 2>&1; then
     systemctl daemon-reload

@@ -4,6 +4,12 @@
 - `install-agent.sh` — idempotent agent installer (arch detection, release tarball download, config bootstrap, systemd enable). See the root README for usage.
 - `release-agent` Makefile target builds linux amd64/arm64/386 tarballs containing `panel-agent`, `panel-agent.service` and `install-agent.sh`.
 
+The panel embeds and serves `GET /install-agent.sh` in both UI and API-only binaries. Fresh installs require `PANEL_URL`, `SERVER_ID` and `AGENT_KEY`; existing config files are preserved. The default `PANEL_VERSION=latest` downloads `panel-agent-latest-linux-<arch>.tar.gz` from the project's latest GitHub Release. A pinned version such as `PANEL_VERSION=1.2.3` uses tag `v1.2.3`; `PANEL_DOWNLOAD_BASE` can override the asset directory for a mirror.
+
+`.github/workflows/release.yml` publishes versioned and `latest` aliases for Linux amd64/arm64/386 when a `v*` tag is pushed. Binary installation requires these published assets. `make release-agent VERSION=1.2.3` builds the versioned archives locally with the correct target architecture.
+
+The panel scratch image includes the system CA bundle for verified HTTPS upstream subscriptions.
+
 The agent embeds sing-box as a Go library and runs it in-process. There is **no external sing-box install, no config file under `/etc/sing-box`, and no reload helper**: the agent forces a config re-apply at startup and rebuilds the instance on every revision change. Agent builds must use `-tags with_quic,with_utls` (hysteria2 QUIC + VLESS Reality uTLS); the resulting binary is ~38 MB. `release-agent` and the agent Dockerfile already pass these tags.
 
 Compose files:

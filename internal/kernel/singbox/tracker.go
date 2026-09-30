@@ -351,6 +351,10 @@ func (c *trackedConn) Close() error {
 	return err
 }
 
+func (c *trackedConn) Upstream() any {
+	return c.ExtendedConn
+}
+
 func (c *trackedConn) UnwrapReader() (io.Reader, []N.CountFunc) {
 	return c.ExtendedConn, []N.CountFunc{c.entry.countUp}
 }
@@ -387,6 +391,10 @@ func (c *trackedPacketConn) Close() error {
 	err := c.PacketConn.Close()
 	c.once.Do(func() { c.tracker.release(c.entry) })
 	return err
+}
+
+func (c *trackedPacketConn) Upstream() any {
+	return c.PacketConn
 }
 
 func (c *trackedPacketConn) UnwrapPacketReader() (N.PacketReader, []N.CountFunc) {

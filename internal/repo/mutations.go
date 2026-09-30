@@ -501,12 +501,35 @@ func (r *Repo) DeleteServerCascade(ctx context.Context, id int64) error {
 			return mapErr(err)
 		}
 
+		deviceRows, err := tx.QueryContext(ctx, `SELECT DISTINCT user_id FROM online_devices WHERE server_id = ?`, id)
+		if err != nil {
+			return mapErr(err)
+		}
+		affectedUsers := []int64{}
+		for deviceRows.Next() {
+			var userID int64
+			if err := deviceRows.Scan(&userID); err != nil {
+				deviceRows.Close()
+				return mapErr(err)
+			}
+			affectedUsers = append(affectedUsers, userID)
+		}
+		deviceRows.Close()
+		if err := deviceRows.Err(); err != nil {
+			return mapErr(err)
+		}
+
 		res, err := tx.ExecContext(ctx, `DELETE FROM servers WHERE id = ?`, id)
 		if err != nil {
 			return mapErr(err)
 		}
 		if rowsAffected(res) == 0 {
 			return ErrNotFound
+		}
+		for _, userID := range affectedUsers {
+			if err := refreshOnlineCountExec(ctx, tx, userID); err != nil {
+				return err
+			}
 		}
 		for _, serverID := range dedupeInt64(referencing) {
 			if err := bumpRevisionExec(ctx, tx, serverID); err != nil {

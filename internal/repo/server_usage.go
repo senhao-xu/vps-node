@@ -32,7 +32,7 @@ func ServerCycleStart(now time.Time, resetDay int) time.Time {
 func serverMonthlyRaw(ctx context.Context, q interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }, serverID int64, since time.Time) (upload, download int64, err error) {
-	err = q.QueryRowContext(ctx, `SELECT COALESCE(SUM(u), 0), COALESCE(SUM(d), 0) FROM traffic_records WHERE server_id = ? AND created_at >= ?`, serverID, since.Unix()).Scan(&upload, &download)
+	err = q.QueryRowContext(ctx, `SELECT COALESCE(SUM(u), 0), COALESCE(SUM(d), 0) FROM server_traffic_daily WHERE server_id = ? AND day >= ?`, serverID, since.Unix()).Scan(&upload, &download)
 	return upload, download, mapErr(err)
 }
 

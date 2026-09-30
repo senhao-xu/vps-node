@@ -51,6 +51,8 @@ Then create the agent **from the panel** — the Agent Key can only be issued th
 2. Create a Server, then add a Node (e.g. on `:8388`).
 3. Server detail → **Agent Key → generate**, then copy the ready-to-run command
    (binary install script or `docker run`) and execute it on the node VPS.
+   Binary installation downloads from GitHub Releases; publish a `v*` tag with
+   the agent release workflow before using this method (see [deployment notes](deploy/README.md)).
 
 The copied `docker run` command is self-contained: it uses `--network host` and the
 `ghcr.io/senhao-xu/vps-node-agent` image. Node hosts that prefer compose can fill
@@ -140,7 +142,8 @@ docker compose -f docker-compose.ghcr.yml up -d    # 预构建镜像
 1. 打开 http://localhost:8080 并登录。
 2. 创建 Server，再添加一个 Node（例如 `:8388`）。
 3. 进入 Server 详情 → **Agent Key → 生成**，复制生成好的命令（安装脚本或 `docker run`），
-   在节点 VPS 上执行。
+   在节点 VPS 上执行。二进制安装从 GitHub Releases 下载，需先通过 agent release
+   工作流发布 `v*` 标签的安装包，详见 [部署说明](deploy/README.md)。
 
 复制出的 `docker run` 命令是自包含的：使用 `--network host` 与
 `ghcr.io/senhao-xu/vps-node-agent` 镜像。节点侧若偏好 compose，可把
