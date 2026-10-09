@@ -312,3 +312,24 @@ Enabled protocol changes when editing nodes, kept protocol settings and secrets 
 ### Status
 
 [OK] **Completed**
+
+
+## Session 10: 自定义节点分享导出与编辑回显
+
+**Date**: 2026-10-09
+**Task**: 自定义节点分享导出与编辑回显
+**Branch**: `main`
+
+### Summary
+
+新增 GET /api/custom-nodes/{id}/share（Clash proxies 片段 + V2 明文链接，无需选用户）与 GET /api/custom-nodes/{id}/content（编辑回显解密原文）；抽取 RenderCustomProxies/RenderProxiesFragment 且合并输出字节不变；前端新增 CustomNodeShareDialog、列表加分享入口、编辑弹窗回显内容；修复回显后无条件重提交导致 subscription 缓存误失效；更新 api-contract 与 spec。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `215a1ae` | (see git log) |
+
+### Status
+
+[OK] **Completed**
