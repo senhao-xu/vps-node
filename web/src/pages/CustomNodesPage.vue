@@ -7,6 +7,7 @@ import type { CustomNode, NodeStatus } from '@/api/types'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import CustomNodeFormDialog from '@/components/CustomNodeFormDialog.vue'
 import CustomNodeNodesDialog from '@/components/CustomNodeNodesDialog.vue'
+import CustomNodeShareDialog from '@/components/CustomNodeShareDialog.vue'
 import DataTable, { type Column } from '@/components/DataTable.vue'
 import ErrorBanner from '@/components/ErrorBanner.vue'
 import FilterChip from '@/components/ui/FilterChip.vue'
@@ -32,6 +33,7 @@ const statusUpdatingId = ref<number | null>(null)
 
 const viewTarget = ref<CustomNode | null>(null)
 const viewRefreshOnOpen = ref(false)
+const shareTarget = ref<CustomNode | null>(null)
 
 const columns: Column[] = [
   { key: 'name', label: '自定义节点', width: '290px' },
@@ -72,6 +74,7 @@ function rowActions(row: CustomNode): OverflowMenuItem[] {
     actions.push({ label: '更新订阅', onSelect: () => openNodes(row, true) })
   }
   actions.push(
+    { label: '分享', onSelect: () => (shareTarget.value = row) },
     { label: '编辑', onSelect: () => (editTarget.value = row) },
     {
       label: row.status === 'active' ? '禁用' : '启用',
@@ -259,6 +262,12 @@ onMounted(() => {
       :refresh-on-open="viewRefreshOnOpen"
       @close="viewTarget = null"
       @refreshed="load"
+    />
+
+    <CustomNodeShareDialog
+      :open="shareTarget !== null"
+      :node="shareTarget"
+      @close="shareTarget = null"
     />
 
     <ConfirmDialog

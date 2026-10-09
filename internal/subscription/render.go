@@ -294,35 +294,63 @@ func RenderClashFilteredMerged(appKey []byte, user User, template string, nodes 
 		usedNames[n.Name] = true
 	}
 	for _, source := range custom {
-		for _, link := range source.Links {
-			proxy, err := ParseShareURI(link)
-			if err != nil {
-				if onSkipCustom != nil {
-					onSkipCustom(source.ID, link, err)
-				}
-				continue
-			}
-			name, _ := proxy["name"].(string)
-			name = uniqueProxyName(usedNames, name, source.ID)
-			proxy["name"] = name
+		for _, proxy := range renderCustomProxies(source, usedNames, onSkipCustom) {
 			proxies = append(proxies, proxy)
-			names["all"] = append(names["all"], name)
-		}
-		for _, proxy := range source.Proxies {
 			name, _ := proxy["name"].(string)
-			if name == "" {
-				if onSkipCustom != nil {
-					onSkipCustom(source.ID, "", fmt.Errorf("upstream proxy without a name"))
-				}
-				continue
-			}
-			name = uniqueProxyName(usedNames, name, source.ID)
-			proxy["name"] = name
-			proxies = append(proxies, proxy)
 			names["all"] = append(names["all"], name)
 		}
 	}
 	return assembleClash(template, proxies, names)
+}
+
+// RenderCustomProxies converts one source's links and upstream proxies into
+// Clash proxy maps, renaming each to a name unique within that source.
+// Unparseable/nameless items are reported via onSkip (nil is allowed).
+func RenderCustomProxies(source CustomSource, onSkip func(sourceID int64, item string, err error)) []map[string]any {
+	return renderCustomProxies(source, map[string]bool{}, onSkip)
+}
+
+// renderCustomProxies is the shared conversion behind RenderCustomProxies and
+// the merged subscription renderer. The merged path passes the node/source-wide
+// used-name set so custom proxy names stay unique across managed nodes and
+// earlier sources; the single-source export passes a fresh set.
+func renderCustomProxies(source CustomSource, usedNames map[string]bool, onSkip func(sourceID int64, item string, err error)) []map[string]any {
+	proxies := []map[string]any{}
+	for _, link := range source.Links {
+		proxy, err := ParseShareURI(link)
+		if err != nil {
+			if onSkip != nil {
+				onSkip(source.ID, link, err)
+			}
+			continue
+		}
+		name, _ := proxy["name"].(string)
+		name = uniqueProxyName(usedNames, name, source.ID)
+		proxy["name"] = name
+		proxies = append(proxies, proxy)
+	}
+	for i, proxy := range source.Proxies {
+		name, _ := proxy["name"].(string)
+		if name == "" {
+			if onSkip != nil {
+				onSkip(source.ID, "proxy #"+strconv.Itoa(i), fmt.Errorf("upstream proxy without a name"))
+			}
+			continue
+		}
+		name = uniqueProxyName(usedNames, name, source.ID)
+		proxy["name"] = name
+		proxies = append(proxies, proxy)
+	}
+	return proxies
+}
+
+// RenderProxiesFragment marshals Clash proxy maps into a YAML `proxies:`
+// fragment; an empty input renders an empty sequence.
+func RenderProxiesFragment(proxies []map[string]any) ([]byte, error) {
+	if proxies == nil {
+		proxies = []map[string]any{}
+	}
+	return yaml.Marshal(map[string]any{"proxies": proxies})
 }
 
 // uniqueProxyName returns name, or "<name> <sourceID>" (with a numeric tie

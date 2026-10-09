@@ -416,7 +416,7 @@ Response `200`:
 { "items": [ { "id": 1, "name": "airport-A", "source_type": "links", "user_agent": "", "insecure_skip_verify": false, "status": "active", "has_cache": false, "fetched_at": null, "created_at": "...", "updated_at": "..." } ] }
 ```
 
-`content` is never echoed. `has_cache` / `fetched_at` describe the cached upstream payload for
+`content` is never echoed by the list; use `GET /api/custom-nodes/:id/content` to prefill the edit form. `has_cache` / `fetched_at` describe the cached upstream payload for
 `subscription`-type entries (refreshed with a 5-minute TTL at render time; a failed fetch falls
 back to the last cache, otherwise the entry is skipped). `user_agent` is the upstream request
 header for `subscription` entries; an empty value means the built-in default
@@ -465,6 +465,37 @@ link line, or the proxy name / `proxy #i`) without affecting the others. For `li
 display `name` removed, so authorizations survive upstream renames. Unparseable entries have
 no `key` and cannot be authorized individually; two entries with identical connection
 parameters (only `name` differs) share one `key`.
+
+### GET /api/custom-nodes/:id/share
+
+Read-only export of one custom node's content for administrators, without choosing a user.
+Response `200`:
+
+```json
+{ "source_type": "links", "has_cache": false, "fetched_at": null, "clash": "proxies:\n    - name: HK-1\n      type: ss\n      ...\n", "links": ["ss://...", "vless://..."], "skipped": ["garbage line"] }
+```
+
+`clash` is a YAML `proxies:` fragment built exactly like the Clash subscription renderer
+(share links parsed into proxies, upstream proxies appended as-is, duplicate names suffixed with
+the source id); an empty render is `proxies: []\n`. `links` is the plaintext newline items
+(never base64-encoded). `subscription` sources are fetched through the render-path lazy fetch:
+within the 5-minute TTL the cache is reused, a stale cache triggers an upstream fetch, and a
+failed fetch falls back to the stale cache; `has_cache` / `fetched_at` follow
+`GET /api/custom-nodes/:id/nodes`. Items that cannot be converted are listed in `skipped` (the raw
+link line, or `proxy #i` for an upstream proxy without a name). No cache and no content renders an
+empty but successful response. Unknown id → `404 not_found`; no admin session → `401 unauthorized`.
+
+### GET /api/custom-nodes/:id/content
+
+Echoes the decrypted stored content of one custom node for the edit form. Response `200`:
+
+```json
+{ "content": "ss://...\nvless://..." }
+```
+
+For `links` sources `content` is the original link text; for `subscription` sources it is the
+original upstream URL. The list endpoint never returns `content`. Unknown id → `404 not_found`;
+no admin session → `401 unauthorized`; a decrypt failure → `500 internal`.
 
 ### POST /api/custom-nodes/:id/refresh
 

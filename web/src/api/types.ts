@@ -444,6 +444,22 @@ export type CustomNodeEntries = {
   skipped?: string[]
 }
 
+export type CustomNodeShare = {
+  source_type: CustomNodeSourceType
+  has_cache: boolean
+  fetched_at: string | null
+  /** Clash `proxies` fragment rendered from the source's convertible entries. */
+  clash: string
+  /** Plaintext share links, one per line (V2 native). Empty for Clash-only upstreams. */
+  links: string[]
+  skipped?: string[]
+}
+
+export type CustomNodeContent = {
+  /** Decrypted original input: raw link text for `links`, the source URL for `subscription`. */
+  content: string
+}
+
 export type CreateCustomNodeInput = {
   name: string
   source_type: CustomNodeSourceType

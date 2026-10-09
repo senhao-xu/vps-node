@@ -2,9 +2,11 @@ import { request } from './http'
 import type {
   CreateCustomNodeInput,
   CustomNode,
+  CustomNodeContent,
   CustomNodeEntries,
   CustomNodeEntrySelection,
   CustomNodeResult,
+  CustomNodeShare,
   UpdateCustomNodeInput,
   UserCustomNodes,
 } from './types'
@@ -33,6 +35,14 @@ export async function deleteCustomNode(customNodeId: number): Promise<void> {
 
 export function getCustomNodeEntries(customNodeId: number): Promise<CustomNodeEntries> {
   return request<CustomNodeEntries>(`/api/custom-nodes/${customNodeId}/nodes`)
+}
+
+export function getCustomNodeShare(customNodeId: number): Promise<CustomNodeShare> {
+  return request<CustomNodeShare>(`/api/custom-nodes/${customNodeId}/share`)
+}
+
+export function getCustomNodeContent(customNodeId: number): Promise<CustomNodeContent> {
+  return request<CustomNodeContent>(`/api/custom-nodes/${customNodeId}/content`)
 }
 
 export function refreshCustomNode(customNodeId: number): Promise<CustomNodeEntries> {

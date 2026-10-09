@@ -171,6 +171,107 @@ func (h *Handler) handleCustomNodeNodesGet(w http.ResponseWriter, r *http.Reques
 	httpx.WriteJSON(w, http.StatusOK, resp)
 }
 
+// customNodeShareDTO is the admin share/export payload for one custom node: a
+// Clash `proxies:` fragment plus the plaintext link lines and the items that
+// could not be converted.
+type customNodeShareDTO struct {
+	SourceType string   `json:"source_type"`
+	HasCache   bool     `json:"has_cache"`
+	FetchedAt  *string  `json:"fetched_at"`
+	Clash      string   `json:"clash"`
+	Links      []string `json:"links"`
+	Skipped    []string `json:"skipped,omitempty"`
+}
+
+// handleCustomNodeShare renders one custom node's content for admin copy
+// without a user. links sources decrypt content_enc; subscription sources use
+// the render-path lazy fetch (TTL cache with stale fallback).
+func (h *Handler) handleCustomNodeShare(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	cn, err := h.repo.GetCustomNode(r.Context(), id)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	links := []string{}
+	var proxies []map[string]any
+	switch cn.SourceType {
+	case repo.CustomNodeSourceLinks:
+		plain, err := secrets.Decrypt(h.appKey, cn.ContentEnc)
+		if err != nil {
+			writeErr(w, errInternal("failed to decrypt custom node content"))
+			return
+		}
+		links = subscription.SplitLinkLines(string(plain))
+	case repo.CustomNodeSourceSubscription:
+		upstream, err := secrets.Decrypt(h.appKey, cn.ContentEnc)
+		if err != nil {
+			writeErr(w, errInternal("failed to decrypt custom node content"))
+			return
+		}
+		content := h.fetchCustomNodeContent(r.Context(), cn, strings.TrimSpace(string(upstream)))
+		if content != "" {
+			links, proxies = subscription.NormalizeFetchedContent(content)
+		}
+		if links == nil {
+			links = []string{}
+		}
+		if updated, err := h.repo.GetCustomNode(r.Context(), cn.ID); err == nil {
+			cn = updated
+		}
+	}
+	skipped := []string{}
+	source := subscription.CustomSource{ID: cn.ID, Name: cn.Name, Links: links, Proxies: proxies}
+	rendered := subscription.RenderCustomProxies(source, func(_ int64, item string, _ error) {
+		skipped = append(skipped, item)
+	})
+	clash, err := subscription.RenderProxiesFragment(rendered)
+	if err != nil {
+		writeErr(w, errInternal("failed to render clash proxies: "+err.Error()))
+		return
+	}
+	resp := customNodeShareDTO{
+		SourceType: cn.SourceType,
+		HasCache:   cn.SourceType == repo.CustomNodeSourceSubscription && cn.CachedContent != "",
+		Clash:      string(clash),
+		Links:      links,
+		Skipped:    skipped,
+	}
+	if resp.HasCache && !cn.FetchedAt.IsZero() {
+		resp.FetchedAt = rfc3339Ptr(&cn.FetchedAt)
+	}
+	httpx.WriteJSON(w, http.StatusOK, resp)
+}
+
+type customNodeContentDTO struct {
+	Content string `json:"content"`
+}
+
+// handleCustomNodeContentGet echoes the decrypted stored content of one custom
+// node so the edit form can prefill it. The list endpoint never returns it.
+func (h *Handler) handleCustomNodeContentGet(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	cn, err := h.repo.GetCustomNode(r.Context(), id)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	plain, err := secrets.Decrypt(h.appKey, cn.ContentEnc)
+	if err != nil {
+		writeErr(w, errInternal("failed to decrypt custom node content"))
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, customNodeContentDTO{Content: string(plain)})
+}
+
 // handleCustomNodeRefresh force-fetches a subscription source, ignoring the
 // render-path cache TTL. On upstream failure the previous cache and
 // fetched_at are left untouched so later renders keep serving stale data.

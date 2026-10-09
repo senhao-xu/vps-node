@@ -219,3 +219,53 @@ client := fetchClient
 if insecureSkipVerify { client = insecureFetchClient }
 resp, err := client.Do(req)
 ```
+
+---
+
+## Scenario: Custom node share & content echo
+
+### 1. Scope / Trigger
+- Trigger: any change to `GET /api/custom-nodes/{id}/share`, `GET /api/custom-nodes/{id}/content`, or `subscription.RenderCustomProxies` / `subscription.RenderProxiesFragment`.
+
+### 2. Signatures
+- `GET /api/custom-nodes/{id}/share` — admin export of one source, no user.
+- `GET /api/custom-nodes/{id}/content` — admin echo of one source's decrypted content.
+- `subscription.RenderCustomProxies(source CustomSource, onSkip func(sourceID int64, item string, err error)) []map[string]any` — converts one source's links + upstream proxies into Clash proxies; `RenderClashFilteredMerged` calls the shared unexported `renderCustomProxies(source, usedNames, onSkip)` so merged output stays byte-identical while the export uses a fresh name set.
+- `subscription.RenderProxiesFragment(proxies []map[string]any) ([]byte, error)` — `yaml.Marshal({"proxies": proxies})`; empty input renders `proxies: []\n`.
+
+### 3. Contracts
+- Share response `{source_type, has_cache, fetched_at, clash, links, skipped?}`.
+- `clash` is a YAML `proxies:` fragment built exactly like the Clash subscription renderer (links parsed via `ParseShareURI`, upstream proxies appended, duplicate names suffixed with the source id).
+- `links` is the plaintext newline items (**never** base64). A Clash-only upstream yields an empty `links`.
+- `subscription` share uses the render-path lazy fetch (`fetchCustomNodeContent`: TTL cache, stale fallback); a failed fetch returns the stale/empty content with `200`, not `500`.
+- `skipped` carries the raw link line, or `proxy #i` for a nameless upstream proxy.
+- Content response `{content}`: `links` → original link text, `subscription` → original upstream URL.
+- Neither list endpoint (`GET /api/custom-nodes`, `GET /api/users/{id}/custom-nodes`) returns content; echo goes through the single-node content route only.
+
+### 4. Validation & Error Matrix
+| Condition | Result |
+|---|---|
+| Unknown id (share or content) | `404 not_found` |
+| No admin session | `401 unauthorized` |
+| Decrypt failure | `500 internal` |
+| No cache / no content | `200` empty-but-successful |
+
+### 5. Good/Base/Bad Cases
+- Good: `links` source share returns a proxies fragment plus the plaintext lines; an unparseable line lands in `skipped` without breaking the rest.
+- Base: a `links` source that cannot convert any line returns `clash: "proxies: []\n"`, `links: [...]`, `skipped: [...]`.
+- Bad: base64-encoding `links` (siblings render base64 for `flag=general`, but the admin export is deliberately plaintext) or routing a custom source through the user-credentialed render path.
+
+### 6. Tests Required
+- `internal/web/custom_nodes_share_test.go`: links share (fragment + plaintext + `skipped`); subscription share populates `has_cache` via lazy fetch; base64-links vs Clash-only upstream (`links` empty, `clash` non-empty); content echo for both source types; both routes `401` unauthenticated and `404` unknown id; list has no `content` field.
+- `internal/subscription/custom_test.go` gate tests (`TestRenderClashFilteredWithoutCustomMatchesLegacy`, `TestRenderClashFilteredMergedCustomSources`) must keep passing after the extraction.
+
+### 7. Wrong vs Correct
+#### Wrong
+```go
+body := subscription.RenderGeneralLinksMerged(h.appKey, subscription.User{ID: u.ID, UUID: u.UUID}, nodes, custom, skip) // user-scoped; needs credentials
+```
+#### Correct
+```go
+proxies := subscription.RenderCustomProxies(subscription.CustomSource{ID: cn.ID, Name: cn.Name, Links: links, Proxies: proxies}, onSkip)
+fragment, _ := subscription.RenderProxiesFragment(proxies)
+```

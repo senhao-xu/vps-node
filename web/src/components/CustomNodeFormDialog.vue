@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { createCustomNode, updateCustomNode } from '@/api/customNodes'
+import { createCustomNode, getCustomNodeContent, updateCustomNode } from '@/api/customNodes'
 import { errorMessage } from '@/api/http'
 import type { CustomNode, CustomNodeSourceType } from '@/api/types'
 import ErrorBanner from '@/components/ErrorBanner.vue'
@@ -40,6 +40,10 @@ const insecureSkipVerify = ref(false)
 const submitting = ref(false)
 const error = ref('')
 const savedWarnings = ref<string[]>([])
+const contentLoading = ref(false)
+const contentError = ref('')
+const originalContent = ref('')
+let contentRequest = 0
 
 const isEdit = computed(() => props.node !== null)
 const title = computed(() => (isEdit.value ? '编辑自定义节点' : '新建自定义节点'))
@@ -65,6 +69,10 @@ watch(
     if (!open) return
     error.value = ''
     savedWarnings.value = []
+    contentRequest++
+    contentError.value = ''
+    contentLoading.value = false
+    originalContent.value = ''
     name.value = props.node?.name ?? ''
     sourceType.value = props.node?.source_type ?? 'links'
     content.value = ''
@@ -78,8 +86,25 @@ watch(
       customUserAgent.value = userAgent
     }
     insecureSkipVerify.value = props.node?.insecure_skip_verify ?? false
+    if (props.node) void loadContent(props.node.id)
   },
 )
+
+async function loadContent(id: number) {
+  const request = ++contentRequest
+  contentLoading.value = true
+  contentError.value = ''
+  try {
+    const result = await getCustomNodeContent(id)
+    if (request !== contentRequest || !props.open) return
+    content.value = result.content
+    originalContent.value = result.content
+  } catch (err) {
+    if (request === contentRequest && props.open) contentError.value = errorMessage(err)
+  } finally {
+    if (request === contentRequest) contentLoading.value = false
+  }
+}
 
 const contentLabel = computed(() => {
   if (sourceType.value === 'subscription') return '上游订阅 URL'
@@ -123,12 +148,13 @@ async function submit() {
   error.value = ''
   try {
     const trimmedContent = content.value.trim()
+    const contentChanged = trimmedContent !== '' && trimmedContent !== originalContent.value.trim()
     const result =
       isEdit.value && props.node
         ? await updateCustomNode(props.node.id, {
             name: name.value.trim(),
             status: status.value,
-            ...(trimmedContent ? { content: trimmedContent } : {}),
+            ...(contentChanged ? { content: trimmedContent } : {}),
             ...(sourceType.value === 'subscription'
               ? { user_agent: effectiveUserAgent.value, insecure_skip_verify: insecureSkipVerify.value }
               : {}),
@@ -161,7 +187,7 @@ async function submit() {
     :title="title"
     :subtitle="
       isEdit
-        ? '修改名称、状态或替换内容；内容加密存储且不回显'
+        ? '内容已回显，可按需修改；留空保持原值'
         : '自定义节点并入已授权用户的订阅输出，不参与流量统计'
     "
     :width="520"
@@ -227,17 +253,29 @@ async function submit() {
 
       <div class="field">
         <label for="custom-node-content">{{ contentLabel }}</label>
+        <ErrorBanner
+          :message="contentError"
+          @dismiss="contentError = ''"
+        />
         <textarea
           id="custom-node-content"
           v-model="content"
           :rows="sourceType === 'links' ? 6 : 2"
           :placeholder="contentPlaceholder"
+          :disabled="contentLoading"
         />
+        <span
+          v-if="contentLoading"
+          class="content-loading"
+        >
+          <LoadingSpinner size="sm" />
+          正在读取内容…
+        </span>
         <p
           v-if="isEdit"
           class="field-hint"
         >
-          内容不回显；留空表示保持不变。替换订阅 URL 会立即丢弃旧缓存。
+          内容已回显，可修改；留空表示保持不变。替换订阅 URL 会立即丢弃旧缓存。
         </p>
       </div>
 
@@ -333,6 +371,14 @@ async function submit() {
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
   line-height: 1.5;
+}
+
+.content-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
 }
 
 .warnings {

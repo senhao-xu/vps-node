@@ -69,3 +69,4 @@ Vue 3 SFC (`<script setup>`), TypeScript strict, no UI library. Two component ti
 - Calling `getDashboard()` from individual pages or starting page-local overview intervals — consume `stores/overview.ts` so requests are deduplicated and polling pauses in hidden tabs.
 - `window.confirm` for destructive actions — always `ConfirmDialog`.
 - Button loading as text swap ("保存中…") — use the spinner + `is-loading` class.
+- Echoing a stored secret/value into an edit form and then always re-submitting it: the backend treats a supplied field as a change (e.g. `PUT /api/custom-nodes/:id` clears the fetch cache whenever `content` is present). Keep the originally-echoed value and submit the field **only when it actually differs**, so blank/unrelated edits do not trigger side effects. See `CustomNodeFormDialog.vue`.

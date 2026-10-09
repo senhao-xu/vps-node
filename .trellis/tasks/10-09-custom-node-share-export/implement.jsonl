@@ -1,0 +1,6 @@
+{"file": "docs/api-contract.md", "reason": "Binding contract: Custom Nodes section to extend with /share and /content; confirms content is not echoed in list responses."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Custom node entries/refresh scenario + auth boundary + secret handling; new read endpoints must match 401/404 matrix."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Validation commands and forbidden patterns (no plaintext secrets in list DTOs, stdlib-first)."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "ModalDialog/dialog overlay, loading/empty/error trio, copy feedback conventions for the new share dialog."}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "api/ is the single owner of types + decoding; pages never hand-cast JSON."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Extract shared proxy-conversion logic instead of duplicating the merge loop."}

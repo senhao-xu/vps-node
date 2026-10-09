@@ -1,0 +1,5 @@
+{"file": "docs/api-contract.md", "reason": "Verify both new endpoints and error codes match the frozen contract, and that list responses never carry content."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Check 401/404/500 paths and that decrypted content is not logged or exposed in list DTOs."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Run the required validation command set before reporting done."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Verify share dialog follows overlay/a11y/copy conventions and the state feedback trio."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Check data flow from repo -> subscription renderer -> web DTO -> api types -> dialog is consistent."}
