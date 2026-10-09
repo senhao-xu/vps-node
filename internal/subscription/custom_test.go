@@ -106,6 +106,34 @@ func TestRenderClashFilteredWithoutCustomMatchesLegacy(t *testing.T) {
 	}
 }
 
+func TestRenderProxiesFragmentFlowStyle(t *testing.T) {
+	proxies := []map[string]any{
+		{"name": "a", "type": "ss", "server": "x.example.com", "port": 1, "reality-opts": map[string]any{"public-key": "k"}},
+		{"name": "b", "type": "vless", "server": "y.example.com", "port": 2},
+	}
+	out, err := RenderProxiesFragment(proxies)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
+	if len(lines) != 3 || lines[0] != "proxies:" {
+		t.Fatalf("unexpected fragment: %q", out)
+	}
+	for _, line := range lines[1:] {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "- {") || !strings.HasSuffix(trimmed, "}") {
+			t.Fatalf("each proxy must be a single flow line: %q", out)
+		}
+	}
+	empty, err := RenderProxiesFragment(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(empty) != "proxies: []\n" {
+		t.Fatalf("empty fragment: %q", empty)
+	}
+}
+
 func TestUniqueProxyName(t *testing.T) {
 	used := map[string]bool{"a": true, "a 9": true}
 	if got := uniqueProxyName(used, "b", 9); got != "b" {

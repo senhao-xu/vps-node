@@ -345,12 +345,23 @@ func renderCustomProxies(source CustomSource, usedNames map[string]bool, onSkip 
 }
 
 // RenderProxiesFragment marshals Clash proxy maps into a YAML `proxies:`
-// fragment; an empty input renders an empty sequence.
+// fragment with each proxy on a single flow-style line; an empty input renders
+// an empty sequence.
 func RenderProxiesFragment(proxies []map[string]any) ([]byte, error) {
-	if proxies == nil {
-		proxies = []map[string]any{}
+	seq := &yaml.Node{Kind: yaml.SequenceNode}
+	for _, proxy := range proxies {
+		item := &yaml.Node{}
+		if err := item.Encode(proxy); err != nil {
+			return nil, err
+		}
+		item.Style = yaml.FlowStyle
+		seq.Content = append(seq.Content, item)
 	}
-	return yaml.Marshal(map[string]any{"proxies": proxies})
+	root := &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{
+		{Kind: yaml.ScalarNode, Value: "proxies"},
+		seq,
+	}}
+	return yaml.Marshal(root)
 }
 
 // uniqueProxyName returns name, or "<name> <sourceID>" (with a numeric tie

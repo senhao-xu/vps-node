@@ -472,7 +472,7 @@ Read-only export of one custom node's content for administrators, without choosi
 Response `200`:
 
 ```json
-{ "source_type": "links", "has_cache": false, "fetched_at": null, "clash": "proxies:\n    - name: HK-1\n      type: ss\n      ...\n", "links": ["ss://...", "vless://..."], "skipped": ["garbage line"] }
+{ "source_type": "links", "has_cache": false, "fetched_at": null, "clash": "proxies:\n    - {name: HK-1, type: ss, server: 1.2.3.4, port: 8388, cipher: aes-128-gcm, password: pw, udp: true}\n", "links": ["ss://...", "vless://..."], "skipped": ["garbage line"] }
 ```
 
 `clash` is a YAML `proxies:` fragment built exactly like the Clash subscription renderer

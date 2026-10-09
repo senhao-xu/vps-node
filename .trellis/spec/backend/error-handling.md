@@ -231,7 +231,7 @@ resp, err := client.Do(req)
 - `GET /api/custom-nodes/{id}/share` — admin export of one source, no user.
 - `GET /api/custom-nodes/{id}/content` — admin echo of one source's decrypted content.
 - `subscription.RenderCustomProxies(source CustomSource, onSkip func(sourceID int64, item string, err error)) []map[string]any` — converts one source's links + upstream proxies into Clash proxies; `RenderClashFilteredMerged` calls the shared unexported `renderCustomProxies(source, usedNames, onSkip)` so merged output stays byte-identical while the export uses a fresh name set.
-- `subscription.RenderProxiesFragment(proxies []map[string]any) ([]byte, error)` — `yaml.Marshal({"proxies": proxies})`; empty input renders `proxies: []\n`.
+- `subscription.RenderProxiesFragment(proxies []map[string]any) ([]byte, error)` — builds a `proxies:` fragment where each proxy is a single flow-style line (`- {name: ..., ...}`); empty input renders `proxies: []\n`.
 
 ### 3. Contracts
 - Share response `{source_type, has_cache, fetched_at, clash, links, skipped?}`.
