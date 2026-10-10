@@ -78,6 +78,7 @@ type HeartbeatRequest struct {
 	DiskPercent    float64 `json:"disk_percent"`
 	UptimeSeconds  int64   `json:"uptime_seconds"`
 	LastApplyError string  `json:"last_apply_error,omitempty"`
+	PublicIP       string  `json:"public_ip,omitempty"`
 }
 
 type HeartbeatResponse struct {

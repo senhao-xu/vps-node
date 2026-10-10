@@ -73,6 +73,7 @@ type heartbeatRequest struct {
 	MemoryPercent *float64 `json:"memory_percent"`
 	DiskPercent   *float64 `json:"disk_percent"`
 	UptimeSeconds *int64   `json:"uptime_seconds"`
+	ReportedIP    string   `json:"public_ip"`
 }
 
 func (h *Handler) handleAgentHeartbeat(w http.ResponseWriter, r *http.Request) {
@@ -101,7 +102,7 @@ func (h *Handler) handleAgentHeartbeat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.repo.RecordHeartbeat(r.Context(), agentID, serverID, version,
-		*req.CPUPercent, *req.MemoryPercent, *req.DiskPercent, *req.UptimeSeconds, time.Now().UTC(), observedClientIP(r)); err != nil {
+		*req.CPUPercent, *req.MemoryPercent, *req.DiskPercent, *req.UptimeSeconds, time.Now().UTC(), observedIP(r, req.ReportedIP)); err != nil {
 		writeErr(w, err)
 		return
 	}

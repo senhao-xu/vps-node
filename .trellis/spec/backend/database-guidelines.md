@@ -87,6 +87,16 @@ repo.IngestTrafficBatch(ctx, agentID, seq, records)
 - Both bump `server_revisions` inside the same tx as the writes (agents poll revision; revocation must be atomic with the delete).
 - Disabled nodes/users MAY be authorized (pre-provisioning is legal); the read paths (`ListSubscriptionNodes`, `ListEligibleUsersByServer`) already filter them. `validateNodeIDs` (user-side PUT) additionally requires node active — that strictness is user-side only, do not copy it to node-side handlers.
 
+## Convention: Server observed_ip resolution order
+
+`observed_ip` (display-only) is resolved per heartbeat in this priority — see `observedIP(r, reported)` in `internal/web/web.go`:
+
+1. Agent-reported `public_ip` heartbeat field (self-detected via `agentruntime.PublicIPProvider`: HTTP probe default `https://api.ipify.org`, 30min cache, static `public_ip`/`AGENT_PUBLIC_IP` override). Adopted only when it parses as a public IP; invalid/private values are **silently ignored** (never 422 — a cosmetic field must not fail the heartbeat).
+2. Connection-derived `observedClientIP`: forwarding headers (`X-Forwarded-For` first hop, then `X-Real-IP`) trusted ONLY when the direct peer is private/loopback (a local reverse proxy); private results are dropped to `""` so docker-internal addresses never reach the UI.
+3. Raw peer address when it is public.
+
+Do not reuse this pipeline for `clientIP` — the login rate limiter buckets on the RAW peer address and must keep that semantics.
+
 ---
 
 ## Convention: Agent batch sequence is panel-owned (stateless agent)

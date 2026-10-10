@@ -77,12 +77,13 @@ func run() error {
 		})
 
 	loop := agentruntime.NewLoop(agentruntime.LoopOptions{
-		Config:  cfg,
-		Client:  client,
-		Kernel:  kernel,
-		Metrics: agentruntime.NewMetricsCollector(),
-		Logger:  logger,
-		Version: agentVersion,
+		Config:   cfg,
+		Client:   client,
+		Kernel:   kernel,
+		Metrics:  agentruntime.NewMetricsCollector(),
+		Logger:   logger,
+		Version:  agentVersion,
+		PublicIP: agentruntime.NewPublicIPProvider(cfg.PublicIP, cfg.PublicIPURL),
 	})
 	return loop.Run(ctx)
 }

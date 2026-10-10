@@ -29,13 +29,14 @@ type Kernel interface {
 }
 
 type Loop struct {
-	cfg     *config.Agent
-	client  *agentclient.Client
-	state   *agentstate.State
-	kernel  Kernel
-	metrics MetricsSource
-	logger  *slog.Logger
-	version string
+	cfg      *config.Agent
+	client   *agentclient.Client
+	state    *agentstate.State
+	kernel   Kernel
+	metrics  MetricsSource
+	logger   *slog.Logger
+	version  string
+	publicIP *PublicIPProvider
 
 	mu                sync.Mutex
 	lastSeen          map[kernelsingbox.Pair]kernelsingbox.Traffic
@@ -56,13 +57,14 @@ type MetricsSource interface {
 }
 
 type LoopOptions struct {
-	Config  *config.Agent
-	Client  *agentclient.Client
-	State   *agentstate.State
-	Kernel  Kernel
-	Metrics MetricsSource
-	Logger  *slog.Logger
-	Version string
+	Config   *config.Agent
+	Client   *agentclient.Client
+	State    *agentstate.State
+	Kernel   Kernel
+	Metrics  MetricsSource
+	Logger   *slog.Logger
+	Version  string
+	PublicIP *PublicIPProvider
 }
 
 func NewLoop(o LoopOptions) *Loop {
@@ -83,6 +85,7 @@ func NewLoop(o LoopOptions) *Loop {
 		metrics:    o.Metrics,
 		logger:     o.Logger,
 		version:    o.Version,
+		publicIP:   o.PublicIP,
 		lastSeen:   map[kernelsingbox.Pair]kernelsingbox.Traffic{},
 		pending:    map[kernelsingbox.Pair]kernelsingbox.Traffic{},
 		forceApply: true,
@@ -183,14 +186,18 @@ func (l *Loop) heartbeatPass(ctx context.Context, nudge func()) (time.Duration, 
 	lastErr := l.lastApplyError
 	l.mu.Unlock()
 
-	resp, err := l.client.Heartbeat(ctx, agentclient.HeartbeatRequest{
+	req := agentclient.HeartbeatRequest{
 		Version:        l.version,
 		CPUPercent:     m.CPUPercent,
 		MemoryPercent:  m.MemoryPercent,
 		DiskPercent:    m.DiskPercent,
 		UptimeSeconds:  m.UptimeSeconds,
 		LastApplyError: lastErr,
-	})
+	}
+	if l.publicIP != nil {
+		req.PublicIP = l.publicIP.Get(ctx)
+	}
+	resp, err := l.client.Heartbeat(ctx, req)
 	if err != nil {
 		l.logger.Warn("heartbeat failed", "error", err)
 		return 0, nil

@@ -357,6 +357,17 @@ func observedClientIP(r *http.Request) string {
 	return candidate
 }
 
+// observedIP prefers the agent's self-reported public IP, falling back to the
+// connection-derived value; invalid or private reports are ignored.
+func observedIP(r *http.Request, reported string) string {
+	if candidate := strings.TrimSpace(reported); candidate != "" && !isPrivateIP(candidate) {
+		if addr, err := netip.ParseAddr(candidate); err == nil && addr.IsValid() {
+			return candidate
+		}
+	}
+	return observedClientIP(r)
+}
+
 func dedupeIDs(ids []int64) []int64 {
 	seen := make(map[int64]bool, len(ids))
 	out := make([]int64, 0, len(ids))

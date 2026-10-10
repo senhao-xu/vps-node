@@ -124,6 +124,8 @@ type Agent struct {
 	HeartbeatInterval time.Duration
 	SyncInterval      time.Duration
 	TrafficInterval   time.Duration
+	PublicIP          string
+	PublicIPURL       string
 	Collection        Collection
 }
 
@@ -152,6 +154,8 @@ type agentFile struct {
 	HeartbeatIntervalSec int    `yaml:"heartbeat_interval"`
 	SyncIntervalSec      int    `yaml:"sync_interval"`
 	TrafficIntervalSec   int    `yaml:"traffic_interval"`
+	PublicIP             string `yaml:"public_ip"`
+	PublicIPURL          string `yaml:"public_ip_url"`
 	Collection           struct {
 		Traffic *bool `yaml:"traffic"`
 		Visits  *bool `yaml:"visits"`
@@ -326,6 +330,12 @@ func LoadAgent(path string) (*Agent, error) {
 		if af.Collection.Visits != nil {
 			cfg.Collection.Visits = *af.Collection.Visits
 		}
+		if v := strings.TrimSpace(af.PublicIP); v != "" {
+			cfg.PublicIP = v
+		}
+		if v := strings.TrimSpace(af.PublicIPURL); v != "" {
+			cfg.PublicIPURL = v
+		}
 	}
 
 	if v := os.Getenv("AGENT_PANEL_URL"); v != "" {
@@ -365,6 +375,12 @@ func LoadAgent(path string) (*Agent, error) {
 			return nil, fmt.Errorf("AGENT_COLLECTION_VISITS: %w", err)
 		}
 		cfg.Collection.Visits = enabled
+	}
+	if v := strings.TrimSpace(os.Getenv("AGENT_PUBLIC_IP")); v != "" {
+		cfg.PublicIP = v
+	}
+	if v := strings.TrimSpace(os.Getenv("AGENT_PUBLIC_IP_URL")); v != "" {
+		cfg.PublicIPURL = v
 	}
 
 	if cfg.PanelURL == "" {
