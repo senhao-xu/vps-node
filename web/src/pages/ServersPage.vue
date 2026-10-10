@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Activity, CalendarClock, Download, GripVertical, Pencil, Plus, Server, ServerOff, Trash2 } from 'lucide-vue-next'
+import { Activity, CalendarClock, GripVertical, Pencil, Plus, Server, ServerOff, Trash2 } from 'lucide-vue-next'
 import { deleteServer, listServers, reorderServers } from '@/api/servers'
 import { errorMessage } from '@/api/http'
 import type { Paged, Server as ServerItem } from '@/api/types'
@@ -80,18 +80,6 @@ function priceLabel(row: ServerItem): string {
   if (row.price_cents === 0) return '—'
   try { return new Intl.NumberFormat('en-US', { style: 'currency', currency: row.price_currency }).format(row.price_cents / 100) }
   catch { return `${row.price_currency} ${(row.price_cents / 100).toFixed(2)}` }
-}
-
-function exportServer(row: ServerItem) {
-  const headers = ['名称', 'IP', '地区', '状态', '已用流量(字节)', '流量额度(字节)', '价格(分)', '货币', '计费周期', '到期']
-  const values = [row.name, row.ip, row.region, row.status, row.monthly_used_bytes, row.traffic_limit_bytes, row.price_cents, row.price_currency, row.billing_cycle, row.expires_at ?? '']
-  const csv = [headers, values].map((cells) => cells.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(',')).join('\r\n')
-  const url = globalThis.URL.createObjectURL(new globalThis.Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' }))
-  const link = document.createElement('a')
-  link.href = url
-  link.download = `server-${row.id}.csv`
-  link.click()
-  globalThis.URL.revokeObjectURL(url)
 }
 
 async function onRowDrop(from: ServerItem, to: ServerItem) {
@@ -259,15 +247,6 @@ onMounted(() => {
         </template>
         <template #cell-actions="{ row }">
           <div class="row-actions">
-            <button
-              type="button"
-              class="icon-action"
-              :aria-label="`导出 ${row.name}`"
-              title="导出服务器资料"
-              @click="exportServer(row)"
-            >
-              <Download :size="17" />
-            </button>
             <button
               type="button"
               class="icon-action"
