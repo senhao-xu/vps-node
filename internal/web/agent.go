@@ -101,7 +101,7 @@ func (h *Handler) handleAgentHeartbeat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.repo.RecordHeartbeat(r.Context(), agentID, serverID, version,
-		*req.CPUPercent, *req.MemoryPercent, *req.DiskPercent, *req.UptimeSeconds, time.Now().UTC(), clientIP(r)); err != nil {
+		*req.CPUPercent, *req.MemoryPercent, *req.DiskPercent, *req.UptimeSeconds, time.Now().UTC(), observedClientIP(r)); err != nil {
 		writeErr(w, err)
 		return
 	}

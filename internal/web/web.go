@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/netip"
 	"strconv"
 	"strings"
 	"time"
@@ -323,6 +324,37 @@ func clientIP(r *http.Request) string {
 		return host
 	}
 	return r.RemoteAddr
+}
+
+func isPrivateIP(ip string) bool {
+	addr, err := netip.ParseAddr(ip)
+	if err != nil {
+		return false
+	}
+	return addr.IsPrivate() || addr.IsLoopback() || addr.IsLinkLocalUnicast() || addr.IsUnspecified()
+}
+
+func firstForwardedIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		return strings.TrimSpace(strings.Split(xff, ",")[0])
+	}
+	return strings.TrimSpace(r.Header.Get("X-Real-IP"))
+}
+
+// observedClientIP resolves the best-effort public IP of an agent for display:
+// forwarding headers are only trusted from private peers (a local reverse
+// proxy), and private results are dropped so docker-internal addresses never
+// reach the UI.
+func observedClientIP(r *http.Request) string {
+	peer := clientIP(r)
+	if !isPrivateIP(peer) {
+		return peer
+	}
+	candidate := firstForwardedIP(r)
+	if candidate == "" || isPrivateIP(candidate) {
+		return ""
+	}
+	return candidate
 }
 
 func dedupeIDs(ids []int64) []int64 {
