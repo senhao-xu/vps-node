@@ -90,6 +90,21 @@ const servers = ref<Server[]>([])
 const serverChoice = ref<number | null>(null)
 const loadingServers = ref(false)
 
+const selectedServer = computed<Server | null>(() => {
+  const id = props.serverId ?? serverChoice.value
+  if (id === null || id === undefined) return null
+  return servers.value.find((server) => server.id === id) ?? null
+})
+const serverV4 = computed(() => (selectedServer.value ? selectedServer.value.ip || selectedServer.value.observed_ip : ''))
+const serverV6 = computed(() => (selectedServer.value ? selectedServer.value.ipv6 || selectedServer.value.observed_ipv6 : ''))
+
+watch(serverV4, (v4) => {
+  if (!isEdit.value && address.value.trim() === '') address.value = v4
+})
+watch([ipv6Enabled, serverV6], ([enabled, v6]) => {
+  if (!isEdit.value && enabled && v6 && ipv6Address.value.trim() === '') ipv6Address.value = v6
+})
+
 const chainNodeId = ref<number | null>(null)
 const chainCandidates = ref<NodeBrief[]>([])
 const loadingChainCandidates = ref(false)
@@ -167,7 +182,7 @@ watch(
     }
     if (isEdit.value && props.node) {
       void loadNodeDetail(props.node.id)
-    } else if (!isEdit.value && props.serverId === undefined) {
+    } else if (!isEdit.value) {
       void loadServers()
     }
   },

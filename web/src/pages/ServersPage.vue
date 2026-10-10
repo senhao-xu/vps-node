@@ -235,7 +235,14 @@ onMounted(() => {
           </div>
         </template>
         <template #cell-ip="{ row }">
-          <span class="mono">{{ row.ip || row.observed_ip || '—' }}</span>
+          <div class="ip-cell">
+            <span class="mono">{{ row.ip || row.observed_ip || '—' }}</span>
+            <span
+              v-if="row.ipv6 || row.observed_ipv6"
+              class="mono ip-v6"
+              :title="row.ipv6 || row.observed_ipv6"
+            >{{ row.ipv6 || row.observed_ipv6 }}</span>
+          </div>
         </template>
         <template #cell-status="{ row }">
           <StatusBadge v-bind="serverStatusInfo(row.status)" />
@@ -343,6 +350,8 @@ onMounted(() => {
 .region-chip { flex: none; padding: 2px 8px; border: 1px solid var(--color-border); border-radius: var(--radius-full); color: var(--color-text-secondary); font-size: var(--font-size-xs); }
 .server-meta { color: var(--color-text-secondary); }
 .mono { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ip-cell { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.ip-v6 { overflow: hidden; max-width: 100%; color: var(--color-text-secondary); text-overflow: ellipsis; }
 .row-actions { display: flex; justify-content: flex-end; gap: 2px; }
 .icon-action { display: inline-grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--color-text); cursor: pointer; }
 .icon-action:hover { background: var(--color-surface-muted); }

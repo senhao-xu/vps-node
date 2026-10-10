@@ -98,3 +98,36 @@ func TestAgentHeartbeatReportedPublicIP(t *testing.T) {
 		t.Fatalf("observed_ip=%q want agent-reported ip without headers", got)
 	}
 }
+
+func TestAgentHeartbeatReportedIPv6(t *testing.T) {
+	e := newTestEnv(t)
+	hb, observed, server, cookie := newHeartbeatHarness(t, e)
+
+	hb("", map[string]any{"public_ipv6": "2001:db8::42"})
+	resp, body := e.do(t, "GET", fmt.Sprintf("/api/servers/%d", server), nil, cookie)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("get server: %d %s", resp.StatusCode, body)
+	}
+	m := jsonMap(t, body)
+	if got := m["observed_ipv6"].(string); got != "2001:db8::42" {
+		t.Fatalf("observed_ipv6=%q want agent-reported v6", got)
+	}
+	if got := m["ipv6"].(string); got != "" {
+		t.Fatalf("manual ipv6=%q must stay untouched", got)
+	}
+
+	hb("", map[string]any{"public_ipv6": "fe80::1"})
+	hb("", map[string]any{"public_ipv6": "fd00::1"})
+	hb("", map[string]any{"public_ipv6": "not-a-v6"})
+	hb("", map[string]any{"public_ipv6": "203.0.113.5"})
+	if got := observed(); got != "" {
+		t.Fatalf("observed_ip=%q must stay untouched by v6 reports", got)
+	}
+	resp, body = e.do(t, "GET", fmt.Sprintf("/api/servers/%d", server), nil, cookie)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("get server: %d %s", resp.StatusCode, body)
+	}
+	if got := jsonMap(t, body)["observed_ipv6"].(string); got != "" {
+		t.Fatalf("observed_ipv6=%q want empty after invalid reports", got)
+	}
+}

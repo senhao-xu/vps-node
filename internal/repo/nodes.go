@@ -9,24 +9,25 @@ import (
 )
 
 type Node struct {
-	ID               int64
-	ServerID         int64
-	Address          string
-	IPv6Enabled      bool
-	IPv6Address      string
-	Name             string
-	Protocol         string
-	Port             int
-	ProtocolSettings string
-	SNI              string
-	Rate             float64
-	Tags             string
-	SecretEnc        []byte
-	Status           string
-	ServerName       string
-	ServerIP         string
-	ServerIPv6       string
-	ServerObservedIP string
+	ID                 int64
+	ServerID           int64
+	Address            string
+	IPv6Enabled        bool
+	IPv6Address        string
+	Name               string
+	Protocol           string
+	Port               int
+	ProtocolSettings   string
+	SNI                string
+	Rate               float64
+	Tags               string
+	SecretEnc          []byte
+	Status             string
+	ServerName         string
+	ServerIP           string
+	ServerIPv6         string
+	ServerObservedIP   string
+	ServerObservedIPv6 string
 	// ServerStatus / ServerLastSeenAt are populated by the WithServerName
 	// queries so callers can derive the server's effective online status.
 	ServerStatus     string
@@ -88,7 +89,7 @@ const (
 
 const nodeSelect = `SELECT id, server_id, address, ipv6_enabled, ipv6_address, name, protocol, port, protocol_settings, CASE WHEN json_valid(protocol_settings) AND protocol = 'vless' THEN COALESCE(json_extract(protocol_settings, '$.reality_settings.server_name'), '') WHEN json_valid(protocol_settings) THEN COALESCE(json_extract(protocol_settings, '$.tls.server_name'), '') ELSE '' END, rate, tags, secret_enc, status, chain_node_id, chain_custom_node_id, chain_custom_entry_key, created_at, updated_at FROM nodes`
 
-const nodeSelectWithServer = `SELECT n.id, n.server_id, n.address, n.ipv6_enabled, n.ipv6_address, n.name, n.protocol, n.port, n.protocol_settings, CASE WHEN json_valid(n.protocol_settings) AND n.protocol = 'vless' THEN COALESCE(json_extract(n.protocol_settings, '$.reality_settings.server_name'), '') WHEN json_valid(n.protocol_settings) THEN COALESCE(json_extract(n.protocol_settings, '$.tls.server_name'), '') ELSE '' END, n.rate, n.tags, n.secret_enc, n.status, n.chain_node_id, n.chain_custom_node_id, n.chain_custom_entry_key, n.created_at, n.updated_at, s.name, cn.name, cs.name, ccn.name, s.status, s.last_seen_at, s.ip, s.ipv6, s.observed_ip
+const nodeSelectWithServer = `SELECT n.id, n.server_id, n.address, n.ipv6_enabled, n.ipv6_address, n.name, n.protocol, n.port, n.protocol_settings, CASE WHEN json_valid(n.protocol_settings) AND n.protocol = 'vless' THEN COALESCE(json_extract(n.protocol_settings, '$.reality_settings.server_name'), '') WHEN json_valid(n.protocol_settings) THEN COALESCE(json_extract(n.protocol_settings, '$.tls.server_name'), '') ELSE '' END, n.rate, n.tags, n.secret_enc, n.status, n.chain_node_id, n.chain_custom_node_id, n.chain_custom_entry_key, n.created_at, n.updated_at, s.name, cn.name, cs.name, ccn.name, s.status, s.last_seen_at, s.ip, s.ipv6, s.observed_ip, s.observed_ipv6
 	FROM nodes n JOIN servers s ON s.id = n.server_id
 	LEFT JOIN nodes cn ON cn.id = n.chain_node_id
 	LEFT JOIN servers cs ON cs.id = cn.server_id
@@ -387,7 +388,7 @@ func scanNodeWithServerName(scan func(dest ...any) error) (Node, error) {
 	var chainNodeID, chainCustomNodeID sql.NullInt64
 	var chainNodeName, chainServerName, chainCustomNodeName sql.NullString
 	var serverLastSeenAt sql.NullInt64
-	err := scan(&n.ID, &n.ServerID, &n.Address, &ipv6Enabled, &n.IPv6Address, &n.Name, &n.Protocol, &n.Port, &n.ProtocolSettings, &n.SNI, &n.Rate, &n.Tags, &secretEnc, &n.Status, &chainNodeID, &chainCustomNodeID, &n.ChainCustomEntryKey, &createdAt, &updatedAt, &n.ServerName, &chainNodeName, &chainServerName, &chainCustomNodeName, &n.ServerStatus, &serverLastSeenAt, &n.ServerIP, &n.ServerIPv6, &n.ServerObservedIP)
+	err := scan(&n.ID, &n.ServerID, &n.Address, &ipv6Enabled, &n.IPv6Address, &n.Name, &n.Protocol, &n.Port, &n.ProtocolSettings, &n.SNI, &n.Rate, &n.Tags, &secretEnc, &n.Status, &chainNodeID, &chainCustomNodeID, &n.ChainCustomEntryKey, &createdAt, &updatedAt, &n.ServerName, &chainNodeName, &chainServerName, &chainCustomNodeName, &n.ServerStatus, &serverLastSeenAt, &n.ServerIP, &n.ServerIPv6, &n.ServerObservedIP, &n.ServerObservedIPv6)
 	if err != nil {
 		return Node{}, mapErr(err)
 	}

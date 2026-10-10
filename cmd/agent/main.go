@@ -83,7 +83,7 @@ func run() error {
 		Metrics:  agentruntime.NewMetricsCollector(),
 		Logger:   logger,
 		Version:  agentVersion,
-		PublicIP: agentruntime.NewPublicIPProvider(cfg.PublicIP, cfg.PublicIPURL),
+		PublicIP: agentruntime.NewPublicIPProvider(cfg.PublicIP, cfg.PublicIPv6, cfg.PublicIPURL, cfg.PublicIPv6URL),
 	})
 	return loop.Run(ctx)
 }

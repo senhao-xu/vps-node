@@ -8,11 +8,14 @@ log_level: info
 heartbeat_interval: 30
 sync_interval: 30
 traffic_interval: 60
-# Static public IP reported with heartbeats (optional). When empty the agent
-# probes `public_ip_url` (default https://api.ipify.org) every 30 minutes and
-# reports the result; failures never block the heartbeat.
+# Static public IPs reported with heartbeats (optional). When empty the agent
+# probes `public_ip_url` (default https://api.ipify.org) and `public_ipv6_url`
+# (default https://api6.ipify.org) every 30 minutes and reports the results;
+# failures never block the heartbeat.
 # public_ip: 203.0.113.7
 # public_ip_url: https://api.ipify.org
+# public_ipv6: 2001:db8::7
+# public_ipv6_url: https://api6.ipify.org
 collection:
   traffic: true
   # Report visited destinations (host/port/network/source IP) to the Panel.

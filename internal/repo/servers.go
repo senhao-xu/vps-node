@@ -14,6 +14,7 @@ type Server struct {
 	OfflineNotify               bool
 	IPv6                        string
 	ObservedIP                  string
+	ObservedIPv6                string
 	TrafficAccounting           string
 	TrafficResetDay             int
 	TrafficCorrectionBytes      int64
@@ -44,7 +45,7 @@ const (
 	ServerStatusOffline  = "offline"
 )
 
-const serverSelect = `SELECT id, name, notes, public_visible, offline_notify, ipv6, observed_ip, traffic_accounting, traffic_reset_day, traffic_correction_bytes, traffic_correction_cycle_start, billing_cycle, ip, region, price_cents, price_currency, traffic_limit_bytes, traffic_used_bytes, expires_at, sort_order, status, cpu_percent, memory_percent, disk_percent, uptime_seconds,
+const serverSelect = `SELECT id, name, notes, public_visible, offline_notify, ipv6, observed_ip, observed_ipv6, traffic_accounting, traffic_reset_day, traffic_correction_bytes, traffic_correction_cycle_start, billing_cycle, ip, region, price_cents, price_currency, traffic_limit_bytes, traffic_used_bytes, expires_at, sort_order, status, cpu_percent, memory_percent, disk_percent, uptime_seconds,
 		     agent_version, last_seen_at, created_at, updated_at
 		     FROM servers`
 
@@ -171,7 +172,7 @@ func scanServer(scan func(dest ...any) error) (Server, error) {
 	var lastSeenAt, expiresAt sql.NullInt64
 	var createdAt, updatedAt int64
 	var publicVisible, offlineNotify int
-	err := scan(&s.ID, &s.Name, &s.Notes, &publicVisible, &offlineNotify, &s.IPv6, &s.ObservedIP, &s.TrafficAccounting, &s.TrafficResetDay, &s.TrafficCorrectionBytes, &s.TrafficCorrectionCycleStart, &s.BillingCycle, &s.IP, &s.Region, &s.PriceCents, &s.PriceCurrency, &s.TrafficLimitBytes, &s.TrafficUsedBytes, &expiresAt, &s.SortOrder, &s.Status, &s.CPUPercent, &s.MemoryPercent, &s.DiskPercent,
+	err := scan(&s.ID, &s.Name, &s.Notes, &publicVisible, &offlineNotify, &s.IPv6, &s.ObservedIP, &s.ObservedIPv6, &s.TrafficAccounting, &s.TrafficResetDay, &s.TrafficCorrectionBytes, &s.TrafficCorrectionCycleStart, &s.BillingCycle, &s.IP, &s.Region, &s.PriceCents, &s.PriceCurrency, &s.TrafficLimitBytes, &s.TrafficUsedBytes, &expiresAt, &s.SortOrder, &s.Status, &s.CPUPercent, &s.MemoryPercent, &s.DiskPercent,
 		&s.UptimeSeconds, &s.AgentVersion, &lastSeenAt, &createdAt, &updatedAt)
 	if err != nil {
 		return Server{}, mapErr(err)

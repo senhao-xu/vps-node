@@ -196,6 +196,7 @@ func (l *Loop) heartbeatPass(ctx context.Context, nudge func()) (time.Duration, 
 	}
 	if l.publicIP != nil {
 		req.PublicIP = l.publicIP.Get(ctx)
+		req.PublicIPv6 = l.publicIP.Get6(ctx)
 	}
 	resp, err := l.client.Heartbeat(ctx, req)
 	if err != nil {

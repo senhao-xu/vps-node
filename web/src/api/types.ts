@@ -55,6 +55,7 @@ export type ServerRef = NodeRef & {
   ip: string
   ipv6: string
   observed_ip: string
+  observed_ipv6: string
 }
 
 export type ChainNodeRef = NodeRef & {
@@ -167,6 +168,7 @@ export type Server = {
   offline_notify: boolean
   ipv6: string
   observed_ip: string
+  observed_ipv6: string
   traffic_accounting: TrafficAccounting
   traffic_reset_day: number
   billing_cycle: BillingCycle

@@ -79,6 +79,7 @@ type HeartbeatRequest struct {
 	UptimeSeconds  int64   `json:"uptime_seconds"`
 	LastApplyError string  `json:"last_apply_error,omitempty"`
 	PublicIP       string  `json:"public_ip,omitempty"`
+	PublicIPv6     string  `json:"public_ipv6,omitempty"`
 }
 
 type HeartbeatResponse struct {

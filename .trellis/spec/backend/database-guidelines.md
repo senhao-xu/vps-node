@@ -89,13 +89,13 @@ repo.IngestTrafficBatch(ctx, agentID, seq, records)
 
 ## Convention: Server observed_ip resolution order
 
-`observed_ip` (display-only) is resolved per heartbeat in this priority — see `observedIP(r, reported)` in `internal/web/web.go`:
+`observed_ip` / `observed_ipv6` (display-only) are resolved per heartbeat — see `observedIP(r, reported)` / `observedIPv6(reported)` in `internal/web/web.go`:
 
-1. Agent-reported `public_ip` heartbeat field (self-detected via `agentruntime.PublicIPProvider`: HTTP probe default `https://api.ipify.org`, 30min cache, static `public_ip`/`AGENT_PUBLIC_IP` override). Adopted only when it parses as a public IP; invalid/private values are **silently ignored** (never 422 — a cosmetic field must not fail the heartbeat).
-2. Connection-derived `observedClientIP`: forwarding headers (`X-Forwarded-For` first hop, then `X-Real-IP`) trusted ONLY when the direct peer is private/loopback (a local reverse proxy); private results are dropped to `""` so docker-internal addresses never reach the UI.
-3. Raw peer address when it is public.
+1. Agent-reported `public_ip` / `public_ipv6` heartbeat fields (self-detected via `agentruntime.PublicIPProvider`: dual-stack probes, v4 default `https://api.ipify.org`, v6 default `https://api6.ipify.org` (IPv6-only hostname — no v6 route fails the probe silently), 30min cache, static `public_ip`/`public_ipv6` + `AGENT_*` overrides). Adopted only when they parse as public IPs of the correct family; v6 rejects v4/v4-mapped answers. Invalid/private values are **silently ignored** (never 422 — cosmetic fields must not fail the heartbeat).
+2. Connection-derived `observedClientIP` (v4 only): forwarding headers (`X-Forwarded-For` first hop, then `X-Real-IP`) trusted ONLY when the direct peer is private/loopback (a local reverse proxy); private results are dropped to `""` so docker-internal addresses never reach the UI.
+3. Raw peer address when it is public (v4 only).
 
-Do not reuse this pipeline for `clientIP` — the login rate limiter buckets on the RAW peer address and must keep that semantics.
+`observed_*` never overwrite the admin-managed `servers.ip` / `servers.ipv6` inventory fields; the UI displays `manual || observed`. Do not reuse this pipeline for `clientIP` — the login rate limiter buckets on the RAW peer address and must keep that semantics.
 
 ---
 

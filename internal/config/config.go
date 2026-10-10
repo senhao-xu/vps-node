@@ -126,6 +126,8 @@ type Agent struct {
 	TrafficInterval   time.Duration
 	PublicIP          string
 	PublicIPURL       string
+	PublicIPv6        string
+	PublicIPv6URL     string
 	Collection        Collection
 }
 
@@ -156,6 +158,8 @@ type agentFile struct {
 	TrafficIntervalSec   int    `yaml:"traffic_interval"`
 	PublicIP             string `yaml:"public_ip"`
 	PublicIPURL          string `yaml:"public_ip_url"`
+	PublicIPv6           string `yaml:"public_ipv6"`
+	PublicIPv6URL        string `yaml:"public_ipv6_url"`
 	Collection           struct {
 		Traffic *bool `yaml:"traffic"`
 		Visits  *bool `yaml:"visits"`
@@ -336,6 +340,12 @@ func LoadAgent(path string) (*Agent, error) {
 		if v := strings.TrimSpace(af.PublicIPURL); v != "" {
 			cfg.PublicIPURL = v
 		}
+		if v := strings.TrimSpace(af.PublicIPv6); v != "" {
+			cfg.PublicIPv6 = v
+		}
+		if v := strings.TrimSpace(af.PublicIPv6URL); v != "" {
+			cfg.PublicIPv6URL = v
+		}
 	}
 
 	if v := os.Getenv("AGENT_PANEL_URL"); v != "" {
@@ -381,6 +391,12 @@ func LoadAgent(path string) (*Agent, error) {
 	}
 	if v := strings.TrimSpace(os.Getenv("AGENT_PUBLIC_IP_URL")); v != "" {
 		cfg.PublicIPURL = v
+	}
+	if v := strings.TrimSpace(os.Getenv("AGENT_PUBLIC_IPV6")); v != "" {
+		cfg.PublicIPv6 = v
+	}
+	if v := strings.TrimSpace(os.Getenv("AGENT_PUBLIC_IPV6_URL")); v != "" {
+		cfg.PublicIPv6URL = v
 	}
 
 	if cfg.PanelURL == "" {

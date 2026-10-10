@@ -368,6 +368,24 @@ func observedIP(r *http.Request, reported string) string {
 	return observedClientIP(r)
 }
 
+// observedIPv6 adopts the agent's self-reported public IPv6; there is no
+// proxy-header chain to fall back on, so invalid or private reports resolve
+// to an empty value.
+func observedIPv6(reported string) string {
+	candidate := strings.TrimSpace(reported)
+	if candidate == "" {
+		return ""
+	}
+	addr, err := netip.ParseAddr(candidate)
+	if err != nil || !addr.IsValid() || addr.Is4() || addr.Is4In6() {
+		return ""
+	}
+	if isPrivateIP(candidate) {
+		return ""
+	}
+	return candidate
+}
+
 func dedupeIDs(ids []int64) []int64 {
 	seen := make(map[int64]bool, len(ids))
 	out := make([]int64, 0, len(ids))

@@ -101,7 +101,7 @@ function addressFamily(address: string): string {
 }
 
 function serverAddressFamilies(node: NodeBrief): string[] {
-  const addresses = [node.server.ip, node.server.ipv6, node.server.observed_ip]
+  const addresses = [node.server.ip, node.server.ipv6, node.server.observed_ip, node.server.observed_ipv6]
   const primaryFamily = addressFamily(node.address)
   const families: string[] = []
   if (addresses.some((address) => address !== '' && !address.includes(':')) || primaryFamily === 'IPv4') families.push('IPv4')

@@ -688,12 +688,14 @@ Production traffic must use HTTPS with certificate verification.
 ## POST /api/agent/heartbeat
 
 ```json
-{ "version": "1.0.0", "cpu_percent": 23, "memory_percent": 52, "disk_percent": 41, "uptime_seconds": 123456, "last_apply_error": "", "public_ip": "" }
+{ "version": "1.0.0", "cpu_percent": 23, "memory_percent": 52, "disk_percent": 41, "uptime_seconds": 123456, "last_apply_error": "", "public_ip": "", "public_ipv6": "" }
 ```
 
 `last_apply_error` is an optional extension field: when non-empty it carries the most recent config-apply failure message (see Config below). Panel ignores unknown fields today but must not reject this one.
 
 `public_ip` is an optional extension field: when non-empty it carries the agent's self-detected outbound public IP (HTTP probe against a configurable endpoint, or a static config override). The panel adopts it for the server's `observed_ip` only when it parses as a public IP; invalid or private values are silently ignored and the panel falls back to its connection-derived resolution (forwarding headers from private peers, then the peer address). Display-only: it never participates in authentication or ownership decisions.
+
+`public_ipv6` is the IPv6 counterpart: when non-empty it carries the agent's self-detected outbound public IPv6 (probe against an IPv6-only endpoint, or static override). The panel adopts it for `servers.observed_ipv6` only when it parses as a public IPv6 (v4 or v4-mapped values are rejected); invalid or private values are silently ignored. It never overwrites the admin-managed `servers.ipv6` inventory field.
 
 Response `200`:
 

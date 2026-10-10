@@ -82,11 +82,12 @@ func toUserDetailDTO(u repo.User, nodeCount int64) userDetailDTO {
 }
 
 type nodeRefDTO struct {
-	ID         int64  `json:"id"`
-	Name       string `json:"name"`
-	IP         string `json:"ip"`
-	IPv6       string `json:"ipv6"`
-	ObservedIP string `json:"observed_ip"`
+	ID           int64  `json:"id"`
+	Name         string `json:"name"`
+	IP           string `json:"ip"`
+	IPv6         string `json:"ipv6"`
+	ObservedIP   string `json:"observed_ip"`
+	ObservedIPv6 string `json:"observed_ipv6"`
 }
 
 type chainRefDTO struct {
@@ -156,7 +157,7 @@ func toNodeDTO(n repo.Node) nodeDTO {
 		Rate:                n.Rate,
 		Tags:                nodeTags(n.Tags),
 		Status:              n.Status,
-		Server:              nodeRefDTO{ID: n.ServerID, Name: n.ServerName, IP: n.ServerIP, IPv6: n.ServerIPv6, ObservedIP: n.ServerObservedIP},
+		Server:              nodeRefDTO{ID: n.ServerID, Name: n.ServerName, IP: n.ServerIP, IPv6: n.ServerIPv6, ObservedIP: n.ServerObservedIP, ObservedIPv6: n.ServerObservedIPv6},
 		ChainNodeID:         n.ChainNodeID,
 		ChainCustomNodeID:   n.ChainCustomNodeID,
 		ChainCustomEntryKey: n.ChainCustomEntryKey,
@@ -195,6 +196,7 @@ type serverDTO struct {
 	OfflineNotify        bool    `json:"offline_notify"`
 	IPv6                 string  `json:"ipv6"`
 	ObservedIP           string  `json:"observed_ip"`
+	ObservedIPv6         string  `json:"observed_ipv6"`
 	TrafficAccounting    string  `json:"traffic_accounting"`
 	TrafficResetDay      int     `json:"traffic_reset_day"`
 	BillingCycle         string  `json:"billing_cycle"`
@@ -242,6 +244,7 @@ func toServerDTO(s repo.Server, nodeCount, onlineUsers int64) serverDTO {
 		OfflineNotify:     s.OfflineNotify,
 		IPv6:              s.IPv6,
 		ObservedIP:        s.ObservedIP,
+		ObservedIPv6:      s.ObservedIPv6,
 		TrafficAccounting: s.TrafficAccounting,
 		TrafficResetDay:   s.TrafficResetDay,
 		BillingCycle:      s.BillingCycle,
