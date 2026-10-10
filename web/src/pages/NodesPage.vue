@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Copy, Pencil, Plus, QrCode, Trash2, X } from 'lucide-vue-next'
+import { Copy, Pencil, Plus, QrCode, Trash2, Users, X } from 'lucide-vue-next'
 import { deleteNode, copyNode, listNodes, updateNode } from '@/api/nodes'
 import { listServers } from '@/api/servers'
 import { errorMessage } from '@/api/http'
@@ -11,6 +11,7 @@ import DataTable, { type Column } from '@/components/DataTable.vue'
 import ErrorBanner from '@/components/ErrorBanner.vue'
 import NodeFormDialog from '@/components/NodeFormDialog.vue'
 import NodeShareDialog from '@/components/NodeShareDialog.vue'
+import NodeUserAuthDialog from '@/components/NodeUserAuthDialog.vue'
 import TablePaginator from '@/components/TablePaginator.vue'
 import FilterChip from '@/components/ui/FilterChip.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
@@ -43,6 +44,7 @@ const showCreate = ref(false)
 const editTarget = ref<NodeBrief | null>(null)
 const deleteTarget = ref<NodeBrief | null>(null)
 const shareTarget = ref<NodeBrief | null>(null)
+const authTarget = ref<NodeBrief | null>(null)
 const deleting = ref(false)
 
 const columns: Column[] = [
@@ -52,7 +54,7 @@ const columns: Column[] = [
   { key: 'port', label: '端口', width: '9%', sortable: true },
   { key: 'sni', label: '伪装目标 / SNI', width: '16%' },
   { key: 'enabled', label: '状态', width: '8%' },
-  { key: 'actions', label: '操作', width: '130px', align: 'right' },
+  { key: 'actions', label: '操作', width: '150px', align: 'right' },
 ]
 
 const protocolOptions: Array<{ value: Protocol | ''; label: string }> = [
@@ -484,6 +486,15 @@ onMounted(() => {
             <button
               type="button"
               class="icon-action"
+              :aria-label="`管理节点 ${row.name} 的用户授权`"
+              title="用户授权"
+              @click="authTarget = row"
+            >
+              <Users :size="17" />
+            </button>
+            <button
+              type="button"
+              class="icon-action"
               :aria-label="`编辑节点 ${row.name}`"
               title="编辑"
               @click="editTarget = row"
@@ -530,6 +541,12 @@ onMounted(() => {
       :open="shareTarget !== null"
       :node="shareTarget"
       @close="shareTarget = null"
+    />
+
+    <NodeUserAuthDialog
+      :open="authTarget !== null"
+      :node="authTarget"
+      @close="authTarget = null"
     />
 
     <ConfirmDialog

@@ -107,6 +107,11 @@ export type UserNodes = {
   nodes: NodeBrief[]
 }
 
+export type NodeUsers = {
+  user_ids: number[]
+  users: User[]
+}
+
 export type OnlineDevice = {
   node_id: number
   server_id: number

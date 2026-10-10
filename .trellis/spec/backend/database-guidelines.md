@@ -78,6 +78,17 @@ repo.IngestTrafficBatch(ctx, agentID, seq, records)
 
 ---
 
+## Gotcha: Authorization writes are dimension-specific
+
+> **Warning**: `user_nodes` has TWO full-set mutation semantics. Picking the wrong loop breaks data.
+
+- `SetUserNodesAndBump(userID, nodeIDs)` is **user-dimension** full overwrite: it deletes ALL rows of that user. Never loop it to edit one node's users — that wipes every other node authorization of each user.
+- `SetNodeUsersAndBump(nodeID, userIDs)` is **node-dimension** diff update: computes added/removed vs current rows, writes only the delta, bumps the owning server's revision only when something changed.
+- Both bump `server_revisions` inside the same tx as the writes (agents poll revision; revocation must be atomic with the delete).
+- Disabled nodes/users MAY be authorized (pre-provisioning is legal); the read paths (`ListSubscriptionNodes`, `ListEligibleUsersByServer`) already filter them. `validateNodeIDs` (user-side PUT) additionally requires node active — that strictness is user-side only, do not copy it to node-side handlers.
+
+---
+
 ## Convention: Agent batch sequence is panel-owned (stateless agent)
 
 The agent persists **no** local state (`state_path` was removed). Batch sequence numbers are agent-memory only; the panel is the single source of truth.

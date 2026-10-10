@@ -5,6 +5,7 @@ import {
   Activity,
   Box,
   CalendarClock,
+  Copy,
   Cpu,
   HardDrive,
   HeartPulse,
@@ -593,9 +594,10 @@ onMounted(() => {
                   <code class="mono">{{ agentKey }}</code>
                   <button
                     type="button"
-                    class="btn link small"
+                    class="btn secondary small"
                     @click="copyAgentKey"
                   >
+                    <Copy :size="14" />
                     {{ keyCopied ? '已复制' : '复制' }}
                   </button>
                 </div>
@@ -639,9 +641,10 @@ onMounted(() => {
                   <span class="text-secondary">安装命令</span>
                   <button
                     type="button"
-                    class="btn link small"
+                    class="btn secondary small"
                     @click="copyInstallCommand"
                   >
+                    <Copy :size="14" />
                     {{ commandCopied ? '已复制' : '复制' }}
                   </button>
                 </div>

@@ -282,6 +282,79 @@ func (r *Repo) SetUserNodesAndBump(ctx context.Context, userID int64, nodeIDs []
 	return unique, nil
 }
 
+func (r *Repo) SetNodeUsersAndBump(ctx context.Context, nodeID int64, userIDs []int64) ([]int64, error) {
+	unique := dedupeInt64(userIDs)
+	err := Tx(ctx, r.DB, func(tx *sql.Tx) error {
+		serverID, err := nodeServerIDExec(ctx, tx, nodeID)
+		if err != nil {
+			return err
+		}
+		rows, err := tx.QueryContext(ctx, `SELECT user_id FROM user_nodes WHERE node_id = ?`, nodeID)
+		if err != nil {
+			return mapErr(err)
+		}
+		current := []int64{}
+		for rows.Next() {
+			var id int64
+			if err := rows.Scan(&id); err != nil {
+				rows.Close()
+				return mapErr(err)
+			}
+			current = append(current, id)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return mapErr(err)
+		}
+		rows.Close()
+
+		currentSet := make(map[int64]bool, len(current))
+		for _, id := range current {
+			currentSet[id] = true
+		}
+		nextSet := make(map[int64]bool, len(unique))
+		for _, id := range unique {
+			nextSet[id] = true
+		}
+
+		removed := make([]int64, 0)
+		for _, id := range current {
+			if !nextSet[id] {
+				removed = append(removed, id)
+			}
+		}
+		added := make([]int64, 0)
+		for _, id := range unique {
+			if !currentSet[id] {
+				added = append(added, id)
+			}
+		}
+		if len(removed) == 0 && len(added) == 0 {
+			return nil
+		}
+
+		if len(removed) > 0 {
+			if _, err := tx.ExecContext(ctx,
+				`DELETE FROM user_nodes WHERE node_id = ? AND user_id IN (`+inPlaceholders(len(removed))+`)`,
+				append([]any{nodeID}, int64Args(removed)...)...); err != nil {
+				return mapErr(err)
+			}
+		}
+		now := nowUnix()
+		for _, id := range added {
+			if _, err := tx.ExecContext(ctx,
+				`INSERT INTO user_nodes (user_id, node_id, created_at) VALUES (?, ?, ?)`, id, nodeID, now); err != nil {
+				return mapErr(err)
+			}
+		}
+		return bumpRevisionExec(ctx, tx, serverID)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return unique, nil
+}
+
 func (r *Repo) CreateNodeAndBump(ctx context.Context, n NewNode) (int64, error) {
 	var id int64
 	err := Tx(ctx, r.DB, func(tx *sql.Tx) error {

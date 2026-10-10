@@ -5,6 +5,7 @@ import type {
   NodeDetail,
   NodeShare,
   NodeStatus,
+  NodeUsers,
   Paged,
   Protocol,
   RealityKeypair,
@@ -59,4 +60,12 @@ export function copyNode(nodeId: number): Promise<NodeBrief> {
 
 export function getNodeShare(nodeId: number, userId: number): Promise<NodeShare> {
   return request<NodeShare>(`/api/nodes/${nodeId}/share`, { query: { user_id: userId } })
+}
+
+export function getNodeUsers(nodeId: number): Promise<NodeUsers> {
+  return request<NodeUsers>(`/api/nodes/${nodeId}/users`)
+}
+
+export function putNodeUsers(nodeId: number, userIds: number[]): Promise<NodeUsers> {
+  return request<NodeUsers>(`/api/nodes/${nodeId}/users`, { method: 'PUT', body: { user_ids: userIds } })
 }
