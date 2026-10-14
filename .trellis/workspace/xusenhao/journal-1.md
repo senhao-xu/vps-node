@@ -333,3 +333,24 @@ Enabled protocol changes when editing nodes, kept protocol settings and secrets 
 ### Status
 
 [OK] **Completed**
+
+
+## Session 11: Stabilize shared Clash field order
+
+**Date**: 2026-10-14
+**Task**: Stabilize shared Clash field order
+**Branch**: `main`
+
+### Summary
+
+Ordered custom-node Clash share fields deterministically, preserved unknown fields, added regression coverage, synchronized the backend spec, and pushed main.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2095998` | (see git log) |
+
+### Status
+
+[OK] **Completed**
