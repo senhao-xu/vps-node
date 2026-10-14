@@ -231,7 +231,7 @@ resp, err := client.Do(req)
 - `GET /api/custom-nodes/{id}/share` — admin export of one source, no user.
 - `GET /api/custom-nodes/{id}/content` — admin echo of one source's decrypted content.
 - `subscription.RenderCustomProxies(source CustomSource, onSkip func(sourceID int64, item string, err error)) []map[string]any` — converts one source's links + upstream proxies into Clash proxies; `RenderClashFilteredMerged` calls the shared unexported `renderCustomProxies(source, usedNames, onSkip)` so merged output stays byte-identical while the export uses a fresh name set.
-- `subscription.RenderProxiesFragment(proxies []map[string]any) ([]byte, error)` — builds a `proxies:` fragment where each proxy is a single flow-style line (`- {name: ..., ...}`); empty input renders `proxies: []\n`.
+- `subscription.RenderProxiesFragment(proxies []map[string]any) ([]byte, error)` — builds a `proxies:` fragment where each proxy is a single flow-style line (`- {name: ..., ...}`); empty input renders `proxies: []\n`. Known proxy keys use the stable order `name`, `type`, `server`, `port`, `uuid`, `alterId`, `cipher`, `udp`, `flow`, `encryption`, `tls`, `skip-cert-verify`, `servername`, `reality-opts`, `client-fingerprint`, `network`; absent keys are omitted, remaining keys sort lexically, and `reality-opts` orders `public-key` before `short-id` before other lexical keys.
 
 ### 3. Contracts
 - Share response `{source_type, has_cache, fetched_at, clash, links, skipped?}`.
@@ -258,6 +258,7 @@ resp, err := client.Do(req)
 ### 6. Tests Required
 - `internal/web/custom_nodes_share_test.go`: links share (fragment + plaintext + `skipped`); subscription share populates `has_cache` via lazy fetch; base64-links vs Clash-only upstream (`links` empty, `clash` non-empty); content echo for both source types; both routes `401` unauthenticated and `404` unknown id; list has no `content` field.
 - `internal/subscription/custom_test.go` gate tests (`TestRenderClashFilteredWithoutCustomMatchesLegacy`, `TestRenderClashFilteredMergedCustomSources`) must keep passing after the extraction.
+- `internal/subscription/custom_test.go` must assert the exact stable key order, omission of absent preferred keys, preservation of unknown keys, `reality-opts` ordering, YAML round-trip equivalence, and the empty fragment result.
 
 ### 7. Wrong vs Correct
 #### Wrong

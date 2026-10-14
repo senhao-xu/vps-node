@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -350,11 +351,26 @@ func renderCustomProxies(source CustomSource, usedNames map[string]bool, onSkip 
 func RenderProxiesFragment(proxies []map[string]any) ([]byte, error) {
 	seq := &yaml.Node{Kind: yaml.SequenceNode}
 	for _, proxy := range proxies {
-		item := &yaml.Node{}
-		if err := item.Encode(proxy); err != nil {
+		item, err := orderedYAMLMapping(proxy, []string{
+			"name", "type", "server", "port", "uuid", "alterId", "cipher", "udp",
+			"flow", "encryption", "tls", "skip-cert-verify", "servername",
+			"reality-opts", "client-fingerprint", "network",
+		})
+		if err != nil {
 			return nil, err
 		}
-		item.Style = yaml.FlowStyle
+		if reality, ok := proxy["reality-opts"].(map[string]any); ok {
+			ordered, err := orderedYAMLMapping(reality, []string{"public-key", "short-id"})
+			if err != nil {
+				return nil, err
+			}
+			for i := 0; i < len(item.Content); i += 2 {
+				if item.Content[i].Value == "reality-opts" {
+					item.Content[i+1] = ordered
+					break
+				}
+			}
+		}
 		seq.Content = append(seq.Content, item)
 	}
 	root := &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{
@@ -362,6 +378,36 @@ func RenderProxiesFragment(proxies []map[string]any) ([]byte, error) {
 		seq,
 	}}
 	return yaml.Marshal(root)
+}
+
+func orderedYAMLMapping(values map[string]any, preferred []string) (*yaml.Node, error) {
+	keys := make([]string, 0, len(values))
+	seen := make(map[string]bool, len(preferred))
+	for _, key := range preferred {
+		if _, ok := values[key]; ok {
+			keys = append(keys, key)
+			seen[key] = true
+		}
+	}
+	remaining := make([]string, 0, len(values)-len(keys))
+	for key := range values {
+		if !seen[key] {
+			remaining = append(remaining, key)
+		}
+	}
+	sort.Strings(remaining)
+	keys = append(keys, remaining...)
+
+	node := &yaml.Node{Kind: yaml.MappingNode, Style: yaml.FlowStyle}
+	for _, key := range keys {
+		keyNode := &yaml.Node{Kind: yaml.ScalarNode, Value: key}
+		valueNode := &yaml.Node{}
+		if err := valueNode.Encode(values[key]); err != nil {
+			return nil, err
+		}
+		node.Content = append(node.Content, keyNode, valueNode)
+	}
+	return node, nil
 }
 
 // uniqueProxyName returns name, or "<name> <sourceID>" (with a numeric tie

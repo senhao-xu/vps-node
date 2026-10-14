@@ -2,6 +2,7 @@ package subscription
 
 import (
 	"encoding/base64"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -131,6 +132,52 @@ func TestRenderProxiesFragmentFlowStyle(t *testing.T) {
 	}
 	if string(empty) != "proxies: []\n" {
 		t.Fatalf("empty fragment: %q", empty)
+	}
+}
+
+func TestRenderProxiesFragmentOrdersFields(t *testing.T) {
+	proxy := map[string]any{
+		"network": "tcp", "client-fingerprint": "safari",
+		"reality-opts": map[string]any{"z-extra": true, "short-id": "0963ab", "public-key": "public-key"},
+		"servername":   "www.amd.com", "skip-cert-verify": false, "tls": true,
+		"encryption": "none", "flow": "xtls-rprx-vision", "udp": true, "cipher": "auto",
+		"alterId": 0, "uuid": "uuid", "port": 45561, "server": "2400:c800:109:220::a",
+		"type": "vless", "name": "Japan-L", "z-extra": "last", "a-extra": "first",
+	}
+	out, err := RenderProxiesFragment([]map[string]any{proxy})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "proxies:\n    - {name: Japan-L, type: vless, server: '2400:c800:109:220::a', port: 45561, uuid: uuid, alterId: 0, cipher: auto, udp: true, flow: xtls-rprx-vision, encryption: none, tls: true, skip-cert-verify: false, servername: www.amd.com, reality-opts: {public-key: public-key, short-id: 0963ab, z-extra: true}, client-fingerprint: safari, network: tcp, a-extra: first, z-extra: last}\n"
+	if string(out) != want {
+		t.Fatalf("ordered fragment = %q, want %q", out, want)
+	}
+
+	var decoded struct {
+		Proxies []map[string]any `yaml:"proxies"`
+	}
+	if err := yaml.Unmarshal(out, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if len(decoded.Proxies) != 1 || !reflect.DeepEqual(decoded.Proxies[0], proxy) {
+		t.Fatalf("round trip changed proxy: got %#v, want %#v", decoded.Proxies, proxy)
+	}
+}
+
+func TestRenderProxiesFragmentSkipsMissingPreferredFields(t *testing.T) {
+	proxy := map[string]any{
+		"network":  "ws",
+		"server":   "example.com",
+		"name":     "sparse",
+		"password": "secret",
+	}
+	out, err := RenderProxiesFragment([]map[string]any{proxy})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "proxies:\n    - {name: sparse, server: example.com, network: ws, password: secret}\n"
+	if string(out) != want {
+		t.Fatalf("sparse fragment = %q, want %q", out, want)
 	}
 }
 
